@@ -1,0 +1,383 @@
+﻿PART 35/75
+illagerGreetHasGoods}Greetings, {PLAYER_ADDRESS}. We're from the village of {SETTLEMENT_NAME}, heading to {TOWN_NAME} to sell our wares.", villager_friendly_has_goods_condition, null, 110);
+		starter.AddDialogLine("villager_friendly_start_no_goods", "start", "villager_friendly_talk", "{=HAP_VillagerGreetNoGoods}Greetings, {PLAYER_ADDRESS}. We're heading back to {SETTLEMENT_NAME}. Already sold our goods at {TOWN_NAME}.", villager_friendly_no_goods_condition, null, 110);
+		starter.AddDialogLine("villager_friendly_start_returning_has_goods", "start", "villager_friendly_talk", "{=HAP_VillagerGreetReturningGoods}Greetings, {PLAYER_ADDRESS}. We're from the village of {SETTLEMENT_NAME}, heading home. Couldn't sell everything at {TOWN_NAME} — not enough coin in the market.", villager_friendly_returning_has_goods_condition, null, 110);
+		starter.AddDialogLine("villager_friendly_return", "start", "villager_friendly_talk", "{=HAP_VillagerFriendlyReturn}Ah, it's you again, {PLAYER_ADDRESS}. What can we do for you?", villager_friendly_return_condition, null, 110);
+		starter.AddDialogLine("villager_hostile_return", "start", "villager_friendly_talk", "{=HAP_VillagerHostileReturn}You again? Haven't you taken enough from us?[rf:idle_angry][ib:nervous]", villager_hostile_return_condition, null, 110);
+		starter.AddDialogLine("villager_friendly_pretalk", "villager_friendly_pretalk", "villager_friendly_talk", "{=HAP_VillagerPretalk}Aye, what else can we do for you?", villager_restore_pack_animals_condition, null);
+		starter.AddPlayerLine("villager_friendly_buy", "villager_friendly_talk", "villager_player_trade", "{=HAP_VillagerBuyOption}That's a fine load of goods. I'd be interested in buying some.", villager_has_goods_condition, null);
+		starter.AddPlayerLine("villager_friendly_demand_has_goods", "villager_friendly_talk", "villager_friendly_demand_response", "{=HAP_VillagerDemandGoods}Hand over your goods and any valuables. Now.", villager_demand_has_goods_condition, null, 91);
+		starter.AddPlayerLine("villager_friendly_demand_no_goods", "villager_friendly_talk", "villager_friendly_demand_response", "{=HAP_VillagerDemandNoGoods}Hand over your gold and anything of value. Now.", villager_demand_no_goods_condition, null, 90);
+		starter.AddPlayerLine("villager_friendly_leave", "villager_friendly_talk", "close_window", "{=HAP_VillagerLeave}Safe travels.", null, villager_leave_on_consequence, 80);
+		starter.AddDialogLine("villager_player_trade_screen", "villager_player_trade", "villager_friendly_pretalk", "{=HAP_VillagerTradeScreen}Aye, have a look at what we've got. Take what you like![rf:convo_relaxed_happy][ib:demure]", villager_open_trade_screen_condition, null);
+		starter.AddDialogLine("villager_friendly_demand_bribe", "villager_friendly_demand_response", "villager_friendly_bribe_options", "{=HAP_VillagerBribeResponse}Wait, wait! We're just villagers! Here, take {BRIBE_OFFER} and let us go. Please![rf:idle_angry][ib:nervous]", villager_bribe_feasible_condition, null, 110);
+		starter.AddDialogLine("villager_friendly_demand_fight", "villager_friendly_demand_response", "villager_friendly_fight_options", "{=HAP_VillagerFightResponse}We may be simple folk, but we won't hand over our livelihood without a fight![rf:idle_angry][ib:aggressive]", villager_will_fight_condition, null);
+		starter.AddDialogLine("villager_friendly_demand_surrender", "villager_friendly_demand_response", "villager_friendly_surrender_options", "{=HAP_VillagerSurrenderResponse}Please, we're just villagers! Take what you want, but spare our lives![rf:idle_angry][ib:nervous]", villager_will_surrender_condition, null);
+		starter.AddPlayerLine("villager_friendly_fight_attack", "villager_friendly_fight_options", "close_window", "{=HAP_VillagerAttack}So be it. Attack!", null, villager_fight_on_consequence, 100, villager_war_warning_clickable);
+		starter.AddPlayerLine("villager_friendly_fight_backdown", "villager_friendly_fight_options", "villager_friendly_pretalk", "{=HAP_VillagerBackDown}Perhaps I was too hasty. Forget I said anything.", null, null, 80);
+		starter.AddPlayerLine("villager_friendly_surrender_take_goods", "villager_friendly_surrender_options", "villager_friendly_goods_taken", "{=HAP_VillagerTakeGoods}Just the goods. Get out of here.", villager_has_goods_condition, villager_take_goods_on_consequence, 100, villager_crime_warning_clickable);
+		starter.AddPlayerLine("villager_friendly_surrender_prisoners", "villager_friendly_surrender_options", "villager_friendly_prisoner_warning", "{=HAP_VillagerTakePrisoners}You're my prisoners now.", null, null, 90, villager_war_warning_clickable);
+		starter.AddPlayerLine("villager_friendly_surrender_attack", "villager_friendly_surrender_options", "close_window", "{=HAP_VillagerAttackSurrendered}Don't bother pleading. At them, lads!", null, villager_fight_on_consequence, 85, villager_war_warning_clickable);
+		starter.AddPlayerLine("villager_friendly_surrender_let_go", "villager_friendly_surrender_options", "close_window", "{=HAP_VillagerLetGo}Fine. Get out of my sight.", null, villager_leave_on_consequence, 80);
+		starter.AddPlayerLine("villager_friendly_bribe_accept", "villager_friendly_bribe_options", "villager_friendly_bribe_taken", "{=HAP_VillagerBribeAccept}All right. Hand it over and get out of here.", null, villager_accept_bribe_on_consequence, 100, villager_crime_warning_clickable);
+		starter.AddPlayerLine("villager_friendly_bribe_want_all", "villager_friendly_bribe_options", "villager_friendly_demand_escalate", "{=HAP_VillagerBribeWantAll}That's not enough. I want everything.", null, null, 90);
+		starter.AddPlayerLine("villager_friendly_bribe_nevermind", "villager_friendly_bribe_options", "villager_friendly_pretalk", "{=HAP_VillagerBribeNevermind}Fine. Keep your scraps.", null, null, 80);
+		starter.AddDialogLine("villager_friendly_escalate_fight", "villager_friendly_demand_escalate", "villager_friendly_fight_options", "{=HAP_VillagerEscalateFight}Everything? You'll have to fight us for it![rf:idle_angry][ib:aggressive]", villager_will_fight_condition, null);
+		starter.AddDialogLine("villager_friendly_escalate_surrender", "villager_friendly_demand_escalate", "villager_friendly_surrender_options", "{=HAP_VillagerEscalateSurrender}Please... take it all then. Just don't hurt us![rf:idle_angry][ib:nervous]", villager_will_surrender_condition, null);
+		starter.AddDialogLine("villager_friendly_bribe_taken_response", "villager_friendly_bribe_taken", "close_window", "{=HAP_VillagerBribeTakenResponse}Thank you... we'll be on our way.", null, villager_leave_on_consequence);
+		starter.AddDialogLine("villager_friendly_goods_taken_response", "villager_friendly_goods_taken", "close_window", "{=HAP_VillagerGoodsTakenResponse}Thank you for sparing us... We'll remember this.", null, villager_leave_on_consequence);
+		starter.AddDialogLine("villager_friendly_prisoner_warning_response", "villager_friendly_prisoner_warning", "villager_friendly_prisoner_confirm", "{=HAP_VillagerPrisonerWarning}The {FACTION_NAME} won't stand for this! You're making a grave mistake![rf:idle_angry][ib:nervous]", villager_set_faction_name_condition, null);
+		starter.AddPlayerLine("villager_friendly_prisoner_confirm_yes", "villager_friendly_prisoner_confirm", "close_window", "{=HAP_VillagerPrisonerConfirm}Enough talking. Now march.", null, villager_take_prisoners_on_consequence);
+		starter.AddPlayerLine("villager_friendly_prisoner_confirm_no", "villager_friendly_prisoner_confirm", "close_window", "{=HAP_VillagerPrisonerCancel}Never mind. Go on your way.", null, villager_leave_on_consequence, 80);
+		starter.AddDialogLine("villager_enemy_start", "start", "villager_enemy_talk", "{=HAP_VillagerEnemyGreeting}What do you want? We're just villagers from {SETTLEMENT_NAME}. We want no part of your war.[rf:idle_angry][ib:nervous]", villager_enemy_condition, null, 110);
+		starter.AddPlayerLine("villager_enemy_attack", "villager_enemy_talk", "close_window", "{=HAP_VillagerEnemyAttack}Your people chose war. Now face the consequences!", null, villager_fight_on_consequence);
+		starter.AddPlayerLine("villager_enemy_demand", "villager_enemy_talk", "villager_enemy_demand_response", "{=HAP_VillagerEnemyDemand}Surrender your goods and yourselves. Resist and you die.", null, null, 90);
+		starter.AddPlayerLine("villager_enemy_leave", "villager_enemy_talk", "close_window", "{=HAP_VillagerEnemyLeave}I have more important matters. Be gone.", null, villager_leave_on_consequence, 80);
+		starter.AddDialogLine("villager_enemy_demand_fight", "villager_enemy_demand_response", "villager_enemy_fight_options", "{=HAP_VillagerEnemyFight}We're not warriors, but we won't go down without a fight![rf:idle_angry][ib:aggressive]", villager_will_fight_condition, null);
+		starter.AddDialogLine("villager_enemy_demand_surrender", "villager_enemy_demand_response", "villager_enemy_surrender_options", "{=HAP_VillagerEnemySurrender}We can't fight you. We surrender. Please, have mercy![rf:idle_angry][ib:nervous]", villager_will_surrender_condition, null);
+		starter.AddPlayerLine("villager_enemy_fight_attack", "villager_enemy_fight_options", "close_window", "{=HAP_VillagerAttack}So be it. Attack!", null, villager_fight_on_consequence);
+		starter.AddPlayerLine("villager_enemy_fight_leave", "villager_enemy_fight_options", "close_window", "{=HAP_VillagerEnemyFightLeave}You're not worth my time. Be gone.", null, villager_leave_on_consequence, 80);
+		starter.AddPlayerLine("villager_enemy_surrender_take_goods", "villager_enemy_surrender_options", "villager_enemy_goods_taken", "{=HAP_VillagerTakeGoods}Just the goods. Get out of here.", villager_has_goods_condition, villager_take_goods_on_consequence);
+		starter.AddPlayerLine("villager_enemy_surrender_prisoners", "villager_enemy_surrender_options", "close_window", "{=HAP_VillagerEnemyTakePrisoners}You're prisoners of war now. March.", null, villager_take_prisoners_on_consequence, 90);
+		starter.AddPlayerLine("villager_enemy_surrender_attack", "villager_enemy_surrender_options", "close_window", "{=HAP_VillagerAttackSurrendered}Don't bother pleading. At them, lads!", null, villager_fight_on_consequence, 85);
+		starter.AddPlayerLine("villager_enemy_surrender_let_go", "villager_enemy_surrender_options", "close_window", "{=HAP_VillagerEnemyLetGo}Get out of here before I change my mind.", null, villager_leave_on_consequence, 80);
+		starter.AddDialogLine("villager_enemy_goods_taken_response", "villager_enemy_goods_taken", "close_window", "{=HAP_VillagerEnemyGoodsTaken}Thank you for your mercy...", null, villager_leave_on_consequence);
+	}
+
+	private bool IsVillagerPartyEncounter(out bool hasGoods, out bool isEnemy, out bool isHeadingToTown)
+	{
+		hasGoods = false;
+		isEnemy = false;
+		isHeadingToTown = false;
+		if (PlayerEncounter.Current == null)
+		{
+			return false;
+		}
+		if (Campaign.Current.CurrentConversationContext != ConversationContext.PartyEncounter)
+		{
+			return false;
+		}
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null || !encounteredParty.IsMobile)
+		{
+			return false;
+		}
+		MobileParty mobileParty = encounteredParty.MobileParty;
+		if (!mobileParty.IsVillager || IsFishingParty(mobileParty) || HerderPartyComponent.IsHerderParty(mobileParty))
+		{
+			return false;
+		}
+		Settlement homeSettlement = mobileParty.HomeSettlement;
+		hasGoods = HasValuableGoods(encounteredParty);
+		isEnemy = FactionManager.IsAtWarAgainstFaction(encounteredParty.MapFaction, Hero.MainHero.MapFaction);
+		isHeadingToTown = mobileParty.DefaultBehavior == AiBehavior.GoToSettlement && mobileParty.TargetSettlement != null && mobileParty.TargetSettlement.IsTown;
+		if (homeSettlement != null)
+		{
+			MBTextManager.SetTextVariable("SETTLEMENT_NAME", homeSettlement.EncyclopediaLinkWithName);
+		}
+		Settlement settlement = null;
+		if (homeSettlement?.Village?.TradeBound != null)
+		{
+			settlement = homeSettlement.Village.TradeBound;
+		}
+		else if (mobileParty.LastVisitedSettlement != null && mobileParty.LastVisitedSettlement.IsTown)
+		{
+			settlement = mobileParty.LastVisitedSettlement;
+		}
+		else if (homeSettlement != null)
+		{
+			settlement = SettlementHelper.FindNearestTownToSettlement(homeSettlement, mobileParty.NavigationCapability)?.Settlement;
+		}
+		if (settlement != null)
+		{
+			MBTextManager.SetTextVariable("TOWN_NAME", settlement.EncyclopediaLinkWithName);
+		}
+		if (Hero.MainHero.Clan?.Kingdom != null)
+		{
+			MBTextManager.SetTextVariable("PLAYER_ADDRESS", new TextObject("{=HAP_VillagerAddressLord}my {?PLAYER.GENDER}lady{?}lord{\\?}"));
+		}
+		else
+		{
+			MBTextManager.SetTextVariable("PLAYER_ADDRESS", new TextObject("{=HAP_VillagerAddressCommoner}traveler"));
+		}
+		return true;
+	}
+
+	private int GetTransportPackAnimalCount(MobileParty party)
+	{
+		if (party == null)
+		{
+			return 0;
+		}
+		return (int)(0.5f * (float)party.MemberRoster.TotalManCount);
+	}
+
+	private int GetSurplusPackAnimalCount(MobileParty party)
+	{
+		if (party == null)
+		{
+			return 0;
+		}
+		int numberOfPackAnimals = party.ItemRoster.NumberOfPackAnimals;
+		int transportPackAnimalCount = GetTransportPackAnimalCount(party);
+		return MathF.Max(0, numberOfPackAnimals - transportPackAnimalCount);
+	}
+
+	private bool IsFishingParty(MobileParty party)
+	{
+		if (party == null || party.PartyComponent == null)
+		{
+			return false;
+		}
+		string name = party.PartyComponent.GetType().Name;
+		return name == "FishingPartyComponent";
+	}
+
+	private int GetVillagerInteraction(MobileParty party)
+	{
+		if (_interactedVillagers.TryGetValue(party, out var value))
+		{
+			return value;
+		}
+		return 0;
+	}
+
+	private void SetVillagerInteraction(MobileParty party, int interaction)
+	{
+		if (_interactedVillagers.ContainsKey(party))
+		{
+			_interactedVillagers[party] = interaction;
+		}
+		else
+		{
+			_interactedVillagers.Add(party, interaction);
+		}
+	}
+
+	private bool HasValuableGoods(PartyBase party)
+	{
+		if (party?.ItemRoster == null || party.ItemRoster.IsEmpty())
+		{
+			return false;
+		}
+		int num = (party.IsMobile ? GetSurplusPackAnimalCount(party.MobileParty) : 0);
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = party.ItemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.EquipmentElement.Item == null)
+			{
+				continue;
+			}
+			int elementNumber = party.ItemRoster.GetElementNumber(i);
+			if (elementNumber > 0)
+			{
+				if (elementCopyAtIndex.EquipmentElement.Item.ItemCategory != DefaultItemCategories.PackAnimal)
+				{
+					return true;
+				}
+				if (num > 0)
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	private bool VillagerWillSurrender()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null || !encounteredParty.IsMobile)
+		{
+			return true;
+		}
+		int totalManCount = encounteredParty.MobileParty.MemberRoster.TotalManCount;
+		int totalManCount2 = MobileParty.MainParty.MemberRoster.TotalManCount;
+		if (totalManCount <= 0)
+		{
+			return true;
+		}
+		float num = (float)totalManCount2 / (float)totalManCount;
+		return num >= 2f;
+	}
+
+	private void CalculateVillagerBribeAmount(PartyBase party, out int gold, out ItemRoster items)
+	{
+		gold = 0;
+		items = new ItemRoster();
+		if (party?.MobileParty == null)
+		{
+			return;
+		}
+		gold = party.MobileParty.PartyTradeGold / 2;
+		int surplusPackAnimalCount = GetSurplusPackAnimalCount(party.MobileParty);
+		int num = 0;
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = party.ItemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.EquipmentElement.Item == null)
+			{
+				continue;
+			}
+			int elementNumber = party.ItemRoster.GetElementNumber(i);
+			if (elementNumber <= 0)
+			{
+				continue;
+			}
+			if (elementCopyAtIndex.EquipmentElement.Item.ItemCategory == DefaultItemCategories.PackAnimal)
+			{
+				int num2 = MathF.Max(0, MathF.Min(elementNumber, surplusPackAnimalCount - num));
+				if (num2 > 0)
+				{
+					int num3 = MathF.Max(1, num2 / 2);
+					items.AddToCounts(elementCopyAtIndex.EquipmentElement, num3);
+					num += num3;
+				}
+			}
+			else
+			{
+				int number = MathF.Max(1, elementNumber / 2);
+				items.AddToCounts(elementCopyAtIndex.EquipmentElement, number);
+			}
+		}
+	}
+
+	private bool villager_criminal_first_encounter_condition()
+	{
+		if (!IsVillagerPartyEncounter(out var _, out var isEnemy, out var _))
+		{
+			return false;
+		}
+		if (isEnemy)
+		{
+			return false;
+		}
+		MobileParty mobileParty = PlayerEncounter.EncounteredParty.MobileParty;
+		if (GetVillagerInteraction(mobileParty) != 0)
+		{
+			return false;
+		}
+		IFaction mapFaction = PlayerEncounter.EncounteredParty.MapFaction;
+		if (mapFaction == null || mapFaction.MainHeroCrimeRating <= 3f)
+		{
+			return false;
+		}
+		SetVillagerInteraction(mobileParty, 1);
+		return true;
+	}
+
+	private bool villager_friendly_has_goods_condition()
+	{
+		if (!IsVillagerPartyEncounter(out var hasGoods, out var isEnemy, out var isHeadingToTown))
+		{
+			return false;
+		}
+		if (isEnemy || !hasGoods || !isHeadingToTown)
+		{
+			return false;
+		}
+		MobileParty mobileParty = PlayerEncounter.EncounteredParty.MobileParty;
+		if (GetVillagerInteraction(mobileParty) != 0)
+		{
+			return false;
+		}
+		SetVillagerInteraction(mobileParty, 1);
+		return true;
+	}
+
+	private bool villager_friendly_no_goods_condition()
+	{
+		if (!IsVillagerPartyEncounter(out var hasGoods, out var isEnemy, out var _))
+		{
+			return false;
+		}
+		if (isEnemy | hasGoods)
+		{
+			return false;
+		}
+		MobileParty mobileParty = PlayerEncounter.EncounteredParty.MobileParty;
+		if (GetVillagerInteraction(mobileParty) != 0)
+		{
+			return false;
+		}
+		SetVillagerInteraction(mobileParty, 1);
+		return true;
+	}
+
+	private bool villager_friendly_returning_has_goods_condition()
+	{
+		if (!IsVillagerPartyEncounter(out var hasGoods, out var isEnemy, out var isHeadingToTown))
+		{
+			return false;
+		}
+		if ((isEnemy || !hasGoods) | isHeadingToTown)
+		{
+			return false;
+		}
+		MobileParty mobileParty = PlayerEncounter.EncounteredParty.MobileParty;
+		if (GetVillagerInteraction(mobileParty) != 0)
+		{
+			return false;
+		}
+		SetVillagerInteraction(mobileParty, 1);
+		return true;
+	}
+
+	private bool villager_friendly_return_condition()
+	{
+		if (!IsVillagerPartyEncounter(out var _, out var isEnemy, out var _))
+		{
+			return false;
+		}
+		if (isEnemy)
+		{
+			return false;
+		}
+		return GetVillagerInteraction(PlayerEncounter.EncounteredParty.MobileParty) == 1;
+	}
+
+	private bool villager_hostile_return_condition()
+	{
+		if (!IsVillagerPartyEncounter(out var _, out var isEnemy, out var _))
+		{
+			return false;
+		}
+		if (isEnemy)
+		{
+			return false;
+		}
+		return GetVillagerInteraction(PlayerEncounter.EncounteredParty.MobileParty) == 2;
+	}
+
+	private bool villager_enemy_condition()
+	{
+		if (!IsVillagerPartyEncounter(out var _, out var isEnemy, out var _))
+		{
+			return false;
+		}
+		return isEnemy;
+	}
+
+	private bool villager_has_goods_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		return encounteredParty != null && HasValuableGoods(encounteredParty);
+	}
+
+	private bool villager_open_trade_screen_condition()
+	{
+		MobileParty conversationParty = MobileParty.ConversationParty;
+		if (conversationParty == null)
+		{
+			return false;
+		}
+		_stashedPackAnimals = new ItemRoster();
+		int transportPackAnimalCount = GetTransportPackAnimalCount(conversationParty);
+		if (transportPackAnimalCount > 0)
+		{
+			int num = 0;
+			int num2 = conversationParty.ItemRoster.Count - 1;
+			while (num2 >= 0 && num < transportPackAnimalCount)
+			{
+				ItemRosterElement elementCopyAtIndex = conversationParty.ItemRoster.GetElementCopyAtIndex(num2);
+				if (elementCopyAtIndex.EquipmentElement.Item

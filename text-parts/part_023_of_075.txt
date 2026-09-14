@@ -1,0 +1,702 @@
+﻿PART 23/75
+rterParty(MobileParty deserterParty)
+	{
+		deserterParty.Party.SetVisualAsDirty();
+		deserterParty.ActualClan = DeserterClan;
+		deserterParty.Aggressiveness = 1f - 0.2f * MBRandom.RandomFloat;
+		int initialGold = (int)(10f * (float)deserterParty.MemberRoster.TotalManCount * (0.5f + 1f * MBRandom.RandomFloat));
+		deserterParty.InitializePartyTrade(initialGold);
+		GiveFoodToDeserterParty(deserterParty);
+	}
+
+	private void GiveFoodToDeserterParty(MobileParty deserterParty)
+	{
+		foreach (ItemObject item in Items.All)
+		{
+			if (item.IsFood)
+			{
+				int num = MBRandom.RoundRandomized((float)deserterParty.MemberRoster.TotalManCount * (1f / (float)item.Value) * 8f * MBRandom.RandomFloat * MBRandom.RandomFloat * MBRandom.RandomFloat * MBRandom.RandomFloat);
+				if (num > 0)
+				{
+					deserterParty.ItemRoster.AddToCounts(item, num);
+				}
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\TownFoodEconomyBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using HarvestAndProduction.Patches;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Siege;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class TownFoodEconomyBehavior : CampaignBehaviorBase
+{
+	public enum RawMaterialMode
+	{
+		Skip,
+		Last,
+		Include
+	}
+
+	private struct ClaimableItem
+	{
+		public ItemObject Item;
+
+		public int Count;
+
+		public float SpoilageRate;
+	}
+
+	private struct StashClaimableItem
+	{
+		public ItemObject Item;
+
+		public int Amount;
+
+		public int FoodValue;
+
+		public float SpoilageRate;
+	}
+
+	private const float PROLONGED_STARVATION_DAYS = 7f;
+
+	private const int MEAT_PER_SUMPTER_HORSE = 3;
+
+	private static readonly Dictionary<string, float> SpoilageRates = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase)
+	{
+		{ "fish", 8f },
+		{ "meat", 6f },
+		{ "meat_beef", 6f },
+		{ "meat_pork", 6f },
+		{ "meat_mutton", 6f },
+		{ "meat_poultry", 6f },
+		{ "meat_hare", 6f },
+		{ "grape", 5f },
+		{ "grapes", 5f },
+		{ "date_fruit", 5f },
+		{ "olives", 5f },
+		{ "cabbage_vegetable", 5f },
+		{ "leek_vegetable", 5f },
+		{ "carrot_vegetable", 5f },
+		{ "onion_vegetable", 5f },
+		{ "apple_fruit", 5f },
+		{ "orange_fruit", 5f },
+		{ "melon_fruit", 5f },
+		{ "mushroom_vegetable", 5f },
+		{ "butter", 4f },
+		{ "cheese", 4f },
+		{ "milk", 4f },
+		{ "heavy_cream", 4f },
+		{ "egg", 4f },
+		{ "bread", 3f },
+		{ "dough", 3f },
+		{ "pie", 3f },
+		{ "stew", 3f },
+		{ "flour", 3f },
+		{ "meat_poultry_cooked", 3f },
+		{ "meat_mutton_cooked", 3f },
+		{ "meat_pork_cooked", 3f },
+		{ "meat_sausage", 2f },
+		{ "meat_ham", 2f },
+		{ "grain", 1f },
+		{ "nuts", 1f },
+		{ "beer", 0.5f },
+		{ "wine", 0.5f },
+		{ "ale", 0.5f },
+		{ "mead", 0.5f },
+		{ "cider", 0.5f },
+		{ "honey", 0.5f },
+		{ "cow", 0.1f },
+		{ "sheep", 0.1f },
+		{ "hog", 0.1f },
+		{ "chicken_product", 0.1f },
+		{ "goose_product", 0.1f },
+		{ "hare", 0.1f }
+	};
+
+	private static readonly Dictionary<string, int> LivestockMeatValues = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+	{
+		{ "cow", 4 },
+		{ "sheep", 2 },
+		{ "hog", 2 },
+		{ "chicken_product", 1 },
+		{ "goose_product", 1 },
+		{ "hare", 1 }
+	};
+
+	private static Dictionary<string, int> _dailyStashClaimed = new Dictionary<string, int>();
+
+	private static Dictionary<string, float> _dailyStashLoyaltyBoost = new Dictionary<string, float>();
+
+	private static int _stashLastResetDay = -1;
+
+	private static HashSet<string> _slaughterNotified = new HashSet<string>();
+
+	private static Dictionary<string, int> _dailyLivestockSlaughter = new Dictionary<string, int>();
+
+	private static Dictionary<string, int> _dailyMarketRequisition = new Dictionary<string, int>();
+
+	private static Dictionary<string, int> _dailyExternalRequisition = new Dictionary<string, int>();
+
+	private static int _slaughterLastResetDay = -1;
+
+	private static void ResetSlaughterTotalsIfNeeded()
+	{
+		int num = (int)CampaignTime.Now.ToDays;
+		if (num != _slaughterLastResetDay)
+		{
+			_dailyLivestockSlaughter.Clear();
+			_dailyMarketRequisition.Clear();
+			_dailyExternalRequisition.Clear();
+			_slaughterLastResetDay = num;
+		}
+	}
+
+	public static int GetDailyLivestockSlaughter(Settlement settlement)
+	{
+		if (settlement == null)
+		{
+			return 0;
+		}
+		ResetSlaughterTotalsIfNeeded();
+		int value;
+		return _dailyLivestockSlaughter.TryGetValue(settlement.StringId, out value) ? value : 0;
+	}
+
+	public static int GetDailyMarketRequisition(Settlement settlement)
+	{
+		if (settlement == null)
+		{
+			return 0;
+		}
+		ResetSlaughterTotalsIfNeeded();
+		int value;
+		return _dailyMarketRequisition.TryGetValue(settlement.StringId, out value) ? value : 0;
+	}
+
+	public static int GetDailyExternalRequisition(Settlement settlement)
+	{
+		if (settlement == null)
+		{
+			return 0;
+		}
+		ResetSlaughterTotalsIfNeeded();
+		int value;
+		return _dailyExternalRequisition.TryGetValue(settlement.StringId, out value) ? value : 0;
+	}
+
+	public static int GetAvailableMarketFood(Town town, RawMaterialMode rawMaterialMode = RawMaterialMode.Skip)
+	{
+		if (town == null || town.Settlement == null)
+		{
+			return 0;
+		}
+		int num = 0;
+		ItemRoster itemRoster = town.Settlement.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores && (rawMaterialMode != RawMaterialMode.Skip || !RawMaterialRegistry.IsProtected(item.StringId, town.Settlement, RawMaterialRegistry.ProtectionContext.MarketClaiming)))
+			{
+				num += elementCopyAtIndex.Amount;
+			}
+		}
+		return num;
+	}
+
+	public static float EstimateMarketFoodReserves(Settlement settlement)
+	{
+		if (settlement == null)
+		{
+			return 0f;
+		}
+		ItemRoster itemRoster = settlement.ItemRoster;
+		if (itemRoster == null)
+		{
+			return 0f;
+		}
+		float num = 0f;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item == null || elementCopyAtIndex.Amount <= 0)
+			{
+				continue;
+			}
+			int value;
+			if ((item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores) || item.IsFood)
+			{
+				num += (float)elementCopyAtIndex.Amount;
+			}
+			else if (LivestockMeatValues.TryGetValue(item.StringId, out value))
+			{
+				num += (float)(elementCopyAtIndex.Amount * value);
+			}
+			else
+			{
+				if (!item.HasHorseComponent || item.ItemCategory == null)
+				{
+					continue;
+				}
+				string stringId = item.ItemCategory.StringId;
+				switch (stringId)
+				{
+				default:
+					if (!(stringId == "noble_horse"))
+					{
+						continue;
+					}
+					break;
+				case "sumpter_horse":
+				case "horse":
+				case "workshop_horse":
+				case "war_horse":
+				case "workshop_war_horse":
+					break;
+				}
+				num += (float)(elementCopyAtIndex.Amount * 3);
+			}
+		}
+		return num;
+	}
+
+	private static void ResetStashTotalsIfNeeded()
+	{
+		int num = (int)CampaignTime.Now.ToDays;
+		if (num != _stashLastResetDay)
+		{
+			_dailyStashClaimed.Clear();
+			_dailyStashLoyaltyBoost.Clear();
+			_stashLastResetDay = num;
+		}
+	}
+
+	public static int GetDailyStashClaimed(Settlement castle)
+	{
+		if (castle == null)
+		{
+			return 0;
+		}
+		ResetStashTotalsIfNeeded();
+		int value;
+		return _dailyStashClaimed.TryGetValue(castle.StringId, out value) ? value : 0;
+	}
+
+	public static float GetDailyStashLoyaltyBoost(Settlement settlement)
+	{
+		if (settlement == null)
+		{
+			return 0f;
+		}
+		ResetStashTotalsIfNeeded();
+		float value;
+		return _dailyStashLoyaltyBoost.TryGetValue(settlement.StringId, out value) ? value : 0f;
+	}
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.DailyTickTownEvent.AddNonSerializedListener(this, OnDailyTickTown);
+		CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, OnDailyTick);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		if (dataStore.IsLoading)
+		{
+			_dailyLivestockSlaughter.Clear();
+			_dailyMarketRequisition.Clear();
+			_dailyExternalRequisition.Clear();
+			_slaughterLastResetDay = -1;
+			_dailyStashClaimed.Clear();
+			_dailyStashLoyaltyBoost.Clear();
+			_stashLastResetDay = -1;
+		}
+	}
+
+	private void OnDailyTick()
+	{
+		try
+		{
+			foreach (Settlement item in Settlement.All)
+			{
+				if (item != null && (item.IsCastle || item.IsTown) && item.Town != null)
+				{
+					ProcessCastleStashFood(item.Town);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in TownFoodEconomyBehavior.OnDailyTick: " + ex.Message);
+		}
+	}
+
+	private void OnDailyTickTown(Town town)
+	{
+		if (town == null || town.Settlement == null)
+		{
+			return;
+		}
+		if (town.IsCastle)
+		{
+			if (town.IsUnderSiege)
+			{
+				Campaign.Current.GetCampaignBehavior<LordCastleResupplyBehavior>()?.ProcessSiegeRations(town);
+			}
+			return;
+		}
+		try
+		{
+			if (FoodSystemConstants.IsEmergencyMode(town))
+			{
+				ProcessEmergencyFoodClaim(town);
+				ProcessEmergencyLivestockSlaughter(town, 1);
+				if (town.IsUnderSiege ? (town.FoodStocks + town.FoodChange <= 0f) : IsProlongedStarvation(town))
+				{
+					ProcessEmergencyLivestockSlaughter(town);
+				}
+			}
+			if (town.IsUnderSiege)
+			{
+				Campaign.Current.GetCampaignBehavior<LordCastleResupplyBehavior>()?.ProcessSiegeRations(town);
+			}
+			float starvationDays = StarvationDesertionBehavior.GetStarvationDays(town.Settlement);
+			if (starvationDays < 3f)
+			{
+				_slaughterNotified.Remove(town.Settlement.StringId);
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log($"ERROR in TownFoodEconomyBehavior.OnDailyTickTown for {town.Name}: {ex.Message}");
+		}
+	}
+
+	public static bool TryRequisitionMarketFood(Town town, int desiredFood, string sourceId, out int transferredFood, RawMaterialMode rawMaterialMode = RawMaterialMode.Skip)
+	{
+		transferredFood = 0;
+		if (town == null || town.Settlement == null || desiredFood <= 0)
+		{
+			return false;
+		}
+		try
+		{
+			int num = town.FoodStocksUpperLimit();
+			float foodStocks = town.FoodStocks;
+			float pendingFoodPurchases = FoodSalePatch.GetPendingFoodPurchases(town);
+			float num2 = (float)num - foodStocks - pendingFoodPurchases;
+			if (num2 <= 0f)
+			{
+				return false;
+			}
+			float num3 = MathF.Min((float)desiredFood, num2);
+			ItemRoster itemRoster = town.Settlement.ItemRoster;
+			float num4 = 0f;
+			bool flag = rawMaterialMode == RawMaterialMode.Skip || rawMaterialMode == RawMaterialMode.Last;
+			int num5 = itemRoster.Count - 1;
+			while (num5 >= 0 && num4 < num3)
+			{
+				ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num5);
+				ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+				if (item != null && elementCopyAtIndex.Amount > 0 && item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores && (!flag || !RawMaterialRegistry.IsProtected(item.StringId, town.Settlement, RawMaterialRegistry.ProtectionContext.MarketClaiming)))
+				{
+					int num6 = Math.Min(elementCopyAtIndex.Amount, (int)(num3 - num4));
+					if (num6 > 0)
+					{
+						itemRoster.AddToCounts(item, -num6);
+						num4 += (float)num6;
+					}
+				}
+				num5--;
+			}
+			if (rawMaterialMode == RawMaterialMode.Last && num4 < num3)
+			{
+				int num7 = itemRoster.Count - 1;
+				while (num7 >= 0 && num4 < num3)
+				{
+					ItemRosterElement elementCopyAtIndex2 = itemRoster.GetElementCopyAtIndex(num7);
+					ItemObject item2 = elementCopyAtIndex2.EquipmentElement.Item;
+					if (item2 != null && elementCopyAtIndex2.Amount > 0 && item2.ItemCategory != null && item2.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores && RawMaterialRegistry.IsProtected(item2.StringId, town.Settlement, RawMaterialRegistry.ProtectionContext.MarketClaiming))
+					{
+						int num8 = Math.Min(elementCopyAtIndex2.Amount, (int)(num3 - num4));
+						if (num8 > 0)
+						{
+							itemRoster.AddToCounts(item2, -num8);
+							num4 += (float)num8;
+						}
+					}
+					num7--;
+				}
+			}
+			if (num4 <= 0f)
+			{
+				return false;
+			}
+			town.FoodStocks += num4;
+			if (town.FoodStocks > (float)num)
+			{
+				town.FoodStocks = num;
+			}
+			transferredFood = (int)num4;
+			ResetSlaughterTotalsIfNeeded();
+			string stringId = town.Settlement.StringId;
+			if (_dailyExternalRequisition.ContainsKey(stringId))
+			{
+				_dailyExternalRequisition[stringId] += transferredFood;
+			}
+			else
+			{
+				_dailyExternalRequisition[stringId] = transferredFood;
+			}
+			return true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log($"ERROR in TryRequisitionMarketFood for {town.Name} (source={sourceId}): {ex.Message}");
+			return false;
+		}
+	}
+
+	private void ProcessEmergencyFoodClaim(Town town)
+	{
+		int num = town.FoodStocksUpperLimit();
+		float foodStocks = town.FoodStocks;
+		float pendingFoodPurchases = FoodSalePatch.GetPendingFoodPurchases(town);
+		float a = (float)num - foodStocks - pendingFoodPurchases;
+		float num2 = town.Prosperity / 80f + ((town.GarrisonParty != null) ? ((float)town.GarrisonParty.Party.NumberOfAllMembers / 40f) : 0f);
+		float b = num2 * 3f;
+		a = MathF.Min(a, b);
+		if (a <= 0f)
+		{
+			return;
+		}
+		List<ClaimableItem> claimableFoodItems = GetClaimableFoodItems(town, isEmergency: true);
+		if (claimableFoodItems.Count == 0)
+		{
+			return;
+		}
+		claimableFoodItems.Sort((ClaimableItem claimableItem2, ClaimableItem claimableItem) => claimableItem.SpoilageRate.CompareTo(claimableItem2.SpoilageRate));
+		float num3 = 0f;
+		ItemRoster itemRoster = town.Settlement.ItemRoster;
+		foreach (ClaimableItem item in claimableFoodItems)
+		{
+			if (num3 >= a)
+			{
+				break;
+			}
+			float num4 = MathF.Min((float)item.Count, a - num3);
+			int num5 = (int)num4;
+			if (num5 > 0)
+			{
+				itemRoster.AddToCounts(item.Item, -num5);
+				num3 += (float)num5;
+			}
+		}
+		if (num3 > 0f)
+		{
+			town.FoodStocks += num3;
+			if (town.FoodStocks > (float)num)
+			{
+				town.FoodStocks = num;
+			}
+			ResetSlaughterTotalsIfNeeded();
+			string stringId = town.Settlement.StringId;
+			if (_dailyMarketRequisition.ContainsKey(stringId))
+			{
+				_dailyMarketRequisition[stringId] += (int)num3;
+			}
+			else
+			{
+				_dailyMarketRequisition[stringId] = (int)num3;
+			}
+		}
+	}
+
+	private void ProcessEmergencyLivestockSlaughter(Town town, int maxPriority = 4)
+	{
+		if (town == null || town.Settlement == null)
+		{
+			return;
+		}
+		int num = town.FoodStocksUpperLimit();
+		float num2 = MathF.Max(0f, (float)num - town.FoodStocks);
+		if (num2 <= 0f)
+		{
+			return;
+		}
+		float num3 = town.Prosperity / 80f + ((town.GarrisonParty != null) ? ((float)town.GarrisonParty.Party.NumberOfAllMembers / 40f) : 0f);
+		float b = num3 * 3f;
+		num2 = MathF.Min(num2, b);
+		if (num2 <= 0f)
+		{
+			return;
+		}
+		ItemRoster itemRoster = town.Settlement.ItemRoster;
+		float num4 = 0f;
+		int num5 = 0;
+		for (int i = 0; i <= maxPriority; i++)
+		{
+			if (!(num4 < num2))
+			{
+				break;
+			}
+			int num6 = itemRoster.Count - 1;
+			while (num6 >= 0 && num4 < num2)
+			{
+				ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num6);
+				ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+				if (item != null && elementCopyAtIndex.Amount > 0 && GetSlaughterPriority(item) == i)
+				{
+					int marketSlaughterMeatValue = GetMarketSlaughterMeatValue(item);
+					if (marketSlaughterMeatValue > 0)
+					{
+						float a = elementCopyAtIndex.Amount * marketSlaughterMeatValue;
+						float num7 = MathF.Min(a, num2 - num4);
+						int num8 = (int)(num7 / (float)marketSlaughterMeatValue);
+						if (num8 > 0)
+						{
+							num8 = Math.Min(num8, elementCopyAtIndex.Amount);
+							float num9 = num8 * marketSlaughterMeatValue;
+							itemRoster.AddToCounts(item, -num8);
+							num4 += num9;
+							num5 += num8;
+						}
+					}
+				}
+				num6--;
+			}
+		}
+		if (!(num4 > 0f))
+		{
+			return;
+		}
+		town.FoodStocks += num4;
+		if (town.FoodStocks > (float)num)
+		{
+			town.FoodStocks = num;
+		}
+		ResetSlaughterTotalsIfNeeded();
+		string stringId = town.Settlement.StringId;
+		if (_dailyLivestockSlaughter.ContainsKey(stringId))
+		{
+			_dailyLivestockSlaughter[stringId] += (int)num4;
+		}
+		else
+		{
+			_dailyLivestockSlaughter[stringId] = (int)num4;
+		}
+		if (maxPriority >= 2 && town.Settlement.OwnerClan == Clan.PlayerClan && !_slaughterNotified.Contains(town.Settlement.StringId))
+		{
+			_slaughterNotified.Add(town.Settlement.StringId);
+			HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+			if (instance == null || instance.SettlementInformation)
+			{
+				TextObject textObject = new TextObject("{=HAP_SettlementLivestockRequisitioned}{SETTLEMENT_NAME}: {ANIMALS} animals requisitioned for {FOOD} food due to prolonged food shortage.");
+				textObject.SetTextVariable("SETTLEMENT_NAME", town.Name);
+				textObject.SetTextVariable("ANIMALS", num5);
+				textObject.SetTextVariable("FOOD", (int)num4);
+				InformationManager.DisplayMessage(new InformationMessage(textObject.ToString(), Colors.Red));
+			}
+		}
+		if (!town.IsUnderSiege || town.Settlement.SiegeEvent == null)
+		{
+			return;
+		}
+		MobileParty mainParty = MobileParty.MainParty;
+		if (mainParty == null)
+		{
+			return;
+		}
+		bool flag = false;
+		if (mainParty.CurrentSettlement == town.Settlement)
+		{
+			flag = true;
+		}
+		if (!flag && town.Settlement.SiegeEvent.BesiegerCamp != null)
+		{
+			MobileParty leaderParty = town.Settlement.SiegeEvent.BesiegerCamp.LeaderParty;
+			if (leaderParty == mainParty)
+			{
+				flag = true;
+			}
+			else if (mainParty.Army != null && mainParty.Army.LeaderParty == leaderParty)
+			{
+				flag = true;
+			}
+			else if (PlayerSiege.PlayerSiegeEvent != null && PlayerSiege.PlayerSiegeEvent.BesiegedSettlement == town.Settlement)
+			{
+				flag = true;
+			}
+		}
+		if (flag)
+		{
+			TextObject textObject2 = new TextObject("{=HAP_SiegeEmergencySlaughter}{SETTLEMENT_NAME}: Defenders slaughtered {ANIMALS} animals for {FOOD} food.");
+			textObject2.SetTextVariable("SETTLEMENT_NAME", town.Name);
+			textObject2.SetTextVariable("ANIMALS", num5);
+			textObject2.SetTextVariable("FOOD", (int)num4);
+			InformationManager.DisplayMessage(new InformationMessage(textObject2.ToString(), Colors.Yellow));
+		}
+	}
+
+	private int GetMarketSlaughterMeatValue(ItemObject item)
+	{
+		if (item == null)
+		{
+			return 0;
+		}
+		if (LivestockMeatValues.TryGetValue(item.StringId, out var value))
+		{
+			return value;
+		}
+		if (item.HasHorseComponent && item.ItemCategory != null)
+		{
+			string stringId = item.ItemCategory.StringId;
+			switch (stringId)
+			{
+			default:
+				if (!(stringId == "noble_horse"))
+				{
+					break;
+				}
+				goto case "sumpter_horse";
+			case "sumpter_horse":
+			case "horse":
+			case "workshop_horse":
+			case "war_horse":
+			case "workshop_war_horse":
+				return 3;
+			}
+		}
+		return 0;
+	}
+
+	private int GetSlaughterPriority(ItemObject item)
+	{
+		if (item == null)
+		{
+			return -1;
+		}
+		if (LivestockMeatValues.ContainsKey(item.StringId))
+		{
+			return 0;
+		}
+		if (item.HasHorseComponent && item.ItemCategory != null)
+		{
+			string stringId = item.ItemCategory.StringId;
+			if (stringId == "sum

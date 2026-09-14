@@ -1,0 +1,630 @@
+﻿PART 45/75
+ref result);
+		}
+		if (party.EffectiveQuartermaster != null)
+		{
+			PerkHelper.AddEpicPerkBonusForCharacter(DefaultPerks.Steward.PriceOfLoyalty, party.EffectiveQuartermaster.CharacterObject, DefaultSkills.Steward, applyPrimaryBonus: true, ref result, Campaign.Current.Models.CharacterDevelopmentModel.MaxSkillRequiredForEpicPerkBonus);
+		}
+		TerrainType faceTerrainType = Campaign.Current.MapSceneWrapper.GetFaceTerrainType(party.CurrentNavigationFace);
+		if (faceTerrainType == TerrainType.Forest || faceTerrainType == TerrainType.Steppe)
+		{
+			PerkHelper.AddPerkBonusForParty(DefaultPerks.Scouting.Foragers, party, isPrimaryBonus: true, ref result);
+		}
+		if (party.IsGarrison && party.CurrentSettlement != null && party.CurrentSettlement.Town.IsUnderSiege)
+		{
+			PerkHelper.AddPerkBonusForTown(DefaultPerks.Athletics.StrongLegs, party.CurrentSettlement.Town, ref result);
+		}
+		if (party.Army != null)
+		{
+			PerkHelper.AddPerkBonusForParty(DefaultPerks.Steward.StiffUpperLip, party, isPrimaryBonus: true, ref result, party.IsCurrentlyAtSea);
+		}
+		if (party.SiegeEvent?.BesiegerCamp != null)
+		{
+			if (party.HasPerk(DefaultPerks.Steward.SoundReserves, checkSecondaryRole: true))
+			{
+				PerkHelper.AddPerkBonusForParty(DefaultPerks.Steward.SoundReserves, party, isPrimaryBonus: false, ref result);
+			}
+			if (party.SiegeEvent.BesiegerCamp.HasInvolvedPartyForEventType(party.Party) && party.HasPerk(DefaultPerks.Steward.MasterOfPlanning))
+			{
+				result.AddFactor(DefaultPerks.Steward.MasterOfPlanning.PrimaryBonus, DefaultPerks.Steward.MasterOfPlanning.Name);
+			}
+		}
+	}
+
+	private void CalculateMountedTroopConsumption(MobileParty party, ref ExplainedNumber result, bool includeDescription, float temperature)
+	{
+		int num = 0;
+		int num2 = 0;
+		int num3 = 0;
+		int num4 = 0;
+		int num5 = 0;
+		int num6 = 0;
+		int num7 = 0;
+		int num8 = 0;
+		for (int i = 0; i < party.MemberRoster.Count; i++)
+		{
+			CharacterObject characterAtIndex = party.MemberRoster.GetCharacterAtIndex(i);
+			int elementNumber = party.MemberRoster.GetElementNumber(i);
+			if (!characterAtIndex.IsMounted)
+			{
+				continue;
+			}
+			EquipmentElement equipmentElement = characterAtIndex.Equipment[EquipmentIndex.ArmorItemEndSlot];
+			if (equipmentElement.Item != null && equipmentElement.Item.ItemCategory != null)
+			{
+				bool flag = IsCamel(equipmentElement.Item);
+				switch (equipmentElement.Item.ItemCategory.StringId)
+				{
+				case "noble_horse":
+					if (flag)
+					{
+						num8 += elementNumber;
+					}
+					else
+					{
+						num4 += elementNumber;
+					}
+					break;
+				case "war_horse":
+					if (flag)
+					{
+						num7 += elementNumber;
+					}
+					else
+					{
+						num3 += elementNumber;
+					}
+					break;
+				case "sumpter_horse":
+					if (flag)
+					{
+						num6 += elementNumber;
+					}
+					else
+					{
+						num2 += elementNumber;
+					}
+					break;
+				default:
+					if (flag)
+					{
+						num5 += elementNumber;
+					}
+					else
+					{
+						num += elementNumber;
+					}
+					break;
+				}
+			}
+			else
+			{
+				num += elementNumber;
+			}
+		}
+		if (num == 0 && num2 == 0 && num3 == 0 && num4 == 0 && num5 == 0 && num6 == 0 && num7 == 0 && num8 == 0)
+		{
+			return;
+		}
+		if (TryGetKhuzaitSteppeFeatModifier(party, temperature, out var modifier))
+		{
+			if (modifier != 0f)
+			{
+				float temperatureModifierForHorses = GetTemperatureModifierForHorses(temperature);
+				modifier *= temperatureModifierForHorses;
+				AddMountConsumption(num, num2, num3, num4, num5, num6, num7, num8, modifier, modifier, ref result, includeDescription);
+			}
+		}
+		else
+		{
+			float combinedModifierForHorses = GetCombinedModifierForHorses(party, temperature);
+			float combinedModifierForCamels = GetCombinedModifierForCamels(party, temperature);
+			AddMountConsumption(num, num2, num3, num4, num5, num6, num7, num8, combinedModifierForHorses, combinedModifierForCamels, ref result, includeDescription);
+		}
+	}
+
+	private void AddMountConsumption(int horseCount, int sumpterHorseCount, int warHorseCount, int nobleHorseCount, int camelCount, int sumpterCamelCount, int warCamelCount, int nobleCamelCount, float horseModifier, float camelModifier, ref ExplainedNumber result, bool includeDescription)
+	{
+		float num = GlobalSettings<HAPSettings>.Instance?.MountFoodMultiplier ?? 1f;
+		float num2 = (0f - (float)horseCount) * 1.25f / (float)NumberOfMenOnMapToEatOneFood * horseModifier * num;
+		float num3 = (0f - (float)sumpterHorseCount) * 1f / (float)NumberOfMenOnMapToEatOneFood * horseModifier * num;
+		float num4 = (0f - (float)warHorseCount) * 1.5f / (float)NumberOfMenOnMapToEatOneFood * horseModifier * num;
+		float num5 = (0f - (float)nobleHorseCount) * 2f / (float)NumberOfMenOnMapToEatOneFood * horseModifier * num;
+		float num6 = (0f - (float)camelCount) * 1.25f / (float)NumberOfMenOnMapToEatOneFood * camelModifier * num;
+		float num7 = (0f - (float)sumpterCamelCount) * 1f / (float)NumberOfMenOnMapToEatOneFood * camelModifier * num;
+		float num8 = (0f - (float)warCamelCount) * 1.5f / (float)NumberOfMenOnMapToEatOneFood * camelModifier * num;
+		float num9 = (0f - (float)nobleCamelCount) * 2f / (float)NumberOfMenOnMapToEatOneFood * camelModifier * num;
+		float num10 = num2 + num6;
+		float num11 = num3 + num7;
+		float num12 = num4 + num8;
+		float num13 = num5 + num9;
+		if (num10 < 0f)
+		{
+			result.Add(num10, includeDescription ? new TextObject("{=horse_troops}Horse Troops") : null);
+		}
+		if (num11 < 0f)
+		{
+			result.Add(num11, includeDescription ? new TextObject("{=sumpter_horse_troops}Sumpter Horse Troops") : null);
+		}
+		if (num12 < 0f)
+		{
+			result.Add(num12, includeDescription ? new TextObject("{=war_horse_troops}War Horse Troops") : null);
+		}
+		if (num13 < 0f)
+		{
+			result.Add(num13, includeDescription ? new TextObject("{=noble_horse_troops}Noble Horse Troops") : null);
+		}
+	}
+
+	private void CalculateInventoryHorseConsumption(MobileParty party, ref ExplainedNumber result, bool includeDescription, float temperature)
+	{
+		int num = 0;
+		int num2 = 0;
+		int num3 = 0;
+		int num4 = 0;
+		int num5 = 0;
+		int num6 = 0;
+		int num7 = 0;
+		int num8 = 0;
+		int num9 = 0;
+		int num10 = 0;
+		int num11 = 0;
+		int num12 = 0;
+		int num13 = 0;
+		int num14 = 0;
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemObject itemAtIndex = party.ItemRoster.GetItemAtIndex(i);
+			if (!itemAtIndex.HasHorseComponent)
+			{
+				continue;
+			}
+			int elementNumber = party.ItemRoster.GetElementNumber(i);
+			string lowerCase = StringCache.GetLowerCase(itemAtIndex.StringId);
+			switch (lowerCase)
+			{
+			default:
+				if (!(lowerCase == "chicken_product"))
+				{
+					if (lowerCase == "sheep" || lowerCase == "hog")
+					{
+						num11 += elementNumber;
+						num14 += elementNumber;
+						break;
+					}
+					bool flag = IsCamel(itemAtIndex);
+					switch (itemAtIndex.ItemCategory.StringId)
+					{
+					case "noble_horse":
+						if (flag)
+						{
+							num8 += elementNumber;
+						}
+						else
+						{
+							num4 += elementNumber;
+						}
+						num12 += elementNumber;
+						break;
+					case "war_horse":
+						if (flag)
+						{
+							num7 += elementNumber;
+						}
+						else
+						{
+							num3 += elementNumber;
+						}
+						num12 += elementNumber;
+						break;
+					case "horse":
+						if (flag)
+						{
+							num5 += elementNumber;
+						}
+						else
+						{
+							num += elementNumber;
+						}
+						num12 += elementNumber;
+						break;
+					case "sumpter_horse":
+						if (flag)
+						{
+							num6 += elementNumber;
+						}
+						else
+						{
+							num2 += elementNumber;
+						}
+						num13 += elementNumber;
+						break;
+					default:
+						if (itemAtIndex.HorseComponent != null && itemAtIndex.HorseComponent.IsLiveStock)
+						{
+							num9 += elementNumber;
+							num14 += elementNumber;
+						}
+						break;
+					}
+					break;
+				}
+				goto case "cat";
+			case "cat":
+			case "dog":
+			case "chicken":
+			case "hare":
+			case "goose":
+			case "goose_product":
+				num10 += elementNumber;
+				num14 += elementNumber;
+				break;
+			}
+		}
+		HerdCounts value = new HerdCounts
+		{
+			Mounts = num12,
+			PackAnimals = num13,
+			Livestock = num14,
+			TotalHerd = num12 + num13 + num14
+		};
+		_herdCountCache[party] = value;
+		if (TryGetKhuzaitSteppeFeatModifier(party, temperature, out var modifier))
+		{
+			if (modifier != 0f)
+			{
+				float temperatureModifierForHorses = GetTemperatureModifierForHorses(temperature);
+				modifier *= temperatureModifierForHorses;
+				AddInventoryMountConsumption(num, num2, num3, num4, num5, num6, num7, num8, num9, num10, num11, modifier, modifier, ref result, includeDescription);
+			}
+		}
+		else
+		{
+			float combinedModifierForHorses = GetCombinedModifierForHorses(party, temperature);
+			float combinedModifierForCamels = GetCombinedModifierForCamels(party, temperature);
+			AddInventoryMountConsumption(num, num2, num3, num4, num5, num6, num7, num8, num9, num10, num11, combinedModifierForHorses, combinedModifierForCamels, ref result, includeDescription);
+		}
+	}
+
+	private void AddInventoryMountConsumption(int horseCount, int sumpterHorseCount, int warHorseCount, int nobleHorseCount, int camelCount, int sumpterCamelCount, int warCamelCount, int nobleCamelCount, int livestockCount, int smallAnimalCount, int mediumAnimalCount, float horseModifier, float camelModifier, ref ExplainedNumber result, bool includeDescription)
+	{
+		HAPSettings instance = GlobalSettings<HAPSettings>.Instance;
+		float num = instance?.MountFoodMultiplier ?? 1f;
+		float num2 = instance?.LivestockFoodMultiplier ?? 1f;
+		float num3 = (0f - (float)horseCount) * 1.25f / (float)NumberOfMenOnMapToEatOneFood * horseModifier * num;
+		float num4 = (0f - (float)sumpterHorseCount) * 1f / (float)NumberOfMenOnMapToEatOneFood * horseModifier * num;
+		float num5 = (0f - (float)warHorseCount) * 1.5f / (float)NumberOfMenOnMapToEatOneFood * horseModifier * num;
+		float num6 = (0f - (float)nobleHorseCount) * 2f / (float)NumberOfMenOnMapToEatOneFood * horseModifier * num;
+		float num7 = (0f - (float)camelCount) * 1.25f / (float)NumberOfMenOnMapToEatOneFood * camelModifier * num;
+		float num8 = (0f - (float)sumpterCamelCount) * 1f / (float)NumberOfMenOnMapToEatOneFood * camelModifier * num;
+		float num9 = (0f - (float)warCamelCount) * 1.5f / (float)NumberOfMenOnMapToEatOneFood * camelModifier * num;
+		float num10 = (0f - (float)nobleCamelCount) * 2f / (float)NumberOfMenOnMapToEatOneFood * camelModifier * num;
+		float num11 = (0f - (float)livestockCount) * 1f / (float)NumberOfMenOnMapToEatOneFood * horseModifier * num2;
+		float num12 = (0f - (float)smallAnimalCount) * 0.2f / (float)NumberOfMenOnMapToEatOneFood * horseModifier * num2;
+		float num13 = (0f - (float)mediumAnimalCount) * 0.4f / (float)NumberOfMenOnMapToEatOneFood * horseModifier * num2;
+		float num14 = num3 + num7;
+		float num15 = num4 + num8;
+		float num16 = num5 + num9;
+		float num17 = num6 + num10;
+		float num18 = num11 + num12 + num13;
+		if (num14 < 0f)
+		{
+			result.Add(num14, includeDescription ? new TextObject("{=inv_horses}Inventory Horses") : null);
+		}
+		if (num15 < 0f)
+		{
+			result.Add(num15, includeDescription ? new TextObject("{=inv_sumpter}Inventory Pack Mounts") : null);
+		}
+		if (num16 < 0f)
+		{
+			result.Add(num16, includeDescription ? new TextObject("{=inv_war_horses}Inventory War Horses") : null);
+		}
+		if (num17 < 0f)
+		{
+			result.Add(num17, includeDescription ? new TextObject("{=inv_noble_horses}Inventory Noble Horses") : null);
+		}
+		if (num18 < 0f)
+		{
+			result.Add(num18, includeDescription ? new TextObject("{=inv_livestock}Inventory Livestock") : null);
+		}
+	}
+
+	private bool IsCamel(ItemObject item)
+	{
+		if (item == null || item.StringId == null)
+		{
+			return false;
+		}
+		string text = item.StringId.ToLower();
+		return text.Contains("camel");
+	}
+
+	private float GetTemperatureModifierForHorses(float temperature)
+	{
+		float result = 1f;
+		if (temperature < 5f)
+		{
+			result = 2f;
+		}
+		else if (temperature < 15f)
+		{
+			float num = (15f - temperature) / 10f;
+			result = 1f + num * 0.2f;
+		}
+		else if (temperature > 25f)
+		{
+			result = 1.5f;
+		}
+		return result;
+	}
+
+	private float GetTemperatureModifierForCamels(float temperature)
+	{
+		float result = 1f;
+		if (temperature < 5f)
+		{
+			result = 2.5f;
+		}
+		else if (temperature < 15f)
+		{
+			float num = (15f - temperature) / 10f;
+			result = 1f + num * 0.3f;
+		}
+		else if (temperature > 30f)
+		{
+			result = 0.8f;
+		}
+		return result;
+	}
+
+	private float GetCombinedModifierForHorses(MobileParty party, float temperature)
+	{
+		float terrainModifierForHorses = GetTerrainModifierForHorses(party);
+		float temperatureModifierForHorses = GetTemperatureModifierForHorses(temperature);
+		return terrainModifierForHorses * temperatureModifierForHorses;
+	}
+
+	private float GetCombinedModifierForCamels(MobileParty party, float temperature)
+	{
+		float terrainModifierForCamels = GetTerrainModifierForCamels(party);
+		float temperatureModifierForCamels = GetTemperatureModifierForCamels(temperature);
+		return terrainModifierForCamels * temperatureModifierForCamels;
+	}
+
+	private float GetTerrainModifierForHorses(MobileParty party)
+	{
+		if (party == null || Campaign.Current == null || Campaign.Current.MapSceneWrapper == null)
+		{
+			return 1f;
+		}
+		TerrainType faceTerrainType = Campaign.Current.MapSceneWrapper.GetFaceTerrainType(party.CurrentNavigationFace);
+		CampaignTime.Seasons getSeasonOfYear = CampaignTime.Now.GetSeasonOfYear;
+		float num = 1f;
+		switch (faceTerrainType)
+		{
+		case TerrainType.Steppe:
+			num = getSeasonOfYear switch
+			{
+				CampaignTime.Seasons.Summer => 0f, 
+				CampaignTime.Seasons.Spring => 0.3f, 
+				CampaignTime.Seasons.Autumn => 0.4f, 
+				CampaignTime.Seasons.Winter => 0.8f, 
+				_ => 0.5f, 
+			};
+			break;
+		case TerrainType.Plain:
+			num = getSeasonOfYear switch
+			{
+				CampaignTime.Seasons.Summer => 0f, 
+				CampaignTime.Seasons.Spring => 0.35f, 
+				CampaignTime.Seasons.Autumn => 0.45f, 
+				CampaignTime.Seasons.Winter => 0.9f, 
+				_ => 0.5f, 
+			};
+			break;
+		case TerrainType.Forest:
+			num = getSeasonOfYear switch
+			{
+				CampaignTime.Seasons.Summer => 0.5f, 
+				CampaignTime.Seasons.Spring => 0.6f, 
+				CampaignTime.Seasons.Autumn => 0.7f, 
+				CampaignTime.Seasons.Winter => 1.1f, 
+				_ => 0.8f, 
+			};
+			break;
+		case TerrainType.Desert:
+		case TerrainType.Dune:
+			num = getSeasonOfYear switch
+			{
+				CampaignTime.Seasons.Summer => 1.5f, 
+				CampaignTime.Seasons.Spring => 1.3f, 
+				CampaignTime.Seasons.Autumn => 1.3f, 
+				CampaignTime.Seasons.Winter => 1.2f, 
+				_ => 1.5f, 
+			};
+			break;
+		case TerrainType.River:
+		case TerrainType.CoastalSea:
+		case TerrainType.OpenSea:
+		case TerrainType.UnderBridge:
+			num = getSeasonOfYear switch
+			{
+				CampaignTime.Seasons.Summer => 2f, 
+				CampaignTime.Seasons.Spring => 2f, 
+				CampaignTime.Seasons.Autumn => 2f, 
+				CampaignTime.Seasons.Winter => 2f, 
+				_ => 2f, 
+			};
+			break;
+		default:
+			num = 1f;
+			break;
+		}
+		return num;
+	}
+
+	private float GetTerrainModifierForCamels(MobileParty party)
+	{
+		if (party == null || Campaign.Current == null || Campaign.Current.MapSceneWrapper == null)
+		{
+			return 1f;
+		}
+		TerrainType faceTerrainType = Campaign.Current.MapSceneWrapper.GetFaceTerrainType(party.CurrentNavigationFace);
+		CampaignTime.Seasons getSeasonOfYear = CampaignTime.Now.GetSeasonOfYear;
+		float num = 1f;
+		switch (faceTerrainType)
+		{
+		case TerrainType.Desert:
+		case TerrainType.Dune:
+			num = getSeasonOfYear switch
+			{
+				CampaignTime.Seasons.Summer => 0.5f, 
+				CampaignTime.Seasons.Spring => 0.6f, 
+				CampaignTime.Seasons.Autumn => 0.6f, 
+				CampaignTime.Seasons.Winter => 0.7f, 
+				_ => 0.6f, 
+			};
+			break;
+		case TerrainType.Steppe:
+			num = getSeasonOfYear switch
+			{
+				CampaignTime.Seasons.Summer => 0f, 
+				CampaignTime.Seasons.Spring => 0.4f, 
+				CampaignTime.Seasons.Autumn => 0.5f, 
+				CampaignTime.Seasons.Winter => 0.9f, 
+				_ => 0.6f, 
+			};
+			break;
+		case TerrainType.Plain:
+			num = getSeasonOfYear switch
+			{
+				CampaignTime.Seasons.Summer => 0.1f, 
+				CampaignTime.Seasons.Spring => 0.5f, 
+				CampaignTime.Seasons.Autumn => 0.6f, 
+				CampaignTime.Seasons.Winter => 1f, 
+				_ => 0.7f, 
+			};
+			break;
+		case TerrainType.Forest:
+			num = getSeasonOfYear switch
+			{
+				CampaignTime.Seasons.Summer => 0.9f, 
+				CampaignTime.Seasons.Spring => 1f, 
+				CampaignTime.Seasons.Autumn => 1.1f, 
+				CampaignTime.Seasons.Winter => 1.2f, 
+				_ => 1.1f, 
+			};
+			break;
+		case TerrainType.River:
+		case TerrainType.CoastalSea:
+		case TerrainType.OpenSea:
+		case TerrainType.UnderBridge:
+			num = getSeasonOfYear switch
+			{
+				CampaignTime.Seasons.Summer => 2f, 
+				CampaignTime.Seasons.Spring => 2f, 
+				CampaignTime.Seasons.Autumn => 2f, 
+				CampaignTime.Seasons.Winter => 2f, 
+				_ => 2f, 
+			};
+			break;
+		default:
+			num = 1f;
+			break;
+		}
+		return num;
+	}
+
+	private bool TryGetKhuzaitSteppeFeatModifier(MobileParty party, float temperature, out float modifier)
+	{
+		modifier = 1f;
+		if (party == null || party.LeaderHero == null || party.LeaderHero.Culture == null)
+		{
+			return false;
+		}
+		if (!party.LeaderHero.Culture.StringId.Equals("khuzait", StringComparison.OrdinalIgnoreCase))
+		{
+			return false;
+		}
+		if (Campaign.Current == null || Campaign.Current.MapSceneWrapper == null)
+		{
+			return false;
+		}
+		TerrainType faceTerrainType = Campaign.Current.MapSceneWrapper.GetFaceTerrainType(party.CurrentNavigationFace);
+		if (faceTerrainType == TerrainType.Steppe)
+		{
+			modifier = 0f;
+			return true;
+		}
+		return false;
+	}
+
+	private bool TryGetSturgianWinterStoresModifier(MobileParty party, float temperature, out float modifier)
+	{
+		modifier = 1f;
+		if (party == null || party.LeaderHero == null || party.LeaderHero.Culture == null)
+		{
+			return false;
+		}
+		if (!party.LeaderHero.Culture.StringId.Equals("sturgia", StringComparison.OrdinalIgnoreCase))
+		{
+			return false;
+		}
+		if (temperature < 5f)
+		{
+			modifier = 0f;
+			return true;
+		}
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\HAPBuildingModel.cs =====
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Buildings;
+
+namespace HarvestAndProduction.Models;
+
+public class HAPBuildingModel : BuildingModel
+{
+	public override bool CanAddBuildingTypeToTown(BuildingType buildingType, Town town)
+	{
+		if (buildingType == DefaultBuildingTypes.CastleFarmlands)
+		{
+			return true;
+		}
+		return base.BaseModel.CanAddBuildingTypeToTown(buildingType, town);
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\HarvestAndProduction_ProductionBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarvestAndProduction.Behaviors;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Models;
+
+public class HarvestAndProduction_ProductionBehavior : CampaignBehaviorBase
+{
+	private bool _initialized = false;
+
+	private const float SEEDING_MIN_DAYS = 1f;
+
+	private const float SEEDING_MAX_DAYS = 2f;
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+		CampaignEvents.OnGameLoadedEvent.Add

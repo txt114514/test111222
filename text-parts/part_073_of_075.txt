@@ -1,0 +1,681 @@
+﻿PART 73/75
+in (from i in workshop.WorkshopType.Productions.SelectMany((WorkshopType.Production p) => p.Inputs)
+					select i.Item1).Distinct()
+				select new TextObject(GetCategoryDisplayName(c));
+			if (enumerable.Any())
+			{
+				propertyBasedTooltipVM.AddProperty(definition2, CampaignUIHelper.GetCommaNewlineSeparatedText(TextObject.GetEmpty(), enumerable).ToString());
+			}
+			string definition3 = new TextObject("{=HAP_WS_Output}Output").ToString();
+			IEnumerable<TextObject> enumerable2 = from c in (from o in workshop.WorkshopType.Productions.SelectMany((WorkshopType.Production p) => p.Outputs)
+					select o.Item1).Distinct()
+				select new TextObject(GetCategoryDisplayName(c));
+			if (enumerable2.Any())
+			{
+				propertyBasedTooltipVM.AddProperty(definition3, CampaignUIHelper.GetCommaNewlineSeparatedText(TextObject.GetEmpty(), enumerable2).ToString());
+			}
+			if (workshop.Owner == Hero.MainHero || workshop.Settlement?.OwnerClan == Clan.PlayerClan || workshop.Settlement?.OwnerClan?.Kingdom?.Leader == Hero.MainHero)
+			{
+				string definition4 = new TextObject("{=HAP_WS_State}State").ToString();
+				string value2 = ((workshop.Capital >= workshop.InitialCapital) ? new TextObject("{=HAP_WS_Profitable}Profitable").ToString() : new TextObject("{=HAP_WS_Unprofitable}Unprofitable").ToString());
+				propertyBasedTooltipVM.AddProperty(definition4, value2);
+				string definition5 = new TextObject("{=HAP_WS_Capital}Capital").ToString();
+				propertyBasedTooltipVM.AddProperty(definition5, workshop.Capital.ToString("N0"));
+			}
+		}
+		catch
+		{
+			return true;
+		}
+		return false;
+	}
+
+	private static string GetCategoryDisplayName(ItemCategory category)
+	{
+		if (category == null)
+		{
+			return "";
+		}
+		return category.GetName().ToString();
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\WorkshopIconPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using SandBox.ViewModelCollection.Missions.NameMarker.Targets;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.CampaignSystem.ViewModelCollection.ClanManagement.ClanFinance;
+using TaleWorlds.CampaignSystem.ViewModelCollection.GameMenu.TownManagement;
+using TaleWorlds.GauntletUI;
+using TaleWorlds.GauntletUI.BaseTypes;
+using TaleWorlds.Library;
+using TaleWorlds.MountAndBlade.GauntletUI.Widgets.Map.Menu.TownManagement;
+
+namespace HarvestAndProduction.Patches;
+
+public class WorkshopIconPatch
+{
+	[HarmonyPatch(typeof(ClanFinanceWorkshopItemVM), "RefreshValues")]
+	public class ClanFinanceWorkshopItemVM_RefreshValues
+	{
+		[HarmonyPostfix]
+		public static void Postfix(ClanFinanceWorkshopItemVM __instance)
+		{
+			try
+			{
+				Workshop workshop = GetWorkshop(__instance);
+				if (workshop?.WorkshopType == null)
+				{
+					return;
+				}
+				string text = workshop.WorkshopType.StringId?.ToLower();
+				if (!string.IsNullOrEmpty(text) && ClanIconMap.TryGetValue(text, out var value))
+				{
+					PropertyInfo property = __instance.GetType().GetProperty("WorkshopTypeId");
+					if (property != null && property.CanWrite)
+					{
+						property.SetValue(__instance, value);
+					}
+				}
+			}
+			catch
+			{
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(TownManagementShopItemVM), MethodType.Constructor, new Type[] { typeof(Workshop) })]
+	public class TownManagementShopItemVM_Constructor
+	{
+		[HarmonyPostfix]
+		public static void Postfix(TownManagementShopItemVM __instance, Workshop workshop)
+		{
+			try
+			{
+				if (workshop?.WorkshopType != null)
+				{
+					string text = workshop.WorkshopType.StringId?.ToLower();
+					if (!string.IsNullOrEmpty(text) && TownIconMap.TryGetValue(text, out var value))
+					{
+						__instance.ShopId = value;
+					}
+				}
+			}
+			catch
+			{
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(TownManagementShopItemVM), "RefreshValues")]
+	public class TownManagementShopItemVM_RefreshValues
+	{
+		[HarmonyPostfix]
+		public static void Postfix(TownManagementShopItemVM __instance)
+		{
+			try
+			{
+				string text = __instance.ShopId?.ToLower();
+				if (!string.IsNullOrEmpty(text) && TownIconMap.TryGetValue(text, out var value))
+				{
+					__instance.ShopId = value;
+				}
+			}
+			catch
+			{
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(BrushWidget), "SetState")]
+	public class BrushWidget_SetState_Workshop
+	{
+		private static readonly FieldInfo _originalBrushField = AccessTools.Field(typeof(BrushWidget), "_originalBrush");
+
+		[HarmonyPrefix]
+		public static void Prefix(BrushWidget __instance, ref string stateName)
+		{
+			try
+			{
+				if (!(_originalBrushField == null) && !string.IsNullOrEmpty(stateName) && _originalBrushField.GetValue(__instance) is Brush { Name: var name } && !string.IsNullOrEmpty(name) && (name.Contains("Workshop") || name.Contains("Shop")))
+				{
+					string key = stateName.ToLower();
+					if (ClanIconMap.TryGetValue(key, out var value))
+					{
+						stateName = value;
+					}
+				}
+			}
+			catch
+			{
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(MissionWorkshopNameMarkerTargetVM), MethodType.Constructor, new Type[]
+	{
+		typeof(Workshop),
+		typeof(Vec3)
+	})]
+	public class MissionWorkshopNameMarkerTargetVM_Constructor
+	{
+		[HarmonyPostfix]
+		public static void Postfix(MissionWorkshopNameMarkerTargetVM __instance)
+		{
+			try
+			{
+				PropertyInfo property = __instance.GetType().GetProperty("IconType");
+				if (property == null || !property.CanWrite)
+				{
+					return;
+				}
+				string text = property.GetValue(__instance) as string;
+				if (!string.IsNullOrEmpty(text))
+				{
+					string iconId = GetIconId(text);
+					if (iconId != text)
+					{
+						property.SetValue(__instance, iconId);
+					}
+				}
+			}
+			catch
+			{
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(ShopVisualIconBrushWidget), "OnLateUpdate")]
+	public class ShopVisualIconBrushWidget_OnLateUpdate
+	{
+		private static readonly FieldInfo _initializedField = AccessTools.Field(typeof(ShopVisualIconBrushWidget), "_initialized");
+
+		private static readonly HashSet<string> CustomWorkshopIds = new HashSet<string> { "butcher", "studfarm" };
+
+		[HarmonyPrefix]
+		public static bool Prefix(ShopVisualIconBrushWidget __instance)
+		{
+			try
+			{
+				if (_initializedField == null)
+				{
+					return true;
+				}
+				if ((bool)_initializedField.GetValue(__instance))
+				{
+					return true;
+				}
+				string shopId = __instance.ShopId;
+				if (!string.IsNullOrEmpty(shopId) && CustomWorkshopIds.Contains(shopId))
+				{
+					string state = char.ToUpper(shopId[0]) + shopId.Substring(1);
+					__instance.SetState(state);
+					_initializedField.SetValue(__instance, true);
+					return false;
+				}
+			}
+			catch
+			{
+			}
+			return true;
+		}
+	}
+
+	private static readonly Dictionary<string, string> ClanIconMap = new Dictionary<string, string> { { "bakery", "mill" } };
+
+	private static readonly Dictionary<string, string> TownIconMap = new Dictionary<string, string> { { "bakery", "mill" } };
+
+	public static string GetIconId(string workshopTypeId)
+	{
+		if (string.IsNullOrEmpty(workshopTypeId))
+		{
+			return workshopTypeId;
+		}
+		if (TownIconMap.TryGetValue(workshopTypeId.ToLower(), out var value))
+		{
+			return value;
+		}
+		return workshopTypeId;
+	}
+
+	private static Workshop GetWorkshop(ClanFinanceWorkshopItemVM instance)
+	{
+		try
+		{
+			PropertyInfo property = instance.GetType().GetProperty("Workshop");
+			if (property != null)
+			{
+				return property.GetValue(instance) as Workshop;
+			}
+			FieldInfo[] fields = instance.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			FieldInfo[] array = fields;
+			foreach (FieldInfo fieldInfo in array)
+			{
+				if (fieldInfo.FieldType == typeof(Workshop))
+				{
+					return fieldInfo.GetValue(instance) as Workshop;
+				}
+			}
+		}
+		catch
+		{
+		}
+		return null;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\WorkshopProfitPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Reflection.Emit;
+using HarmonyLib;
+using MCM.Abstractions.Base.Global;
+
+namespace HarvestAndProduction.Patches;
+
+public static class WorkshopProfitPatch
+{
+	private const float VANILLA_CONSTANT = 200f;
+
+	public static float GetThreshold()
+	{
+		return GlobalSettings<HAPSettings>.Instance?.WorkshopProfitThreshold ?? 50f;
+	}
+
+	public static IEnumerable<CodeInstruction> ReplaceThresholdConstant(IEnumerable<CodeInstruction> instructions, string methodName)
+	{
+		MethodInfo getThresholdMethod = AccessTools.Method(typeof(WorkshopProfitPatch), "GetThreshold");
+		bool replaced = false;
+		foreach (CodeInstruction instruction in instructions)
+		{
+			if (!replaced && instruction.opcode == OpCodes.Ldc_R4 && instruction.operand is float val && Math.Abs(val - 200f) < 0.01f)
+			{
+				yield return new CodeInstruction(OpCodes.Call, getThresholdMethod);
+				replaced = true;
+				Main.Log("[WorkshopProfitPatch] " + methodName + ": replaced 200f with MCM call");
+			}
+			else
+			{
+				yield return instruction;
+			}
+		}
+		if (!replaced)
+		{
+			Main.Log("[WorkshopProfitPatch] WARNING: Could not find 200f in " + methodName + ". Game version may have changed.");
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\WorkshopProfitPatch_Notable.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch]
+public static class WorkshopProfitPatch_Notable
+{
+	private static MethodBase TargetMethod()
+	{
+		Type type = AccessTools.TypeByName("TaleWorlds.CampaignSystem.CampaignBehaviors.WorkshopsCampaignBehavior");
+		if (type == null)
+		{
+			Main.Log("[WorkshopProfitPatch] ERROR: WorkshopsCampaignBehavior not found");
+			return null;
+		}
+		MethodInfo methodInfo = AccessTools.Method(type, "CanNotableWorkshopProduceThisCycle", new Type[5]
+		{
+			typeof(WorkshopType.Production),
+			typeof(Workshop),
+			typeof(int),
+			typeof(int),
+			typeof(bool)
+		});
+		if (methodInfo == null)
+		{
+			Main.Log("[WorkshopProfitPatch] ERROR: CanNotableWorkshopProduceThisCycle not found");
+		}
+		return methodInfo;
+	}
+
+	private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+	{
+		return WorkshopProfitPatch.ReplaceThresholdConstant(instructions, "CanNotableWorkshopProduceThisCycle");
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\WorkshopProfitPatch_Player.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch]
+public static class WorkshopProfitPatch_Player
+{
+	private static MethodBase TargetMethod()
+	{
+		Type type = AccessTools.TypeByName("TaleWorlds.CampaignSystem.CampaignBehaviors.WorkshopsCampaignBehavior");
+		if (type == null)
+		{
+			Main.Log("[WorkshopProfitPatch] ERROR: WorkshopsCampaignBehavior not found");
+			return null;
+		}
+		MethodInfo methodInfo = AccessTools.Method(type, "CanPlayerWorkshopProduceThisCycle", new Type[6]
+		{
+			typeof(WorkshopType.Production),
+			typeof(Workshop),
+			typeof(int),
+			typeof(int),
+			typeof(bool),
+			typeof(bool)
+		});
+		if (methodInfo == null)
+		{
+			Main.Log("[WorkshopProfitPatch] ERROR: CanPlayerWorkshopProduceThisCycle not found");
+		}
+		return methodInfo;
+	}
+
+	private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+	{
+		return WorkshopProfitPatch.ReplaceThresholdConstant(instructions, "CanPlayerWorkshopProduceThisCycle");
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\WorkshopTaxPatch.cs =====
+using System;
+using HarmonyLib;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultClanFinanceModel), "CalculateOwnerIncomeFromWorkshop")]
+public static class WorkshopTaxPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(Workshop workshop, ref int __result)
+	{
+		try
+		{
+			if (__result > 0)
+			{
+				float num = GlobalSettings<HAPSettings>.Instance?.WorkshopTaxRate ?? 0.2f;
+				if (!(num <= 0f) && workshop.Settlement?.OwnerClan != null)
+				{
+					__result = (int)((float)__result * (1f - num));
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("WorkshopTaxPatch error: " + ex.Message);
+		}
+	}
+
+	public static int GetWorkshopTaxAmount(Workshop workshop)
+	{
+		float num = GlobalSettings<HAPSettings>.Instance?.WorkshopTaxRate ?? 0.2f;
+		if (num <= 0f)
+		{
+			return 0;
+		}
+		if (workshop.WorkshopType == null || workshop.WorkshopType.IsHidden)
+		{
+			return 0;
+		}
+		if (workshop.Settlement?.OwnerClan == null)
+		{
+			return 0;
+		}
+		int num2 = MathF.Max(0, workshop.Capital - workshop.InitialCapital);
+		int num3 = (int)((float)num2 / Campaign.Current.Models.ClanFinanceModel.RevenueSmoothenFraction());
+		if (num3 <= 0)
+		{
+			return 0;
+		}
+		return (int)((float)num3 * num);
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\WorkshopTypeSelectorPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using HarvestAndProduction.Models;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+public static class WorkshopTypeSelectorPatch
+{
+	private static bool _patchApplied;
+
+	private static MethodInfo _findTotalInputDensityScore;
+
+	private const int BANKRUPTCY_CAPITAL = 5000;
+
+	public static void Apply(Harmony harmony)
+	{
+		if (_patchApplied)
+		{
+			return;
+		}
+		try
+		{
+			Type typeFromHandle = typeof(WorkshopsCampaignBehavior);
+			_findTotalInputDensityScore = AccessTools.Method(typeFromHandle, "FindTotalInputDensityScore", new Type[4]
+			{
+				typeof(Settlement),
+				typeof(WorkshopType),
+				typeof(IDictionary<ItemCategory, float>),
+				typeof(bool)
+			});
+			if (_findTotalInputDensityScore == null)
+			{
+				Main.Log("[WorkshopTypeSelectorPatch] ERROR: FindTotalInputDensityScore not found — skipping patch");
+				return;
+			}
+			MethodInfo methodInfo = AccessTools.Method(typeFromHandle, "DecideBestWorkshopType", new Type[3]
+			{
+				typeof(Settlement),
+				typeof(bool),
+				typeof(WorkshopType)
+			});
+			if (methodInfo == null)
+			{
+				Main.Log("[WorkshopTypeSelectorPatch] ERROR: DecideBestWorkshopType not found — skipping patch");
+				return;
+			}
+			HarmonyMethod prefix = new HarmonyMethod(typeof(WorkshopTypeSelectorPatch), "Prefix");
+			harmony.Patch(methodInfo, prefix);
+			MethodInfo methodInfo2 = AccessTools.Method(typeof(ChangeOwnerOfWorkshopAction), "ApplyByBankruptcy");
+			if (methodInfo2 != null)
+			{
+				HarmonyMethod postfix = new HarmonyMethod(typeof(WorkshopTypeSelectorPatch), "BankruptcyPostfix");
+				harmony.Patch(methodInfo2, null, postfix);
+				Main.Log("[WorkshopTypeSelectorPatch] Bankruptcy capital reset patch applied (10000 → 5000)");
+			}
+			_patchApplied = true;
+			Main.Log("[WorkshopTypeSelectorPatch] Applied — workshop type selection uses HAP annual profiles");
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[WorkshopTypeSelectorPatch] ERROR: " + ex.Message);
+		}
+	}
+
+	private static bool Prefix(object __instance, Settlement currentSettlement, bool atGameStart, WorkshopType workshopToExclude, ref WorkshopType __result)
+	{
+		try
+		{
+			if (!(Campaign.Current?.Models?.VillageProductionCalculatorModel is VillageProductionModel villageProductionModel))
+			{
+				return true;
+			}
+			IDictionary<ItemCategory, float> dictionary = new Dictionary<ItemCategory, float>();
+			foreach (Village item in Village.All)
+			{
+				if (item.TradeBound != currentSettlement)
+				{
+					continue;
+				}
+				Dictionary<ItemCategory, float> annualProductionProfile = villageProductionModel.GetAnnualProductionProfile(item);
+				foreach (KeyValuePair<ItemCategory, float> item2 in annualProductionProfile)
+				{
+					if (dictionary.ContainsKey(item2.Key))
+					{
+						dictionary[item2.Key] += item2.Value;
+					}
+					else
+					{
+						dictionary[item2.Key] = item2.Value;
+					}
+				}
+			}
+			Dictionary<WorkshopType, float> dictionary2 = new Dictionary<WorkshopType, float>();
+			float num = 0f;
+			object[] array = new object[4] { currentSettlement, null, dictionary, atGameStart };
+			foreach (WorkshopType item3 in WorkshopType.All)
+			{
+				if (!item3.IsHidden && (workshopToExclude == null || workshopToExclude != item3))
+				{
+					array[1] = item3;
+					float num2 = (dictionary2[item3] = (float)_findTotalInputDensityScore.Invoke(__instance, array));
+					num += num2;
+				}
+			}
+			float num4 = num * MBRandom.RandomFloat;
+			WorkshopType workshopType = null;
+			foreach (WorkshopType item4 in WorkshopType.All)
+			{
+				if (!item4.IsHidden && (workshopToExclude == null || workshopToExclude != item4) && dictionary2.TryGetValue(item4, out var value))
+				{
+					num4 -= value;
+					if (num4 < 0f)
+					{
+						workshopType = item4;
+						break;
+					}
+				}
+			}
+			if (workshopType == null)
+			{
+				workshopType = WorkshopType.All[MBRandom.RandomInt(1, WorkshopType.All.Count)];
+			}
+			__result = workshopType;
+			return false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[WorkshopTypeSelectorPatch] Error in prefix, falling back to vanilla: " + ex.Message);
+			return true;
+		}
+	}
+
+	private static void BankruptcyPostfix(Workshop workshop)
+	{
+		try
+		{
+			if (workshop != null)
+			{
+				int num = workshop.Capital - 5000;
+				if (num > 0)
+				{
+					workshop.ChangeGold(-num);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[WorkshopTypeSelectorPatch] BankruptcyPostfix error: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\WorkshopWarehouseCapacityPatch.cs =====
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.GameComponents;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultWorkshopModel), "WarehouseCapacity", MethodType.Getter)]
+public static class WorkshopWarehouseCapacityPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(ref int __result)
+	{
+		__result = 20000;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\RawMaterialRegistry.cs =====
+using System;
+using System.Collections.Generic;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction;
+
+public static class RawMaterialRegistry
+{
+	[Flags]
+	public enum ProtectionContext
+	{
+		None = 0,
+		MarketClaiming = 1,
+		TooltipPrediction = 2,
+		SaleRouting = 4,
+		CastleDeposit = 8,
+		VillagerRouting = 0x10,
+		All = MarketClaiming | TooltipPrediction | SaleRouting | CastleDeposit | VillagerRouting
+	}
+
+	private class RawMaterialRegistryListener
+	{
+	}
+
+	private const bool DEBUG_REGISTRY = false;
+
+	private const int MARKET_SURPLUS_THRESHOLD = 50;
+
+	private static readonly Dictionary<string, HashSet<string>> _materialToWorkshops = new Dictionary<string, HashSet<string>>(StringComparer.O

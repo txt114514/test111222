@@ -1,0 +1,570 @@
+﻿PART 57/75
+
+								if (applyWithdrawals)
+								{
+									workshop.ChangeGold(-workshopTaxAmount);
+								}
+							}
+						}
+					}
+				}
+				if (explainedNumber.IncludeDescriptions)
+				{
+					explainedNumber.Add((int)explainedNumber2.ResultNumber, Game.Current.GameTextManager.FindText(_townTaxStr), fief.Name);
+					if (num3 > 0)
+					{
+						TextObject textObject = new TextObject("{=HAP_WorkshopTaxLine}{TOWN_NAME} Workshop Taxes");
+						textObject.SetTextVariable("TOWN_NAME", fief.Settlement.Name);
+						explainedNumber.Add(num3, textObject);
+					}
+					explainedNumber.Add((int)explainedNumber3.ResultNumber, Game.Current.GameTextManager.FindText(_tariffTaxStr), fief.Name);
+					explainedNumber.Add(num2, _projectsIncomeText);
+				}
+				else
+				{
+					explainedNumber.Add((int)explainedNumber2.ResultNumber);
+					if (num3 > 0)
+					{
+						explainedNumber.Add(num3);
+					}
+					explainedNumber.Add((int)explainedNumber3.ResultNumber);
+					explainedNumber.Add(num2);
+				}
+				int num5 = (int)explainedNumber2.ResultNumber + num3 + (int)explainedNumber3.ResultNumber;
+				foreach (Village village in fief.Villages)
+				{
+					int num6 = Campaign.Current.Models.ClanFinanceModel.CalculateVillageIncome(clan, village, applyWithdrawals);
+					num5 += num6;
+					explainedNumber.Add(num6, village.Name);
+				}
+				if (!(num > 0f) || num5 <= 0)
+				{
+					continue;
+				}
+				int num7 = (int)((float)num5 * num);
+				if (num7 > 0)
+				{
+					if (explainedNumber.IncludeDescriptions)
+					{
+						TextObject description = new TextObject("{=HAP_TaxInefficiencyLine}Tax Inefficiency");
+						explainedNumber.Add(0f - (float)num7, description);
+					}
+					else
+					{
+						explainedNumber.Add(0f - (float)num7);
+					}
+				}
+			}
+			if (!includeDetails)
+			{
+				goldChange.Add(explainedNumber.ResultNumber, _settlementIncomeText);
+			}
+			else
+			{
+				goldChange.AddFromExplainedNumber(explainedNumber, _settlementIncomeText);
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("AddSettlementIncome_Prefix ERROR: " + ex.Message);
+		}
+		return false;
+	}
+
+	private static void CalculateClanGoldChange_Postfix(Clan clan, bool includeDescriptions, bool applyWithdrawals, bool includeDetails, ref ExplainedNumber __result)
+	{
+		try
+		{
+			if (clan != Clan.PlayerClan)
+			{
+				return;
+			}
+			int num = 0;
+			int num2 = 0;
+			List<(Settlement, int)> list = new List<(Settlement, int)>();
+			List<(Settlement, int, bool)> list2 = new List<(Settlement, int, bool)>();
+			foreach (Town fief in clan.Fiefs)
+			{
+				if (fief.IsCastle)
+				{
+					Settlement settlement = fief.Settlement;
+					MobileParty mobileParty = FindForagerForCastle(settlement);
+					if (mobileParty != null && mobileParty.IsActive)
+					{
+						int totalWage = mobileParty.TotalWage;
+						if (totalWage > 0)
+						{
+							num += totalWage;
+							list.Add((settlement, totalWage));
+						}
+					}
+				}
+				else
+				{
+					if (!fief.IsTown)
+					{
+						continue;
+					}
+					Settlement settlement2 = fief.Settlement;
+					MobileParty mobileParty2 = FindSupplyLineForTown(settlement2);
+					bool item = false;
+					if (mobileParty2 == null || !mobileParty2.IsActive)
+					{
+						mobileParty2 = FindNavalConvoyForTown(settlement2);
+						item = true;
+						if (mobileParty2 == null || !mobileParty2.IsActive)
+						{
+							continue;
+						}
+					}
+					int totalWage2 = mobileParty2.TotalWage;
+					if (totalWage2 > 0)
+					{
+						num2 += totalWage2;
+						list2.Add((settlement2, totalWage2, item));
+					}
+				}
+			}
+			if (num > 0)
+			{
+				if (includeDescriptions & includeDetails)
+				{
+					foreach (var item2 in list)
+					{
+						TextObject textObject = new TextObject("{=HAP_CastleSupplierWages}{CASTLE_NAME} Supplier Wages");
+						textObject.SetTextVariable("CASTLE_NAME", item2.Item1.Name);
+						__result.Add(-item2.Item2, textObject);
+					}
+				}
+				else if (includeDescriptions)
+				{
+					__result.Add(-num, new TextObject("{=HAP_CastleSupplierWagesCombined}Castle Supplier Wages"));
+				}
+				else
+				{
+					__result.Add(-num);
+				}
+			}
+			if (num2 <= 0)
+			{
+				return;
+			}
+			if (includeDescriptions & includeDetails)
+			{
+				foreach (var item3 in list2)
+				{
+					TextObject textObject2 = (item3.Item3 ? new TextObject("{=HAP_TownSupplyConvoyWages}{TOWN_NAME} Supply Convoy Wages") : new TextObject("{=HAP_TownSupplyCaravanWages}{TOWN_NAME} Supply Caravan Wages"));
+					textObject2.SetTextVariable("TOWN_NAME", item3.Item1.Name);
+					__result.Add(-item3.Item2, textObject2);
+				}
+				return;
+			}
+			if (includeDescriptions)
+			{
+				__result.Add(-num2, new TextObject("{=HAP_TownSupplyLineWagesCombined}Town Supply Line Wages"));
+			}
+			else
+			{
+				__result.Add(-num2);
+			}
+		}
+		catch
+		{
+		}
+	}
+
+	private static void CalculateClanExpenses_Postfix(Clan clan, bool includeDescriptions, bool applyWithdrawals, bool includeDetails, ref ExplainedNumber __result)
+	{
+		try
+		{
+			if (clan != Clan.PlayerClan)
+			{
+				return;
+			}
+			int num = 0;
+			int num2 = 0;
+			List<(Settlement, int)> list = new List<(Settlement, int)>();
+			List<(Settlement, int, bool)> list2 = new List<(Settlement, int, bool)>();
+			foreach (Town fief in clan.Fiefs)
+			{
+				if (fief.IsCastle)
+				{
+					Settlement settlement = fief.Settlement;
+					MobileParty mobileParty = FindForagerForCastle(settlement);
+					if (mobileParty != null && mobileParty.IsActive)
+					{
+						int totalWage = mobileParty.TotalWage;
+						if (totalWage > 0)
+						{
+							num += totalWage;
+							list.Add((settlement, totalWage));
+						}
+					}
+				}
+				else
+				{
+					if (!fief.IsTown)
+					{
+						continue;
+					}
+					Settlement settlement2 = fief.Settlement;
+					MobileParty mobileParty2 = FindSupplyLineForTown(settlement2);
+					bool item = false;
+					if (mobileParty2 == null || !mobileParty2.IsActive)
+					{
+						mobileParty2 = FindNavalConvoyForTown(settlement2);
+						item = true;
+						if (mobileParty2 == null || !mobileParty2.IsActive)
+						{
+							continue;
+						}
+					}
+					int totalWage2 = mobileParty2.TotalWage;
+					if (totalWage2 > 0)
+					{
+						num2 += totalWage2;
+						list2.Add((settlement2, totalWage2, item));
+					}
+				}
+			}
+			if (num > 0)
+			{
+				if (includeDescriptions & includeDetails)
+				{
+					foreach (var item2 in list)
+					{
+						TextObject textObject = new TextObject("{=HAP_CastleSupplierWages}{CASTLE_NAME} supplier wages");
+						textObject.SetTextVariable("CASTLE_NAME", item2.Item1.Name);
+						__result.Add(-item2.Item2, textObject);
+					}
+				}
+				else if (includeDescriptions)
+				{
+					__result.Add(-num, new TextObject("{=HAP_CastleSupplierWagesCombined}Castle Supplier Wages"));
+				}
+				else
+				{
+					__result.Add(-num);
+				}
+			}
+			if (num2 <= 0)
+			{
+				return;
+			}
+			if (includeDescriptions & includeDetails)
+			{
+				foreach (var item3 in list2)
+				{
+					TextObject textObject2 = (item3.Item3 ? new TextObject("{=HAP_TownSupplyConvoyWages}{TOWN_NAME} Supply Convoy Wages") : new TextObject("{=HAP_TownSupplyCaravanWages}{TOWN_NAME} Supply Caravan Wages"));
+					textObject2.SetTextVariable("TOWN_NAME", item3.Item1.Name);
+					__result.Add(-item3.Item2, textObject2);
+				}
+				return;
+			}
+			if (includeDescriptions)
+			{
+				__result.Add(-num2, new TextObject("{=HAP_TownSupplyLineWagesCombined}Town Supply Line Wages"));
+			}
+			else
+			{
+				__result.Add(-num2);
+			}
+		}
+		catch
+		{
+		}
+	}
+
+	private static MobileParty FindForagerForCastle(Settlement castle)
+	{
+		return (Campaign.Current?.GetCampaignBehavior<CastleForagerBehavior>())?.GetActiveForager(castle);
+	}
+
+	private static MobileParty FindSupplyLineForTown(Settlement town)
+	{
+		MobileParty mobileParty = (Campaign.Current?.GetCampaignBehavior<TownSupplyLineBehavior>())?.GetActiveSupplyPartyForDonor(town);
+		if (mobileParty != null && TownSupplyLinePartyComponent.IsSupplyLineParty(mobileParty))
+		{
+			return mobileParty;
+		}
+		return null;
+	}
+
+	private static MobileParty FindNavalConvoyForTown(Settlement town)
+	{
+		MobileParty mobileParty = (Campaign.Current?.GetCampaignBehavior<TownSupplyLineBehavior>())?.GetActiveSupplyPartyForDonor(town);
+		if (mobileParty != null && NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(mobileParty))
+		{
+			return mobileParty;
+		}
+		return null;
+	}
+
+	public static void Reset()
+	{
+		_patchApplied = false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\ClanSettlementItemVMPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.CampaignSystem.ViewModelCollection.ClanManagement;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(ClanSettlementItemVM), "UpdateProfitProperties")]
+public static class ClanSettlementItemVMPatch
+{
+	private static void Postfix(ClanSettlementItemVM __instance)
+	{
+		try
+		{
+			Settlement settlement = __instance.Settlement;
+			if (settlement == null || settlement.OwnerClan != Clan.PlayerClan)
+			{
+				return;
+			}
+			int num = 0;
+			if (settlement.IsCastle)
+			{
+				MobileParty mobileParty = FindForagerForCastle(settlement);
+				if (mobileParty == null || !mobileParty.IsActive)
+				{
+					return;
+				}
+				int totalWage = mobileParty.TotalWage;
+				if (totalWage <= 0)
+				{
+					return;
+				}
+				MBBindingList<ProfitItemPropertyVM> profitItemProperties = __instance.ProfitItemProperties;
+				int index = FindGarrisonWagesIndex(profitItemProperties) + 1;
+				profitItemProperties.Insert(index, new ProfitItemPropertyVM(new TextObject("{=HAP_SupplierWages}Supplier Wages").ToString(), -totalWage, ProfitItemPropertyVM.PropertyType.Garrison));
+				__instance.TotalProfit.Value -= totalWage;
+			}
+			else if (settlement.IsTown)
+			{
+				MobileParty mobileParty2 = FindSupplyLineForTown(settlement);
+				bool flag = false;
+				bool flag2 = true;
+				if (mobileParty2 == null || !mobileParty2.IsActive)
+				{
+					mobileParty2 = FindNavalConvoyForTown(settlement);
+					flag = true;
+					if (mobileParty2 == null || !mobileParty2.IsActive)
+					{
+						flag2 = false;
+					}
+				}
+				if (flag2)
+				{
+					int totalWage2 = mobileParty2.TotalWage;
+					if (totalWage2 > 0)
+					{
+						MBBindingList<ProfitItemPropertyVM> profitItemProperties2 = __instance.ProfitItemProperties;
+						int index2 = FindGarrisonWagesIndex(profitItemProperties2) + 1;
+						string name = (flag ? new TextObject("{=HAP_SupplyConvoyWagesShort}Supply Convoy Wages").ToString() : new TextObject("{=HAP_SupplyCaravanWagesShort}Supply Caravan Wages").ToString());
+						profitItemProperties2.Insert(index2, new ProfitItemPropertyVM(name, -totalWage2, ProfitItemPropertyVM.PropertyType.Garrison));
+						__instance.TotalProfit.Value -= totalWage2;
+					}
+				}
+				num = 0;
+				Workshop[] workshops = settlement.Town.Workshops;
+				foreach (Workshop workshop in workshops)
+				{
+					if (workshop.WorkshopType != null && !workshop.WorkshopType.IsHidden)
+					{
+						int workshopTaxAmount = WorkshopTaxPatch.GetWorkshopTaxAmount(workshop);
+						if (workshopTaxAmount > 0)
+						{
+							num += workshopTaxAmount;
+						}
+					}
+				}
+				if (num > 0)
+				{
+					MBBindingList<ProfitItemPropertyVM> profitItemProperties3 = __instance.ProfitItemProperties;
+					int num2 = FindTaxIndex(profitItemProperties3);
+					int index3 = ((num2 >= 0) ? (num2 + 1) : profitItemProperties3.Count);
+					profitItemProperties3.Insert(index3, new ProfitItemPropertyVM(new TextObject("{=HAP_WorkshopTax}Workshop Taxes").ToString(), num, ProfitItemPropertyVM.PropertyType.Tax));
+					__instance.TotalProfit.Value += num;
+				}
+			}
+			float num3 = ClanFinanceModelPatch.CalculateTaxInefficiencyRate(Clan.PlayerClan);
+			if (!(num3 > 0f))
+			{
+				return;
+			}
+			Town town = settlement.Town;
+			if (town == null)
+			{
+				return;
+			}
+			int num4 = (int)Campaign.Current.Models.SettlementTaxModel.CalculateTownTax(town).ResultNumber;
+			int num5 = (int)Campaign.Current.Models.ClanFinanceModel.CalculateTownIncomeFromTariffs(Clan.PlayerClan, town).ResultNumber;
+			int num6 = 0;
+			foreach (Village village in town.Villages)
+			{
+				num6 += Campaign.Current.Models.ClanFinanceModel.CalculateVillageIncome(Clan.PlayerClan, village);
+			}
+			int num7 = num4 + num + num5 + num6;
+			if (num7 > 0)
+			{
+				int num8 = (int)((float)num7 * num3);
+				if (num8 > 0)
+				{
+					MBBindingList<ProfitItemPropertyVM> profitItemProperties4 = __instance.ProfitItemProperties;
+					TextObject textObject = new TextObject("{=HAP_TaxInefficiencyLine}Tax Inefficiency");
+					int index4 = FindLastTaxIndex(profitItemProperties4) + 1;
+					profitItemProperties4.Insert(index4, new ProfitItemPropertyVM(textObject.ToString(), -num8, ProfitItemPropertyVM.PropertyType.Tax));
+					__instance.TotalProfit.Value -= num8;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in ClanSettlementItemVMPatch: " + ex.Message);
+		}
+	}
+
+	private static int FindGarrisonWagesIndex(MBBindingList<ProfitItemPropertyVM> profitProperties)
+	{
+		for (int i = 0; i < profitProperties.Count; i++)
+		{
+			if (profitProperties[i].Type == 3)
+			{
+				return i;
+			}
+		}
+		return 0;
+	}
+
+	private static int FindTaxIndex(MBBindingList<ProfitItemPropertyVM> profitProperties)
+	{
+		for (int i = 0; i < profitProperties.Count; i++)
+		{
+			if (profitProperties[i].Type == 1)
+			{
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	private static int FindLastTaxIndex(MBBindingList<ProfitItemPropertyVM> profitProperties)
+	{
+		for (int num = profitProperties.Count - 1; num >= 0; num--)
+		{
+			if (profitProperties[num].Type == 1)
+			{
+				return num;
+			}
+		}
+		return -1;
+	}
+
+	private static MobileParty FindForagerForCastle(Settlement castle)
+	{
+		return (Campaign.Current?.GetCampaignBehavior<CastleForagerBehavior>())?.GetActiveForager(castle);
+	}
+
+	private static MobileParty FindSupplyLineForTown(Settlement town)
+	{
+		MobileParty mobileParty = (Campaign.Current?.GetCampaignBehavior<TownSupplyLineBehavior>())?.GetActiveSupplyPartyForDonor(town);
+		if (mobileParty != null && TownSupplyLinePartyComponent.IsSupplyLineParty(mobileParty))
+		{
+			return mobileParty;
+		}
+		return null;
+	}
+
+	private static MobileParty FindNavalConvoyForTown(Settlement town)
+	{
+		MobileParty mobileParty = (Campaign.Current?.GetCampaignBehavior<TownSupplyLineBehavior>())?.GetActiveSupplyPartyForDonor(town);
+		if (mobileParty != null && NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(mobileParty))
+		{
+			return mobileParty;
+		}
+		return null;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\DefaultItemCategoriesPatch.cs =====
+using System;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultItemCategories), MethodType.Constructor)]
+public class DefaultItemCategoriesPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(DefaultItemCategories __instance)
+	{
+		try
+		{
+			FieldInfo field = typeof(DefaultItemCategories).GetField("_itemCategorySheep", BindingFlags.Instance | BindingFlags.NonPublic);
+			ItemCategory arg = ((field != null) ? ((ItemCategory)field.GetValue(__instance)) : null);
+			FieldInfo field2 = typeof(DefaultItemCategories).GetField("_itemCategoryGrain", BindingFlags.Instance | BindingFlags.NonPublic);
+			ItemCategory arg2 = ((field2 != null) ? ((ItemCategory)field2.GetValue(__instance)) : null);
+			FieldInfo field3 = typeof(DefaultItemCategories).GetField("_itemCategoryGrape", BindingFlags.Instance | BindingFlags.NonPublic);
+			ItemCategory arg3 = ((field3 != null) ? ((ItemCategory)field3.GetValue(__instance)) : null);
+			FieldInfo field4 = typeof(DefaultItemCategories).GetField("_itemCategoryFish", BindingFlags.Instance | BindingFlags.NonPublic);
+			ItemCategory arg4 = ((field4 != null) ? ((ItemCategory)field4.GetValue(__instance)) : null);
+			FieldInfo field5 = typeof(DefaultItemCategories).GetField("_itemCategoryButter", BindingFlags.Instance | BindingFlags.NonPublic);
+			ItemCategory arg5 = ((field5 != null) ? ((ItemCategory)field5.GetValue(__instance)) : null);
+			Action<string, int, int, ItemCategory, float, bool, ItemCategory.Property> action = delegate(string id, int baseDemand, int luxuryDemand, ItemCategory substitute, float subFactor, bool isAnimal, ItemCategory.Property property)
+			{
+				ItemCategory itemCategory = Game.Current.ObjectManager.RegisterPresumedObject(new ItemCategory(id));
+				itemCategory.InitializeObject(isTradeGood: true, baseDemand, luxuryDemand, property, substitute, subFactor, isAnimal);
+				string text = (string.IsNullOrEmpty(id) ? id : ((id.Length != 1) ? (char.ToUpper(id[0]) + id.Substring(1)) : char.ToUpper(id[0]).ToString()));
+				FieldInfo field6 = typeof(DefaultItemCategories).GetField("_itemCategory" + text, BindingFlags.Instance | BindingFlags.NonPublic);
+				if (field6 != null)
+				{
+					field6.SetValue(__instance, itemCategory);
+				}
+				PropertyInfo property2 = typeof(DefaultItemCategories).GetProperty(text, BindingFlags.Instance | BindingFlags.Public);
+				if (property2 != null)
+				{
+					property2.SetValue(__instance, itemCategory);
+				}
+			};
+			action("goose", 16, 5, arg, 0.1f, arg6: true, ItemCategory.Property.None);
+			action("chicken", 16, 5, arg, 0.1f, arg6: true, ItemCategory.Property.None);
+			action("hare", 4, 26, arg, 0.1f, arg6: true, ItemCategory.Property.None);
+			action("crab", 18, 35, arg4, 0.05f, arg6: true, ItemCategory.Property.BonusToFoodStores);
+			action("lobster", 6, 48, arg4, 0.03f, arg6: true, ItemCategory.Property.BonusToLoyalty);
+			action("lobster_cooked", 4, 57, null, 0f, arg6: false, ItemCategory.Property.BonusToProsperity);
+			action("meat_sausage", 6, 50, null, 0f, arg6: false, ItemCategory.Property.BonusToLoyalty);
+			action("meat_ham", 5, 55, null, 0f, arg6: false, ItemCategory.Property.BonusToLoyalty);
+			action("meat_poultry_cooked", 8, 40, null, 0f, arg6: false, ItemCategory.Property.BonusToLoyalty);
+			action("meat_mutton_cooked", 8, 35, null, 0f, arg6: false, ItemCategory.Property.BonusToLoyalty);
+			action("meat_pork_cooked", 9, 40, null, 0f, arg6: false, ItemCategory.Property.BonusToLoyalty);
+			action("meat_beef", 18, 30, arg4, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("meat_poultry", 26, 14, arg4, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("meat_mutton", 16, 30, arg4, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("meat_pork", 17, 30, arg4, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("meat_hare", 10, 40, arg4, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("cabbage_vegetable", 22, 2, arg2, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("leek_vegetable", 20, 2, arg2, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("carrot_vegetable", 22, 3, arg2, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("mushroom_vegetable", 17, 5, arg2, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("apple_fruit", 15, 5, arg2, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("orange_fruit", 12, 25, arg3, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			acti

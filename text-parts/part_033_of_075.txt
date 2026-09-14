@@ -1,0 +1,417 @@
+﻿PART 33/75
+
+		starter.AddPlayerLine("supply_fleeing_friendly_leave", "supply_fleeing_friendly_options", "close_window", "{=HAP_SupplyFleeingLeave}Good luck out there.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_talk_fleeing_enemy", "start", "supply_fleeing_enemy_options", "{=HAP_SupplyFleeingEnemy}You've taken everything from us! Both our towns are gone... Just let us go, haven't you won enough?[rf:idle_angry][ib:nervous]", supply_talk_fleeing_enemy_on_condition, null, 160);
+		starter.AddPlayerLine("supply_fleeing_enemy_attack", "supply_fleeing_enemy_options", "supply_fleeing_enemy_attack_confirm", "{=HAP_SupplyFleeingAttack}No mercy for the defeated. Seize them!", null, null, 120);
+		starter.AddPlayerLine("supply_fleeing_enemy_take_goods", "supply_fleeing_enemy_options", "supply_fleeing_enemy_goods_confirm", "{=HAP_SupplyFleeingTakeGoods}Just the supplies. Get out of here.", null, null, 110, supply_enemy_has_goods_on_condition);
+		starter.AddPlayerLine("supply_fleeing_enemy_letgo", "supply_fleeing_enemy_options", "close_window", "{=HAP_SupplyFleeingLetGo}Go. You've suffered enough.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_fleeing_enemy_attack_fight", "supply_fleeing_enemy_attack_confirm", "supply_fleeing_enemy_fight_or_leave", "{=HAP_SupplyFleeingAttackResponse}Damn you! We'll die fighting then![rf:idle_angry][ib:aggressive]", supply_will_fight_on_condition, null);
+		starter.AddDialogLine("supply_fleeing_enemy_attack_surrender", "supply_fleeing_enemy_attack_confirm", "supply_fleeing_enemy_surrender_options", "{=HAP_SupplyFleeingSurrender}We're beaten... Take what you want. Just spare our lives![rf:idle_angry][ib:nervous]", supply_will_surrender_on_condition, null);
+		starter.AddPlayerLine("supply_fleeing_enemy_fight_attack", "supply_fleeing_enemy_fight_or_leave", "close_window", "{=HAP_SupplyFightAttack}Then we'll take it by force. Attack!", null, supply_attack_on_consequence, 120);
+		starter.AddPlayerLine("supply_fleeing_enemy_fight_leave", "supply_fleeing_enemy_fight_or_leave", "close_window", "{=HAP_SupplyFightLeave}On second thought, be on your way.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddPlayerLine("supply_fleeing_enemy_surrender_prisoner", "supply_fleeing_enemy_surrender_options", "close_window", "{=HAP_SupplyAttackYes}Your goods AND your freedom. Seize them!", null, supply_take_prisoner_on_consequence, 120);
+		starter.AddPlayerLine("supply_fleeing_enemy_surrender_goods", "supply_fleeing_enemy_surrender_options", "close_window", "{=HAP_SupplyEnemyTakeGoods}Just the supplies. Get out of here.", null, supply_enemy_goods_taken_on_consequence, 110, supply_enemy_has_goods_on_condition);
+		starter.AddPlayerLine("supply_fleeing_enemy_surrender_letgo", "supply_fleeing_enemy_surrender_options", "close_window", "{=HAP_SupplyAttackNo}Fine. Get out of my sight.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_fleeing_enemy_goods_response", "supply_fleeing_enemy_goods_confirm", "close_window", "{=HAP_SupplyFleeingGoodsResponse}Take it! Take it all! Just let us live![rf:idle_angry][ib:nervous]", null, supply_enemy_goods_taken_on_consequence);
+		starter.AddDialogLine("naval_supply_holding_friendly", "start", "supply_talk_player_options", "{=HAP_NavalConvoyBlockade}We're holding offshore. {DEST_LINK}'s port is blockaded. We'll deliver once the blockade lifts.", naval_supply_holding_friendly_on_condition, null, 170);
+		starter.AddDialogLine("naval_supply_holding_enemy", "start", "supply_talk_enemy_options", "{=HAP_NavalConvoyBlockadeEnemy}Stay back! We're stuck offshore waiting for the blockade to lift. What do you want?[rf:idle_angry][ib:nervous]", naval_supply_holding_enemy_on_condition, null, 170);
+		starter.AddDialogLine("supply_talk_fallback", "start", "supply_fallback_options", "{=HAP_SupplyFallbackGreeting}What do you want? We're just hauling supplies![rf:idle_angry][ib:nervous]", supply_talk_fallback_on_condition, null, 50);
+		starter.AddPlayerLine("supply_fallback_attack", "supply_fallback_options", "supply_fallback_attack_confirm", "{=HAP_SupplyFallbackAttack}You're not going anywhere! Surrender!", null, null, 120);
+		starter.AddPlayerLine("supply_fallback_take_goods", "supply_fallback_options", "supply_fallback_goods_confirm", "{=HAP_SupplyFleeingTakeGoods}Just the supplies. Get out of here.", null, null, 110, supply_enemy_has_goods_on_condition);
+		starter.AddPlayerLine("supply_fallback_leave", "supply_fallback_options", "close_window", "{=HAP_SupplyFallbackLeave}Be on your way.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_fallback_attack_fight", "supply_fallback_attack_confirm", "supply_fallback_fight_or_leave", "{=HAP_SupplyEnemyFight}You want our cargo? We're garrison soldiers, not peasants! You'll have to take it![rf:idle_angry][ib:aggressive]", supply_will_fight_on_condition, null);
+		starter.AddDialogLine("supply_fallback_attack_surrender", "supply_fallback_attack_confirm", "supply_fallback_surrender_options", "{=HAP_SupplyEnemySurrender}We're not here to fight... Take our goods, but let us go![rf:idle_angry][ib:nervous]", supply_will_surrender_on_condition, null);
+		starter.AddPlayerLine("supply_fallback_fight_attack", "supply_fallback_fight_or_leave", "close_window", "{=HAP_SupplyFightAttack}Then we'll take it by force. Attack!", null, supply_attack_on_consequence, 120);
+		starter.AddPlayerLine("supply_fallback_fight_leave", "supply_fallback_fight_or_leave", "close_window", "{=HAP_SupplyFightLeave}On second thought, be on your way.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddPlayerLine("supply_fallback_surrender_prisoner", "supply_fallback_surrender_options", "close_window", "{=HAP_SupplyAttackYes}Your goods AND your freedom. Seize them!", null, supply_take_prisoner_on_consequence, 120);
+		starter.AddPlayerLine("supply_fallback_surrender_goods", "supply_fallback_surrender_options", "close_window", "{=HAP_SupplyEnemyTakeGoods}Just the supplies. Get out of here.", null, supply_enemy_goods_taken_on_consequence, 110, supply_enemy_has_goods_on_condition);
+		starter.AddPlayerLine("supply_fallback_surrender_letgo", "supply_fallback_surrender_options", "close_window", "{=HAP_SupplyAttackNo}Fine. Get out of my sight.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_fallback_goods_response", "supply_fallback_goods_confirm", "close_window", "{=HAP_SupplyFleeingGoodsResponse}Take it! Take it all! Just let us live![rf:idle_angry][ib:nervous]", null, supply_enemy_goods_taken_on_consequence);
+	}
+
+	private bool IsSupplyLineConversation(out TownSupplyLinePartyComponent component)
+	{
+		component = TownSupplyLinePartyComponent.GetComponent(MobileParty.ConversationParty);
+		return component != null;
+	}
+
+	private bool IsAnySupplyConversation()
+	{
+		return GetConversationPartyData().IsValid;
+	}
+
+	private ConversationPartyData GetConversationPartyData()
+	{
+		ConversationPartyData result = default(ConversationPartyData);
+		MobileParty conversationParty = MobileParty.ConversationParty;
+		if (conversationParty == null)
+		{
+			return result;
+		}
+		TownSupplyLinePartyComponent component = TownSupplyLinePartyComponent.GetComponent(conversationParty);
+		if (component != null)
+		{
+			result.IsValid = true;
+			result.IsNaval = false;
+			result.HomeTown = component.HomeTown;
+			result.DestinationTown = component.DestinationTown;
+			result.OriginalClan = component.OriginalClan;
+			result.PartyOwner = component.PartyOwner;
+			result.OriginFaction = component.OriginalClan?.MapFaction;
+			result.IsTraveling = component.State == TownSupplyLinePartyComponent.SupplyLineState.TravelingToDestination || component.State == TownSupplyLinePartyComponent.SupplyLineState.PreparingAtHome;
+			result.IsUnloading = component.State == TownSupplyLinePartyComponent.SupplyLineState.UnloadingAtDestination;
+			result.IsReturning = component.State == TownSupplyLinePartyComponent.SupplyLineState.Returning;
+			result.IsWaitingAtHome = component.State == TownSupplyLinePartyComponent.SupplyLineState.WaitingAtHome;
+			result.IsFleeing = component.State == TownSupplyLinePartyComponent.SupplyLineState.Fleeing;
+			result.IsDefending = component.State == TownSupplyLinePartyComponent.SupplyLineState.Defending;
+			result.IsHoldingOffshore = false;
+			result.IsIdle = component.State == TownSupplyLinePartyComponent.SupplyLineState.Idle;
+			return result;
+		}
+		NavalSupplyConvoyPartyComponent component2 = NavalSupplyConvoyPartyComponent.GetComponent(conversationParty);
+		if (component2 != null)
+		{
+			result.IsValid = true;
+			result.IsNaval = true;
+			result.HomeTown = component2.HomeTown;
+			result.DestinationTown = component2.DestinationTown;
+			result.OriginalClan = component2.OriginalClan;
+			result.PartyOwner = component2.PartyOwner;
+			result.OriginFaction = component2.OriginalClan?.MapFaction;
+			result.IsTraveling = component2.State == NavalSupplyConvoyPartyComponent.ConvoyState.TravelingToDestination || component2.State == NavalSupplyConvoyPartyComponent.ConvoyState.PreparingAtHome;
+			result.IsUnloading = component2.State == NavalSupplyConvoyPartyComponent.ConvoyState.UnloadingAtDestination;
+			result.IsReturning = component2.State == NavalSupplyConvoyPartyComponent.ConvoyState.Returning;
+			result.IsWaitingAtHome = component2.State == NavalSupplyConvoyPartyComponent.ConvoyState.WaitingAtHome;
+			result.IsFleeing = component2.State == NavalSupplyConvoyPartyComponent.ConvoyState.Fleeing;
+			result.IsDefending = false;
+			result.IsHoldingOffshore = component2.State == NavalSupplyConvoyPartyComponent.ConvoyState.HoldingOffshore;
+			result.IsIdle = component2.State == NavalSupplyConvoyPartyComponent.ConvoyState.Idle;
+			return result;
+		}
+		return result;
+	}
+
+	private void SetLinkVariables(ConversationPartyData data)
+	{
+		TextObject text = ((data.HomeTown != null) ? data.HomeTown.EncyclopediaLinkWithName : new TextObject("{=HAP_SupplyFallbackHome}their town"));
+		TextObject text2 = ((data.DestinationTown != null) ? data.DestinationTown.EncyclopediaLinkWithName : new TextObject("{=HAP_SupplyFallbackDest}another town"));
+		MBTextManager.SetTextVariable("HOME_LINK", text);
+		MBTextManager.SetTextVariable("DEST_LINK", text2);
+		MBTextManager.SetTextVariable("FACTION_NAME", (data.OriginFaction != null) ? data.OriginFaction.Name : new TextObject("{=HAP_SupplyFallbackFaction}their realm"));
+	}
+
+	private void SetFleeTargetVariable(ConversationPartyData data)
+	{
+		TextObject text = ((data.DestinationTown != null) ? data.DestinationTown.EncyclopediaLinkWithName : new TextObject("{=HAP_SupplyFallbackFlee}a safe place"));
+		MBTextManager.SetTextVariable("FLEE_TARGET", text);
+	}
+
+	private bool naval_supply_holding_friendly_on_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid || !conversationPartyData.IsNaval || !conversationPartyData.IsHoldingOffshore)
+		{
+			return false;
+		}
+		if (conversationPartyData.OriginFaction == null || FactionManager.IsAtWarAgainstFaction(conversationPartyData.OriginFaction, Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		SetLinkVariables(conversationPartyData);
+		return true;
+	}
+
+	private bool naval_supply_holding_enemy_on_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid || !conversationPartyData.IsNaval || !conversationPartyData.IsHoldingOffshore)
+		{
+			return false;
+		}
+		if (conversationPartyData.OriginFaction == null || !FactionManager.IsAtWarAgainstFaction(conversationPartyData.OriginFaction, Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		SetLinkVariables(conversationPartyData);
+		return true;
+	}
+
+	private bool supply_talk_friendly_on_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid)
+		{
+			return false;
+		}
+		if (!conversationPartyData.IsTraveling && !conversationPartyData.IsUnloading)
+		{
+			return false;
+		}
+		if (conversationPartyData.OriginFaction == null || FactionManager.IsAtWarAgainstFaction(conversationPartyData.OriginFaction, Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		if (GetSupplyInteraction(MobileParty.ConversationParty) != 0)
+		{
+			return false;
+		}
+		SetSupplyInteraction(MobileParty.ConversationParty, 1);
+		SetLinkVariables(conversationPartyData);
+		return true;
+	}
+
+	private bool supply_talk_friendly_returning_on_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid)
+		{
+			return false;
+		}
+		if (!conversationPartyData.IsReturning && !conversationPartyData.IsWaitingAtHome)
+		{
+			return false;
+		}
+		if (conversationPartyData.OriginFaction == null || FactionManager.IsAtWarAgainstFaction(conversationPartyData.OriginFaction, Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		if (GetSupplyInteraction(MobileParty.ConversationParty) != 0)
+		{
+			return false;
+		}
+		SetSupplyInteraction(MobileParty.ConversationParty, 1);
+		SetLinkVariables(conversationPartyData);
+		return true;
+	}
+
+	private bool supply_talk_friendly_return_on_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid)
+		{
+			return false;
+		}
+		if (conversationPartyData.IsFleeing || conversationPartyData.IsDefending)
+		{
+			return false;
+		}
+		if (conversationPartyData.IsNaval && conversationPartyData.IsHoldingOffshore)
+		{
+			return false;
+		}
+		if (conversationPartyData.OriginFaction == null || FactionManager.IsAtWarAgainstFaction(conversationPartyData.OriginFaction, Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		if (GetSupplyInteraction(MobileParty.ConversationParty) != 1)
+		{
+			return false;
+		}
+		SetLinkVariables(conversationPartyData);
+		return true;
+	}
+
+	private bool supply_talk_hostile_return_on_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid)
+		{
+			return false;
+		}
+		if (conversationPartyData.IsFleeing || conversationPartyData.IsDefending)
+		{
+			return false;
+		}
+		if (conversationPartyData.IsNaval && conversationPartyData.IsHoldingOffshore)
+		{
+			return false;
+		}
+		if (conversationPartyData.OriginFaction == null || FactionManager.IsAtWarAgainstFaction(conversationPartyData.OriginFaction, Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		if (GetSupplyInteraction(MobileParty.ConversationParty) != 2)
+		{
+			return false;
+		}
+		SetLinkVariables(conversationPartyData);
+		return true;
+	}
+
+	private bool supply_talk_enemy_on_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid)
+		{
+			return false;
+		}
+		if (conversationPartyData.IsFleeing || conversationPartyData.IsDefending)
+		{
+			return false;
+		}
+		if (conversationPartyData.OriginFaction == null || !FactionManager.IsAtWarAgainstFaction(conversationPartyData.OriginFaction, Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		SetLinkVariables(conversationPartyData);
+		return true;
+	}
+
+	private bool supply_talk_fleeing_friendly_on_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid)
+		{
+			return false;
+		}
+		if (!conversationPartyData.IsFleeing)
+		{
+			return false;
+		}
+		if (conversationPartyData.OriginFaction == null || FactionManager.IsAtWarAgainstFaction(conversationPartyData.OriginFaction, Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		SetLinkVariables(conversationPartyData);
+		SetFleeTargetVariable(conversationPartyData);
+		return true;
+	}
+
+	private bool supply_talk_fleeing_enemy_on_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid)
+		{
+			return false;
+		}
+		if (!conversationPartyData.IsFleeing)
+		{
+			return false;
+		}
+		if (conversationPartyData.OriginFaction == null || !FactionManager.IsAtWarAgainstFaction(conversationPartyData.OriginFaction, Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		SetLinkVariables(conversationPartyData);
+		return true;
+	}
+
+	private bool supply_talk_fallback_on_condition()
+	{
+		return GetConversationPartyData().IsValid;
+	}
+
+	private bool supply_talk_set_link_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid)
+		{
+			return false;
+		}
+		SetLinkVariables(conversationPartyData);
+		return true;
+	}
+
+	private bool supply_set_faction_name_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid)
+		{
+			return false;
+		}
+		if (conversationPartyData.OriginFaction != null)
+		{
+			MBTextManager.SetTextVariable("FACTION_NAME", conversationPartyData.OriginFaction.InformalName);
+		}
+		return true;
+	}
+
+	private bool supply_not_same_faction_on_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid)
+		{
+			return true;
+		}
+		if (conversationPartyData.OriginFaction == null)
+		{
+			return true;
+		}
+		if (conversationPartyData.OriginFaction == Hero.MainHero.MapFaction)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private bool supply_talk_defending_on_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid || !conversationPartyData.IsDefending)
+		{
+			return false;
+		}
+		if (conversationPartyData.OriginFaction == null || !FactionManager.IsAtWarAgainstFaction(conversationPartyData.OriginFaction, Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		SetLinkVariables(conversationPartyData);
+		return true;
+	}
+
+	private bool supply_talk_defending_friendly_on_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid || !conversationPartyData.IsDefending)
+		{
+			return false;
+		}
+		if (conversationPartyData.OriginFaction == null || FactionManager.IsAtWarAgainstFaction(conversationPartyData.OriginFaction, Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		SetLinkVariables(conversationPartyData);
+		return true;
+	}
+
+	private bool supply_same_faction_on_condition()
+	{
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid)
+		{
+			return false;
+		}
+		if (conversationPartyData.OriginalClan?.MapFaction == null || Hero.MainHero.MapFaction == null)
+		{
+			return false;
+		}
+		return conversationPartyData.OriginalClan.MapFaction == Hero.MainHero.MapFaction;
+	}
+
+	private bool supply_will_surrender_on_condition()
+	{
+		int num = MobileParty.ConversationParty?.MemberRoster.TotalManCount ?? 0;
+		int num2 = MobileParty.MainParty?.MemberRoster.TotalManCount ?? 0;
+		if (num <= 0)
+		{
+			return true;
+		}
+		float num3 = (float)num2 / (float)num;
+		return num3 >= 3f;
+	}
+
+	private bool supply_will_fight_on_condition()
+	{
+		return !supply_will_surrender_on_condition();
+	}
+
+	private bool supply_demand_clickable_condition(out TextObject explanation)
+	{
+		MobileParty conversationParty = MobileParty.ConversationParty;
+		if (conversationParty?.ItemRoster == null || conversationParty.ItemRoster.Count == 0)
+		{
+			bool flag = NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(conversationParty);
+			explanation = (flag ? new TextObject("{=HAP_NavalConvoyNoGoods}This convoy has no goods left.") : new TextObject("{=HAP_SupplyNoGoods}This caravan has no goods left."));
+			return false;
+		}
+		explanatio

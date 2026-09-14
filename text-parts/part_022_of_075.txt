@@ -1,0 +1,621 @@
+﻿PART 22/75
+unts(elementCopyAtIndex.EquipmentElement, num9);
+					num += num9;
+					bool flag = false;
+				}
+			}
+		}
+		bool flag2 = false;
+	}
+
+	private void ClearBattleLootFromPatrol(MobileParty patrol)
+	{
+		if (patrol.ItemRoster == null || patrol.ItemRoster.Count == 0)
+		{
+			return;
+		}
+		int num = Math.Max(1, patrol.MemberRoster?.TotalManCount ?? 1);
+		int num2 = 10;
+		int num3 = (int)((float)num * 1f);
+		int num4 = 0;
+		int num5 = 0;
+		ItemRoster itemRoster = patrol.ItemRoster;
+		for (int num6 = itemRoster.Count - 1; num6 >= 0; num6--)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num6);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && !item.IsFood && (!item.HasHorseComponent || !item.HorseComponent.IsLiveStock))
+			{
+				if (item.HasHorseComponent && item.HorseComponent.IsPackAnimal)
+				{
+					int val = Math.Max(0, num2 - num4);
+					int num7 = Math.Min(val, elementCopyAtIndex.Amount);
+					num4 += num7;
+					int num8 = elementCopyAtIndex.Amount - num7;
+					if (num8 > 0)
+					{
+						itemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, -num8);
+					}
+				}
+				else if (item.HasHorseComponent && item.HorseComponent.IsMount)
+				{
+					int val2 = Math.Max(0, num3 - num5);
+					int num9 = Math.Min(val2, elementCopyAtIndex.Amount);
+					num5 += num9;
+					int num10 = elementCopyAtIndex.Amount - num9;
+					if (num10 > 0)
+					{
+						itemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, -num10);
+					}
+				}
+				else
+				{
+					itemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, -elementCopyAtIndex.Amount);
+				}
+			}
+		}
+	}
+
+	private void OnHourlyTickParty(MobileParty party)
+	{
+		bool flag = true;
+	}
+
+	private void DisplayPatrolDecisionMessage(MobileParty patrol)
+	{
+		int inventoryCapacity = patrol.InventoryCapacity;
+		float totalWeightCarried = patrol.TotalWeightCarried;
+		float num = ((inventoryCapacity > 0) ? (totalWeightCarried / (float)inventoryCapacity * 100f) : 0f);
+		float num2 = ((inventoryCapacity > 0) ? (totalWeightCarried / (float)inventoryCapacity) : 0f);
+		float partySizeRatio = patrol.PartySizeRatio;
+		float num3;
+		string text;
+		if (_lastHomeVisit.TryGetValue(patrol, out var value))
+		{
+			float elapsedDaysUntilNow = value.ElapsedDaysUntilNow;
+			num3 = 0.15f + (elapsedDaysUntilNow - 5f) * 0.025f;
+			text = $"time={num3:+0.00;-0.00} ({elapsedDaysUntilNow:F1}d)";
+		}
+		else
+		{
+			num3 = 0f;
+			text = "time=n/a";
+		}
+		float num4 = 1.1f / Math.Max(partySizeRatio, 0.01f);
+		float num5 = ((num2 >= 0.5f) ? ((num2 - 0.5f) * 4.8f) : 0f);
+		string text2 = ((num5 >= 1.25f) ? "LOAD (HAP)" : ((num4 >= 1.25f) ? "SIZE (vanilla)" : ((num3 >= 1.25f) ? "TIME (vanilla)" : ((num5 >= num4 && num5 >= num3) ? "load (combined)" : ((!(num4 >= num3)) ? "time (combined)" : "size (combined)")))));
+		int num6 = 0;
+		int num7 = 0;
+		int num8 = 0;
+		int num9 = 0;
+		int num10 = 0;
+		int num11 = 0;
+		int num12 = 0;
+		int num13 = 0;
+		foreach (ItemRosterElement item2 in patrol.ItemRoster)
+		{
+			ItemObject item = item2.EquipmentElement.Item;
+			if (item != null && item2.Amount > 0)
+			{
+				int amount = item2.Amount;
+				if (item.IsFood)
+				{
+					num6 += amount;
+				}
+				else if (item.HasHorseComponent && item.HorseComponent.IsLiveStock)
+				{
+					num7 += amount;
+				}
+				else if (item.HasHorseComponent && item.HorseComponent.IsPackAnimal)
+				{
+					num9 += amount;
+				}
+				else if (item.HasHorseComponent && item.HorseComponent.IsMount)
+				{
+					num8 += amount;
+				}
+				else if (IsWeapon(item.Type))
+				{
+					num10 += amount;
+				}
+				else if (IsArmor(item.Type))
+				{
+					num11 += amount;
+				}
+				else if (item.Type == ItemObject.ItemTypeEnum.Goods)
+				{
+					num12 += amount;
+				}
+				else
+				{
+					num13 += amount;
+				}
+			}
+		}
+		string information = $"{patrol.Name} returning to {patrol.HomeSettlement.Name} " + $"[{text2}] | load={num5:+0.00;-0.00} size={num4:+0.00;-0.00} {text}";
+		string information2 = $"  load {num:F0}% ({totalWeightCarried:F0}/{inventoryCapacity}) size {partySizeRatio * 100f:F0}% | " + $"food={num6} livestock={num7} mounts={num8} pack={num9} " + $"weapons={num10} armor={num11} goods={num12} other={num13}";
+		InformationManager.DisplayMessage(new InformationMessage(information, Colors.Yellow));
+		InformationManager.DisplayMessage(new InformationMessage(information2, Colors.Yellow));
+	}
+
+	private static bool IsWeapon(ItemObject.ItemTypeEnum t)
+	{
+		return t == ItemObject.ItemTypeEnum.OneHandedWeapon || t == ItemObject.ItemTypeEnum.TwoHandedWeapon || t == ItemObject.ItemTypeEnum.Polearm || t == ItemObject.ItemTypeEnum.Bow || t == ItemObject.ItemTypeEnum.Crossbow || t == ItemObject.ItemTypeEnum.Thrown || t == ItemObject.ItemTypeEnum.Arrows || t == ItemObject.ItemTypeEnum.Bolts || t == ItemObject.ItemTypeEnum.Shield;
+	}
+
+	private static bool IsArmor(ItemObject.ItemTypeEnum t)
+	{
+		return t == ItemObject.ItemTypeEnum.HeadArmor || t == ItemObject.ItemTypeEnum.BodyArmor || t == ItemObject.ItemTypeEnum.LegArmor || t == ItemObject.ItemTypeEnum.HandArmor || t == ItemObject.ItemTypeEnum.Cape;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\StarvationDesertionBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using Helpers;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.Encounters;
+using TaleWorlds.CampaignSystem.Extensions;
+using TaleWorlds.CampaignSystem.GameMenus;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Party.PartyComponents;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+using TaleWorlds.SaveSystem;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class StarvationDesertionBehavior : CampaignBehaviorBase
+{
+	private const float RECOVERY_BASE_CAPACITY_TOWN = 300f;
+
+	private const float RECOVERY_BASE_CAPACITY_CASTLE = 300f;
+
+	public const float MILITIA_PENALTY_START_DAY = 7f;
+
+	public const float DESERTION_START_DAY = 7f;
+
+	private const float RECOVERY_RATE_SLOW = 1f;
+
+	private const float RECOVERY_RATE_NORMAL = 2f;
+
+	private const float RECOVERY_RATE_FAST = 3f;
+
+	private const float RECOVERY_RATE_VERY_FAST = 4f;
+
+	private const int MINIMUM_GARRISON = 0;
+
+	private const int DESERTER_ACCUMULATION_THRESHOLD = 20;
+
+	private const int DESERTER_PARTY_MAX_SPAWN = 80;
+
+	private const float DESERTER_SPAWN_DAILY_CHANCE = 0.05f;
+
+	private const float MORALE_BASELINE = 50f;
+
+	private const float MORALE_SCALE_PER_POINT = 0.02f;
+
+	private const float MORALE_FACTOR_MIN = 0.5f;
+
+	private const float MORALE_FACTOR_MAX = 1.25f;
+
+	[SaveableField(1)]
+	private Dictionary<string, float> _starvationDays = new Dictionary<string, float>();
+
+	private Dictionary<string, int> _accumulatedDeserters = new Dictionary<string, int>();
+
+	private Clan _deserterClan;
+
+	private Clan DeserterClan
+	{
+		get
+		{
+			if (_deserterClan == null)
+			{
+				_deserterClan = Clan.FindFirst((Clan x) => x.StringId == "deserters");
+			}
+			return _deserterClan;
+		}
+	}
+
+	public static float GetStarvationDays(Settlement settlement)
+	{
+		HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+		if (instance != null && instance.StarvationEffects?.SelectedIndex == 0)
+		{
+			return 0f;
+		}
+		if (Campaign.Current == null || settlement == null)
+		{
+			return 0f;
+		}
+		StarvationDesertionBehavior campaignBehavior = Campaign.Current.GetCampaignBehavior<StarvationDesertionBehavior>();
+		if (campaignBehavior?._starvationDays == null)
+		{
+			return 0f;
+		}
+		if (campaignBehavior._starvationDays.TryGetValue(settlement.StringId, out var value))
+		{
+			return value;
+		}
+		return 0f;
+	}
+
+	public static int GetDeterministicDesertionCount(Settlement settlement)
+	{
+		if (settlement == null || !settlement.IsFortification)
+		{
+			return 0;
+		}
+		float starvationDays = GetStarvationDays(settlement);
+		if (starvationDays < 7f)
+		{
+			return 0;
+		}
+		if (starvationDays >= 28f)
+		{
+			return 20;
+		}
+		if (starvationDays >= 21f)
+		{
+			return 15;
+		}
+		if (starvationDays >= 14f)
+		{
+			return 10;
+		}
+		if (starvationDays >= 7f)
+		{
+			return 5;
+		}
+		return 0;
+	}
+
+	public static float GetMoraleDesertionFactor(Settlement settlement)
+	{
+		if (settlement == null || !settlement.IsFortification)
+		{
+			return 1f;
+		}
+		MobileParty mobileParty = settlement.Town?.GarrisonParty;
+		if (mobileParty == null)
+		{
+			return 1f;
+		}
+		float morale = mobileParty.Morale;
+		float value = 1f - (morale - 50f) * 0.02f;
+		return MBMath.ClampFloat(value, 0.5f, 1.25f);
+	}
+
+	public static int GetMoraleScaledDesertionCount(Settlement settlement)
+	{
+		int deterministicDesertionCount = GetDeterministicDesertionCount(settlement);
+		if (deterministicDesertionCount <= 0)
+		{
+			return 0;
+		}
+		float moraleDesertionFactor = GetMoraleDesertionFactor(settlement);
+		return MathF.Round((float)deterministicDesertionCount * moraleDesertionFactor);
+	}
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.DailyTickSettlementEvent.AddNonSerializedListener(this, OnDailyTickSettlement);
+		CampaignEvents.OnSettlementOwnerChangedEvent.AddNonSerializedListener(this, OnSettlementOwnerChanged);
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		dataStore.SyncData("HAP_StarvationDays", ref _starvationDays);
+		if (_starvationDays == null)
+		{
+			_starvationDays = new Dictionary<string, float>();
+		}
+	}
+
+	private void OnSettlementOwnerChanged(Settlement settlement, bool openToClaim, Hero newOwner, Hero oldOwner, Hero capturerHero, ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail detail)
+	{
+		if (settlement != null && (detail == ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail.BySiege || detail == ChangeOwnerOfSettlementAction.ChangeOwnerOfSettlementDetail.ByRebellion))
+		{
+			string stringId = settlement.StringId;
+			_starvationDays.Remove(stringId);
+			_accumulatedDeserters.Remove(stringId);
+		}
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		starter.AddGameMenu("hap_empty_siege", "{=HAP_EmptySiegeBody}{SETTLEMENT} has no remaining defenders and now belongs to the {FACTION}.", delegate(MenuCallbackArgs args)
+		{
+			args.MenuContext.SetBackgroundMeshName("wait_besieging");
+		});
+		starter.AddGameMenuOption("hap_empty_siege", "hap_empty_siege_continue", "{=HAP_EmptySiegeContinue}Continue", delegate(MenuCallbackArgs args)
+		{
+			args.optionLeaveType = GameMenuOption.LeaveType.Continue;
+			return true;
+		}, delegate
+		{
+			Settlement encounterSettlement = PlayerEncounter.EncounterSettlement;
+			if (encounterSettlement != null)
+			{
+				EnterSettlementAction.ApplyForParty(MobileParty.MainParty, encounterSettlement);
+				GameMenu.SwitchToMenu(encounterSettlement.IsTown ? "town" : "castle");
+			}
+			else
+			{
+				PlayerEncounter.Finish();
+			}
+		}, isLeave: true);
+	}
+
+	private void OnDailyTickSettlement(Settlement settlement)
+	{
+		HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+		if ((instance != null && instance.StarvationEffects?.SelectedIndex == 0) || !settlement.IsFortification)
+		{
+			return;
+		}
+		string stringId = settlement.StringId;
+		float num = (_starvationDays.TryGetValue(stringId, out var value) ? value : 0f);
+		if ((settlement.Town?.GarrisonParty?.MemberRoster?.TotalManCount).GetValueOrDefault() == 0 && settlement.Militia < 1f && num > 0f && !settlement.IsUnderSiege)
+		{
+			_starvationDays.Remove(stringId);
+			_accumulatedDeserters.Remove(stringId);
+			return;
+		}
+		if (settlement.IsStarving)
+		{
+			num++;
+		}
+		else
+		{
+			float recoveryRate = GetRecoveryRate(settlement.Town);
+			num = MathF.Max(0f, num - recoveryRate);
+		}
+		if (num > 0f)
+		{
+			_starvationDays[stringId] = num;
+		}
+		else
+		{
+			_starvationDays.Remove(stringId);
+			_accumulatedDeserters.Remove(stringId);
+		}
+		if (num >= 7f)
+		{
+			ProcessGarrisonDesertion(settlement, num);
+		}
+	}
+
+	private float GetRecoveryRate(Town town)
+	{
+		if (town == null)
+		{
+			return 1f;
+		}
+		float num = (town.IsCastle ? 300f : 300f);
+		float num2 = town.FoodStocks / num;
+		if (num2 >= 0.75f)
+		{
+			return 4f;
+		}
+		if (num2 >= 0.5f)
+		{
+			return 3f;
+		}
+		if (num2 >= 0.25f)
+		{
+			return 2f;
+		}
+		return 1f;
+	}
+
+	private void ProcessGarrisonDesertion(Settlement settlement, float starvationDays)
+	{
+		MobileParty mobileParty = settlement.Town?.GarrisonParty;
+		if (mobileParty == null || mobileParty.MemberRoster.TotalManCount <= 0)
+		{
+			return;
+		}
+		int num = (settlement.IsUnderSiege ? GetDeterministicDesertionCount(settlement) : GetMoraleScaledDesertionCount(settlement));
+		int totalManCount = mobileParty.MemberRoster.TotalManCount;
+		if (totalManCount - num < 0)
+		{
+			num = totalManCount;
+		}
+		if (num <= 0)
+		{
+			return;
+		}
+		if (settlement.IsUnderSiege)
+		{
+			int num2 = RemoveTroopsLowestFirst(mobileParty.MemberRoster, num);
+			if (num2 > 0 && settlement.OwnerClan == Clan.PlayerClan && starvationDays >= 7f && starvationDays < 8f)
+			{
+				HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+				if (instance == null || instance.SettlementInformation)
+				{
+					TextObject textObject = new TextObject("{=HAP_SettlementTroopsDying}{SETTLEMENT_NAME}: Garrison troops are dying from starvation");
+					textObject.SetTextVariable("SETTLEMENT_NAME", settlement.Name);
+					InformationManager.DisplayMessage(new InformationMessage(textObject.ToString(), Colors.Red));
+				}
+			}
+			return;
+		}
+		int num3 = RemoveTroopsLowestFirst(mobileParty.MemberRoster, num);
+		if (num3 > 0)
+		{
+			string stringId = settlement.StringId;
+			if (!_accumulatedDeserters.ContainsKey(stringId))
+			{
+				_accumulatedDeserters[stringId] = 0;
+			}
+			_accumulatedDeserters[stringId] += num3;
+			HAPSettings? instance2 = GlobalSettings<HAPSettings>.Instance;
+			if (instance2 != null && instance2.StarvationEffects?.SelectedIndex == 2)
+			{
+				TrySpawnDeserterParty(settlement);
+			}
+		}
+		if (num3 > 0 && settlement.OwnerClan == Clan.PlayerClan && starvationDays >= 7f && starvationDays < 8f)
+		{
+			HAPSettings? instance3 = GlobalSettings<HAPSettings>.Instance;
+			if (instance3 == null || instance3.SettlementInformation)
+			{
+				TextObject textObject2 = new TextObject("{=HAP_SettlementTroopsDeserting}{SETTLEMENT_NAME}: Garrison troops are deserting due to prolonged food shortage");
+				textObject2.SetTextVariable("SETTLEMENT_NAME", settlement.Name);
+				InformationManager.DisplayMessage(new InformationMessage(textObject2.ToString(), Colors.Red));
+			}
+		}
+	}
+
+	private int RemoveTroopsLowestFirst(TroopRoster roster, int count)
+	{
+		int num = 0;
+		for (int i = 0; i <= 6; i++)
+		{
+			if (num >= count)
+			{
+				break;
+			}
+			int num2 = roster.Count - 1;
+			while (num2 >= 0 && num < count)
+			{
+				TroopRosterElement elementCopyAtIndex = roster.GetElementCopyAtIndex(num2);
+				CharacterObject character = elementCopyAtIndex.Character;
+				if (character != null && !character.IsHero && character.Tier == i)
+				{
+					int num3 = MathF.Min(elementCopyAtIndex.WoundedNumber, count - num);
+					if (num3 > 0)
+					{
+						roster.AddToCounts(character, -num3, insertAtFront: false, -num3);
+						num += num3;
+					}
+					if (num < count)
+					{
+						int a = elementCopyAtIndex.Number - elementCopyAtIndex.WoundedNumber;
+						int num4 = MathF.Min(a, count - num);
+						if (num4 > 0)
+						{
+							roster.AddToCounts(character, -num4);
+							num += num4;
+						}
+					}
+				}
+				num2--;
+			}
+		}
+		return num;
+	}
+
+	private void TrySpawnDeserterParty(Settlement settlement)
+	{
+		string stringId = settlement.StringId;
+		if (!_accumulatedDeserters.TryGetValue(stringId, out var value) || value < 20 || MBRandom.RandomFloat > 0.05f || DeserterClan == null)
+		{
+			return;
+		}
+		int count = DeserterClan.WarPartyComponents.Count;
+		int maxSupportedNumberOfLootersForClan = Campaign.Current.Models.BanditDensityModel.GetMaxSupportedNumberOfLootersForClan(DeserterClan);
+		if (count >= maxSupportedNumberOfLootersForClan)
+		{
+			return;
+		}
+		int num = MathF.Min(value, 80);
+		if (SpawnDeserterParty(settlement, num))
+		{
+			_accumulatedDeserters[stringId] = value - num;
+			if (_accumulatedDeserters[stringId] <= 0)
+			{
+				_accumulatedDeserters.Remove(stringId);
+			}
+		}
+	}
+
+	private bool SpawnDeserterParty(Settlement settlement, int partySize)
+	{
+		try
+		{
+			if (settlement.Culture?.BasicTroop == null)
+			{
+				Main.Log($"[DESERTER] {settlement.Name}: No culture BasicTroop, skipping spawn");
+				return false;
+			}
+			CampaignVec2 deserterSpawnPosition = GetDeserterSpawnPosition(settlement);
+			MobileParty mobileParty = BanditPartyComponent.CreateLooterParty(DeserterClan.StringId + "_" + settlement.StringId + "_" + MBRandom.RandomInt(100000), DeserterClan, settlement, isBossParty: false, null, deserterSpawnPosition);
+			if (mobileParty == null)
+			{
+				return false;
+			}
+			AddCultureTroopsToParty(mobileParty, settlement, partySize);
+			InitializeDeserterParty(mobileParty);
+			mobileParty.SetMovePatrolAroundPoint(mobileParty.Position, MobileParty.NavigationType.Default);
+			PartyBaseHelper.SortRoster(mobileParty);
+			return true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log($"[DESERTER] Failed to spawn deserter party at {settlement.Name}: {ex.Message}");
+			return false;
+		}
+	}
+
+	private CampaignVec2 GetDeserterSpawnPosition(Settlement settlement)
+	{
+		float maxDistance = 0.5f * Campaign.Current.EstimatedAverageBanditPartySpeed * (float)CampaignTime.HoursInDay;
+		CampaignVec2 campaignVec = NavigationHelper.FindPointAroundPosition(settlement.GatePosition, MobileParty.NavigationType.Default, maxDistance);
+		if (MobileParty.MainParty == null)
+		{
+			return campaignVec;
+		}
+		float num = MobileParty.MainParty.SeeingRange * MobileParty.MainParty.SeeingRange;
+		if (campaignVec.DistanceSquared(MobileParty.MainParty.Position) < num)
+		{
+			for (int i = 0; i < 10; i++)
+			{
+				CampaignVec2 campaignVec2 = NavigationHelper.FindReachablePointAroundPosition(campaignVec, MobileParty.NavigationType.Default, maxDistance);
+				if (NavigationHelper.IsPositionValidForNavigationType(campaignVec2, MobileParty.NavigationType.Default) && campaignVec2.DistanceSquared(MobileParty.MainParty.Position) >= num)
+				{
+					return campaignVec2;
+				}
+			}
+		}
+		return campaignVec;
+	}
+
+	private void AddCultureTroopsToParty(MobileParty party, Settlement settlement, int count)
+	{
+		CultureObject culture = settlement.Culture;
+		if (culture?.BasicTroop == null)
+		{
+			return;
+		}
+		CharacterObject basicTroop = culture.BasicTroop;
+		int num = count;
+		while (num > 0)
+		{
+			float randomFloat = MBRandom.RandomFloat;
+			CharacterObject characterObject = basicTroop;
+			if (randomFloat > 0.5f && basicTroop.UpgradeTargets != null && basicTroop.UpgradeTargets.Length != 0)
+			{
+				characterObject = basicTroop.UpgradeTargets[MBRandom.RandomInt(basicTroop.UpgradeTargets.Length)];
+				if (randomFloat > 0.8f && characterObject.UpgradeTargets != null && characterObject.UpgradeTargets.Length != 0)
+				{
+					characterObject = characterObject.UpgradeTargets[MBRandom.RandomInt(characterObject.UpgradeTargets.Length)];
+				}
+			}
+			int num2 = MathF.Min(num, MBRandom.RandomInt(1, 6));
+			party.MemberRoster.AddToCounts(characterObject, num2);
+			num -= num2;
+		}
+	}
+
+	private void InitializeDese

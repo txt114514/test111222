@@ -1,0 +1,664 @@
+﻿PART 44/75
+tNumber3);
+					PerkHelper.AddPerkBonusForParty(_smoothOperatorPerk, party, isPrimaryBonus: false, ref stat);
+					float num17 = stat.ResultNumber - resultNumber3;
+					if (num17 != 0f)
+					{
+						result2.Add(num17, includeDescription ? _smoothOperatorPerk.Name : null);
+					}
+				}
+			}
+		}
+		if (party.IsMainParty)
+		{
+			float num18 = Math.Abs(result2.ResultNumber);
+			_mainPartySpoilageFraction = ((num18 > 0f && num4 > 0f) ? Math.Min(num4 / num18, 1f) : 0f);
+		}
+		if (includeDescription)
+		{
+			_consumptionCache[party] = new CachedConsumption
+			{
+				ResultNumber = result2.ResultNumber,
+				DetailedResult = result2
+			};
+		}
+		else
+		{
+			_consumptionCache[party] = new CachedConsumption
+			{
+				ResultNumber = result2.ResultNumber,
+				DetailedResult = null
+			};
+		}
+		return result2;
+	}
+
+	public override ExplainedNumber CalculateDailyFoodConsumptionf(MobileParty party, ExplainedNumber baseConsumption)
+	{
+		baseConsumption.LimitMax(0f);
+		return baseConsumption;
+	}
+
+	internal EnvironmentalConditions GetEnvironmentalConditions(MobileParty party)
+	{
+		if (party == null)
+		{
+			return new EnvironmentalConditions
+			{
+				Temperature = 20f,
+				Humidity = 50f
+			};
+		}
+		if (Campaign.Current == null || Campaign.Current.MapSceneWrapper == null)
+		{
+			return new EnvironmentalConditions
+			{
+				Temperature = 20f,
+				Humidity = 50f
+			};
+		}
+		if (Campaign.Current.Models == null || Campaign.Current.Models.MapWeatherModel == null)
+		{
+			return new EnvironmentalConditions
+			{
+				Temperature = 20f,
+				Humidity = 50f
+			};
+		}
+		TerrainType faceTerrainType = Campaign.Current.MapSceneWrapper.GetFaceTerrainType(party.CurrentNavigationFace);
+		CampaignTime.Seasons getSeasonOfYear = CampaignTime.Now.GetSeasonOfYear;
+		MapWeatherModel.WeatherEvent weatherEventInPosition = Campaign.Current.Models.MapWeatherModel.GetWeatherEventInPosition(party.GetPosition2D);
+		Vec2 getPosition2D = party.GetPosition2D;
+		float num = Campaign.Current.MapSceneWrapper.GetTerrainSize().Y;
+		if (num <= 0f)
+		{
+			num = 1f;
+		}
+		float latitudePercent = getPosition2D.Y / num;
+		float height = 0f;
+		Campaign.Current.MapSceneWrapper.GetHeightAtPoint(new CampaignVec2(getPosition2D, isOnLand: true), ref height);
+		Campaign.Current.Models.MapWeatherModel.GetSnowAndRainDataForPosition(getPosition2D, CampaignTime.Now, out var snowValue, out var rainValue);
+		float temperature = CalculateTemperature(faceTerrainType, weatherEventInPosition, getSeasonOfYear, getPosition2D, height, latitudePercent, snowValue);
+		float humidity = CalculateHumidity(party, faceTerrainType, weatherEventInPosition, getSeasonOfYear, getPosition2D, height, latitudePercent, rainValue);
+		return new EnvironmentalConditions
+		{
+			Temperature = temperature,
+			Humidity = humidity
+		};
+	}
+
+	public static (float Temperature, float Humidity) GetPartyEnvironment(MobileParty party)
+	{
+		if (party == null)
+		{
+			return (Temperature: 20f, Humidity: 50f);
+		}
+		double toDays = CampaignTime.Now.ToDays;
+		if (_environmentalCache.CacheDay.ToDays == toDays && _environmentalCache.Conditions.TryGetValue(party, out var value))
+		{
+			return (Temperature: value.Temperature, Humidity: value.Humidity);
+		}
+		try
+		{
+			if (Campaign.Current?.Models?.MobilePartyFoodConsumptionModel is FoodConsumptionModel foodConsumptionModel)
+			{
+				EnvironmentalConditions environmentalConditions = foodConsumptionModel.GetEnvironmentalConditions(party);
+				if (_environmentalCache.CacheDay.ToDays != toDays)
+				{
+					_environmentalCache.Conditions.Clear();
+					_environmentalCache.CacheDay = CampaignTime.Now;
+				}
+				_environmentalCache.Conditions[party] = environmentalConditions;
+				return (Temperature: environmentalConditions.Temperature, Humidity: environmentalConditions.Humidity);
+			}
+		}
+		catch
+		{
+		}
+		return (Temperature: 20f, Humidity: 50f);
+	}
+
+	public static (float Temperature, float Humidity) GetMainPartyEnvironment()
+	{
+		if (MobileParty.MainParty == null)
+		{
+			return (Temperature: 20f, Humidity: 50f);
+		}
+		double toDays = CampaignTime.Now.ToDays;
+		if (_environmentalCache.CacheDay.ToDays == toDays && _environmentalCache.Conditions.TryGetValue(MobileParty.MainParty, out var value))
+		{
+			return (Temperature: value.Temperature, Humidity: value.Humidity);
+		}
+		try
+		{
+			if (Campaign.Current?.Models?.MobilePartyFoodConsumptionModel is FoodConsumptionModel foodConsumptionModel)
+			{
+				EnvironmentalConditions environmentalConditions = foodConsumptionModel.GetEnvironmentalConditions(MobileParty.MainParty);
+				if (_environmentalCache.CacheDay.ToDays != toDays)
+				{
+					_environmentalCache.Conditions.Clear();
+					_environmentalCache.CacheDay = CampaignTime.Now;
+				}
+				_environmentalCache.Conditions[MobileParty.MainParty] = environmentalConditions;
+				return (Temperature: environmentalConditions.Temperature, Humidity: environmentalConditions.Humidity);
+			}
+		}
+		catch
+		{
+		}
+		return (Temperature: 20f, Humidity: 50f);
+	}
+
+	private EnvironmentalConditions GetEnvironmentalConditionsCached(MobileParty party)
+	{
+		if (party == null)
+		{
+			return new EnvironmentalConditions
+			{
+				Temperature = 20f,
+				Humidity = 50f
+			};
+		}
+		double toDays = CampaignTime.Now.ToDays;
+		if (_environmentalCache.CacheDay.ToDays != toDays)
+		{
+			_environmentalCache.Conditions.Clear();
+			_environmentalCache.CacheDay = CampaignTime.Now;
+		}
+		if (_environmentalCache.Conditions.TryGetValue(party, out var value))
+		{
+			return value;
+		}
+		EnvironmentalConditions environmentalConditions = GetEnvironmentalConditions(party);
+		_environmentalCache.Conditions[party] = environmentalConditions;
+		return environmentalConditions;
+	}
+
+	private float CalculateTemperature(TerrainType terrain, MapWeatherModel.WeatherEvent weather, CampaignTime.Seasons season, Vec2 position, float altitude, float latitudePercent, float snowPotential)
+	{
+		if (Campaign.Current == null || Campaign.Current.MapSceneWrapper == null)
+		{
+			return 20f;
+		}
+		float num = 35f - MathF.Pow(latitudePercent, 1f) * 30f;
+		float num2 = altitude * -0.6f;
+		float yearProgress = (float)CampaignTime.Now.ToSeasons % 4f;
+		float seasonalTemperatureModifier = GetSeasonalTemperatureModifier(yearProgress);
+		float num3 = 0.1f + latitudePercent * 0.9f;
+		float num4 = seasonalTemperatureModifier * num3;
+		float num5 = 0f;
+		switch (terrain)
+		{
+		case TerrainType.Desert:
+			num5 = 10f;
+			break;
+		case TerrainType.Forest:
+			num5 = -3f;
+			break;
+		}
+		float weatherTemperatureModifier = GetWeatherTemperatureModifier(weather);
+		float num6 = 0f;
+		if (snowPotential > 0.2f)
+		{
+			num6 = ((!(snowPotential <= 0.55f)) ? (-8f + (snowPotential - 0.55f) / 0.45f * -16f) : ((snowPotential - 0.2f) / 0.35f * -8f));
+			num6 *= latitudePercent;
+		}
+		float num7 = num + num2 + num4 + num5 + weatherTemperatureModifier + num6;
+		switch (weather)
+		{
+		case MapWeatherModel.WeatherEvent.Blizzard:
+			num7 = Math.Min(num7, -5f);
+			break;
+		case MapWeatherModel.WeatherEvent.Snowy:
+			num7 = Math.Min(num7, 0f);
+			break;
+		}
+		if (latitudePercent < 0.35f)
+		{
+			float num8 = 0f;
+			switch (terrain)
+			{
+			case TerrainType.River:
+				num8 = 7f;
+				break;
+			case TerrainType.CoastalSea:
+				num8 = 5f;
+				break;
+			case TerrainType.OpenSea:
+				num8 = 3f;
+				break;
+			}
+			if (num8 > 0f)
+			{
+				num7 += num8 * (1f - latitudePercent / 0.35f);
+			}
+		}
+		return MBMath.ClampFloat(num7, -30f, 50f);
+	}
+
+	private float GetWeatherTemperatureModifier(MapWeatherModel.WeatherEvent weather)
+	{
+		switch (weather)
+		{
+		case MapWeatherModel.WeatherEvent.Snowy:
+		case MapWeatherModel.WeatherEvent.Blizzard:
+			return 0f;
+		case MapWeatherModel.WeatherEvent.HeavyRain:
+			return -4f;
+		case MapWeatherModel.WeatherEvent.LightRain:
+			return -2f;
+		case MapWeatherModel.WeatherEvent.Storm:
+			return -6f;
+		default:
+			return 0f;
+		}
+	}
+
+	private float GetRainPotential(Vec2 position)
+	{
+		if (Campaign.Current?.Models?.MapWeatherModel == null)
+		{
+			return 0.5f;
+		}
+		Campaign.Current.Models.MapWeatherModel.GetSnowAndRainDataForPosition(position, CampaignTime.Now, out var _, out var rainValue);
+		return rainValue;
+	}
+
+	private float GetSeasonalTemperatureModifier(float yearProgress)
+	{
+		float num = ((yearProgress > 1.5f && yearProgress <= 3.5f) ? MBMath.Map(yearProgress, 1.5f, 3.5f, 0f, 1f) : ((!(yearProgress <= 1.5f)) ? MBMath.Map(yearProgress, 3.5f, 4f, 1f, 0.75f) : MBMath.Map(yearProgress, 0f, 1.5f, 0.75f, 0f)));
+		float num2 = (num - 0.5f) * -2f;
+		return num2 * 11f;
+	}
+
+	private float CalculateHumidity(MobileParty party, TerrainType terrain, MapWeatherModel.WeatherEvent weather, CampaignTime.Seasons season, Vec2 position, float altitude, float latitudePercent, float rainPotential)
+	{
+		if (Campaign.Current == null || Campaign.Current.MapSceneWrapper == null)
+		{
+			return 50f;
+		}
+		float num = Math.Abs(latitudePercent - 0.5f);
+		float num2 = 70f - num * 0.4f;
+		num2 -= altitude * 1.5f;
+		float num3 = ((terrain != TerrainType.Desert && terrain != TerrainType.Dune) ? ((terrain != TerrainType.River && terrain != TerrainType.UnderBridge && terrain != TerrainType.CoastalSea && terrain != TerrainType.OpenSea) ? (rainPotential * 200f - 40f) : (rainPotential * 60f)) : (-30f));
+		num2 += num3;
+		float num4 = 0f;
+		switch (terrain)
+		{
+		case TerrainType.Desert:
+			num4 = -10f;
+			break;
+		case TerrainType.Forest:
+			num4 = 10f;
+			break;
+		case TerrainType.Plain:
+			num4 = 0f;
+			break;
+		case TerrainType.River:
+		case TerrainType.UnderBridge:
+			num4 = 10f;
+			break;
+		case TerrainType.CoastalSea:
+			num4 = 15f;
+			break;
+		case TerrainType.OpenSea:
+			num4 = 20f;
+			break;
+		}
+		float num5 = 0f;
+		if (season == CampaignTime.Seasons.Winter)
+		{
+			num5 = -5f;
+		}
+		float value = num2 + num4 + num5;
+		if (weather == MapWeatherModel.WeatherEvent.HeavyRain || weather == MapWeatherModel.WeatherEvent.LightRain || weather == MapWeatherModel.WeatherEvent.Blizzard || weather == MapWeatherModel.WeatherEvent.Snowy || weather == MapWeatherModel.WeatherEvent.Storm)
+		{
+			value = 100f;
+		}
+		if (IsPartyInFog(party))
+		{
+			value = 100f;
+		}
+		return MBMath.ClampFloat(value, 5f, 100f);
+	}
+
+	private static object GetRealisticWeatherManager()
+	{
+		if (_realisticWeatherManager != null)
+		{
+			return _realisticWeatherManager;
+		}
+		if (_realisticWeatherSearched)
+		{
+			return null;
+		}
+		try
+		{
+			Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+			foreach (Assembly assembly in assemblies)
+			{
+				_realisticWeatherType = assembly.GetType("RealisticWeather.RealisticWeatherManager");
+				if (_realisticWeatherType != null)
+				{
+					PropertyInfo property = _realisticWeatherType.GetProperty("Current", BindingFlags.Static | BindingFlags.Public);
+					if (property != null)
+					{
+						_realisticWeatherManager = property.GetValue(null);
+					}
+					break;
+				}
+			}
+		}
+		catch
+		{
+		}
+		_realisticWeatherSearched = true;
+		return _realisticWeatherManager;
+	}
+
+	public static string GetClimateZone(Vec2 position, float altitude)
+	{
+		if (Campaign.Current == null || Campaign.Current.MapSceneWrapper == null)
+		{
+			return "Unknown";
+		}
+		float num = Campaign.Current.MapSceneWrapper.GetTerrainSize().Y;
+		if (num <= 0f)
+		{
+			num = 1f;
+		}
+		float num2 = position.Y / num;
+		PathFaceRecord faceIndex = Campaign.Current.MapSceneWrapper.GetFaceIndex(new CampaignVec2(position, isOnLand: true));
+		TerrainType faceTerrainType = Campaign.Current.MapSceneWrapper.GetFaceTerrainType(faceIndex);
+		if (faceTerrainType == TerrainType.Desert || faceTerrainType == TerrainType.Dune)
+		{
+			return "Desert";
+		}
+		if (num2 < 0.32f)
+		{
+			return "Tropical";
+		}
+		if (num2 > 0.52f || altitude > 16f)
+		{
+			return "Cold";
+		}
+		return "Temperate";
+	}
+
+	private bool IsPartyInFog(MobileParty party)
+	{
+		if (_realisticWeatherSearched && _realisticWeatherManager == null)
+		{
+			return false;
+		}
+		try
+		{
+			object realisticWeatherManager = GetRealisticWeatherManager();
+			if (realisticWeatherManager == null || _realisticWeatherType == null)
+			{
+				return false;
+			}
+			if (_weatherEventPositionsProperty == null)
+			{
+				_weatherEventPositionsProperty = _realisticWeatherType.GetProperty("WeatherEventPositions");
+				if (_weatherEventPositionsProperty == null)
+				{
+					return false;
+				}
+			}
+			if (!(_weatherEventPositionsProperty.GetValue(realisticWeatherManager) is List<Vec3> list))
+			{
+				return false;
+			}
+			Vec2 getPosition2D = party.GetPosition2D;
+			foreach (Vec3 item in list)
+			{
+				if (item.z == 2f || item.z == 4f)
+				{
+					float num = item.AsVec2.Distance(getPosition2D);
+					if (num <= 25f)
+					{
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private bool IsPartyInDustStorm(MobileParty party)
+	{
+		if (_realisticWeatherSearched && _realisticWeatherManager == null)
+		{
+			return false;
+		}
+		try
+		{
+			object realisticWeatherManager = GetRealisticWeatherManager();
+			if (realisticWeatherManager == null || _realisticWeatherType == null)
+			{
+				return false;
+			}
+			if (_weatherEventPositionsProperty == null)
+			{
+				_weatherEventPositionsProperty = _realisticWeatherType.GetProperty("WeatherEventPositions");
+				if (_weatherEventPositionsProperty == null)
+				{
+					return false;
+				}
+			}
+			if (!(_weatherEventPositionsProperty.GetValue(realisticWeatherManager) is List<Vec3> list))
+			{
+				return false;
+			}
+			Vec2 getPosition2D = party.GetPosition2D;
+			foreach (Vec3 item in list)
+			{
+				if (item.z == 1f || item.z == 3f)
+				{
+					float num = item.AsVec2.Distance(getPosition2D);
+					if (num <= 25f)
+					{
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	public static void ResetRealisticWeatherCache()
+	{
+		_realisticWeatherUnavailable = false;
+		_weatherEventPositionsProperty = null;
+		_realisticWeatherSearched = false;
+		_realisticWeatherManager = null;
+		_realisticWeatherType = null;
+		_lastRealisticWeatherCheck = CampaignTime.Never;
+	}
+
+	public static string GetRealisticWeatherEvent(MobileParty party)
+	{
+		if (_realisticWeatherUnavailable)
+		{
+			if (_lastRealisticWeatherCheck == CampaignTime.Never)
+			{
+				_lastRealisticWeatherCheck = CampaignTime.Now;
+			}
+			if (!(CampaignTime.Now.ToDays - _lastRealisticWeatherCheck.ToDays >= 7.0))
+			{
+				return string.Empty;
+			}
+			_realisticWeatherUnavailable = false;
+			_lastRealisticWeatherCheck = CampaignTime.Now;
+		}
+		try
+		{
+			object realisticWeatherManager = GetRealisticWeatherManager();
+			if (realisticWeatherManager == null || _realisticWeatherType == null)
+			{
+				_realisticWeatherUnavailable = true;
+				_lastRealisticWeatherCheck = CampaignTime.Now;
+				return string.Empty;
+			}
+			if (_weatherEventPositionsProperty == null)
+			{
+				_weatherEventPositionsProperty = _realisticWeatherType.GetProperty("WeatherEventPositions");
+				if (_weatherEventPositionsProperty == null)
+				{
+					_realisticWeatherUnavailable = true;
+					_lastRealisticWeatherCheck = CampaignTime.Now;
+					return string.Empty;
+				}
+			}
+			if (!(_weatherEventPositionsProperty.GetValue(realisticWeatherManager) is List<Vec3> list))
+			{
+				return string.Empty;
+			}
+			if (list.Count == 0)
+			{
+				return string.Empty;
+			}
+			Vec2 getPosition2D = party.GetPosition2D;
+			for (int i = 0; i < list.Count; i++)
+			{
+				Vec3 vec = list[i];
+				float num = vec.AsVec2.Distance(getPosition2D);
+				if (num <= 25f)
+				{
+					float z = vec.z;
+					float num2 = z;
+					if (num2 == 1f)
+					{
+						return new TextObject("{=HAP_WeatherDustStorm}Dust Storm").ToString();
+					}
+					if (num2 == 2f)
+					{
+						return new TextObject("{=HAP_WeatherFog}Fog").ToString();
+					}
+					if (num2 == 3f)
+					{
+						return new TextObject("{=HAP_WeatherDustStormDissipating}Dust Storm (Dissipating)").ToString();
+					}
+					if (num2 == 4f)
+					{
+						return new TextObject("{=HAP_WeatherFogDissipating}Fog (Dissipating)").ToString();
+					}
+				}
+			}
+			return string.Empty;
+		}
+		catch (Exception ex)
+		{
+			_realisticWeatherUnavailable = true;
+			_lastRealisticWeatherCheck = CampaignTime.Now;
+			Main.Log("RealisticWeather integration disabled: " + ex.Message);
+			return string.Empty;
+		}
+	}
+
+	private float CalculateSpoilageModifier(EnvironmentalConditions conditions)
+	{
+		float val;
+		if (conditions.Temperature < 5f)
+		{
+			val = 0.4f + conditions.Temperature / 5f * 0.3f;
+			return Math.Max(0.4f, val);
+		}
+		if (conditions.Temperature < 20f)
+		{
+			return 0.7f + (conditions.Temperature - 5f) / 15f * 0.3f;
+		}
+		if (conditions.Temperature < 35f)
+		{
+			return 1f + (conditions.Temperature - 20f) / 15f * 0.5f;
+		}
+		val = 1.5f + (conditions.Temperature - 35f) / 10f * 0.3f;
+		return Math.Min(1.8f, val);
+	}
+
+	private float GetFoodTypeSpoilageRate(ItemObject foodItem)
+	{
+		if (_spoilageByItem.TryGetValue(foodItem, out var value))
+		{
+			return value;
+		}
+		InitializeFoodCaches();
+		string lowerCase = StringCache.GetLowerCase(foodItem.StringId);
+		float num = (_spoilageRateCache.TryGetValue(lowerCase, out var value2) ? value2 : 0.1f);
+		_spoilageByItem[foodItem] = num;
+		return num;
+	}
+
+	private float GetHumiditySensitivity(ItemObject foodItem)
+	{
+		if (_humidityByItem.TryGetValue(foodItem, out var value))
+		{
+			return value;
+		}
+		InitializeFoodCaches();
+		string lowerCase = StringCache.GetLowerCase(foodItem.StringId);
+		float num = (_humiditySensitivityCache.TryGetValue(lowerCase, out var value2) ? value2 : 0.5f);
+		_humidityByItem[foodItem] = num;
+		return num;
+	}
+
+	public float GetEnvironmentAdjustedSpoilageRate(MobileParty party, ItemObject foodItem)
+	{
+		EnvironmentalConditions environmentalConditionsCached = GetEnvironmentalConditionsCached(party);
+		float foodTypeSpoilageRate = GetFoodTypeSpoilageRate(foodItem);
+		float humiditySensitivity = GetHumiditySensitivity(foodItem);
+		float num = CalculateSpoilageModifier(environmentalConditionsCached);
+		float num2;
+		if (environmentalConditionsCached.Humidity < 30f)
+		{
+			num2 = 0.9f;
+		}
+		else if (environmentalConditionsCached.Humidity < 70f)
+		{
+			num2 = 0.9f + (environmentalConditionsCached.Humidity - 30f) / 40f * 0.1f;
+		}
+		else
+		{
+			num2 = 1f + (environmentalConditionsCached.Humidity - 70f) / 30f * 0.2f;
+			num2 = Math.Min(1.2f, num2);
+		}
+		float num3 = 1f + (num2 - 1f) * humiditySensitivity;
+		float num4 = num * 0.75f + num3 * 0.25f;
+		return foodTypeSpoilageRate * num4;
+	}
+
+	private void CalculatePerkEffects(MobileParty party, ref ExplainedNumber result)
+	{
+		int num = 0;
+		for (int i = 0; i < party.MemberRoster.Count; i++)
+		{
+			if (party.MemberRoster.GetCharacterAtIndex(i).Culture.IsBandit)
+			{
+				num += party.MemberRoster.GetElementNumber(i);
+			}
+		}
+		for (int j = 0; j < party.PrisonRoster.Count; j++)
+		{
+			if (party.PrisonRoster.GetCharacterAtIndex(j).Culture.IsBandit)
+			{
+				num += party.PrisonRoster.GetElementNumber(j);
+			}
+		}
+		if (party.LeaderHero != null && party.LeaderHero.GetPerkValue(DefaultPerks.Roguery.Promises) && num > 0)
+		{
+			float value = (float)num / (float)party.MemberRoster.TotalManCount * DefaultPerks.Roguery.Promises.PrimaryBonus;
+			result.AddFactor(value, DefaultPerks.Roguery.Promises.Name);
+		}
+		PerkHelper.AddPerkBonusForParty(DefaultPerks.Athletics.Spartan, party, isPrimaryBonus: false, ref result, party.IsCurrentlyAtSea);
+		if (!party.IsCurrentlyAtSea)
+		{
+			PerkHelper.AddPerkBonusForParty(DefaultPerks.Steward.WarriorsDiet, party, isPrimaryBonus: true, 

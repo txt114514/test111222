@@ -1,0 +1,697 @@
+﻿PART 21/75
+ 0)
+			{
+				continue;
+			}
+			int herdRoomForMounts = GetHerdRoomForMounts(party);
+			int num = Math.Min(value, Math.Min(50, herdRoomForMounts));
+			int num2 = 0;
+			if (num > 0)
+			{
+				num2 = BuyAnimalsFromSettlement(party, settlement, num, 2000, (ItemObject item) => IsUpgradeMount(item, requiredCategory), transactions);
+			}
+			int num3 = value - num2;
+			if (num3 > 0 && settlement.IsTown)
+			{
+				int num4 = SwapForUpgradeMounts(party, settlement, requiredCategory, num3, transactions);
+				num2 += num4;
+			}
+			bool flag = false;
+		}
+	}
+
+	private int SwapForUpgradeMounts(MobileParty party, Settlement settlement, ItemCategory requiredCategory, int maxSwaps, List<(EquipmentElement, int)> transactions)
+	{
+		Town town = settlement.Town;
+		if (town == null)
+		{
+			return 0;
+		}
+		int num = 0;
+		for (int i = 0; i < maxSwaps; i++)
+		{
+			EquipmentElement? equipmentElement = null;
+			int num2 = int.MaxValue;
+			for (int j = 0; j < party.ItemRoster.Count; j++)
+			{
+				ItemRosterElement elementCopyAtIndex = party.ItemRoster.GetElementCopyAtIndex(j);
+				ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+				if (item != null && elementCopyAtIndex.Amount > 0 && item.HasHorseComponent && item.HorseComponent.IsMount && !TroopUpgradeItemPatch.CategoriesMatch(item.ItemCategory, requiredCategory) && !(item.ItemCategory?.StringId == "noble_horse") && item.Value < num2)
+				{
+					num2 = item.Value;
+					equipmentElement = elementCopyAtIndex.EquipmentElement;
+				}
+			}
+			if (!equipmentElement.HasValue || GetSpendableGold(party) <= 0)
+			{
+				break;
+			}
+			SellToTown(party, town, equipmentElement.Value.Item, 1, transactions);
+			int num3 = BuyAnimalsFromSettlement(party, settlement, 1, 2000, (ItemObject item2) => IsUpgradeMount(item2, requiredCategory), transactions);
+			if (num3 > 0)
+			{
+				num++;
+				continue;
+			}
+			break;
+		}
+		return num;
+	}
+
+	private static bool IsUpgradeMount(ItemObject item, ItemCategory requiredCategory)
+	{
+		if (item == null || !item.HasHorseComponent || !item.HorseComponent.IsMount)
+		{
+			return false;
+		}
+		if (item.ItemCategory?.StringId == "noble_horse")
+		{
+			return false;
+		}
+		return TroopUpgradeItemPatch.CategoriesMatch(item.ItemCategory, requiredCategory);
+	}
+
+	private void BuyMounts(MobileParty party, Settlement settlement, int spareMounts, int footmenCount, List<(EquipmentElement, int)> transactions)
+	{
+		if (footmenCount <= 0)
+		{
+			return;
+		}
+		float num = (float)spareMounts / (float)footmenCount;
+		if (num >= 0.35f)
+		{
+			return;
+		}
+		int num2 = (int)((float)footmenCount * 0.5f);
+		int num3 = num2 - spareMounts;
+		if (num3 > 0)
+		{
+			int herdRoomForMounts = GetHerdRoomForMounts(party);
+			int num4 = Math.Min(Math.Min(num3, 50), herdRoomForMounts);
+			if (num4 > 0)
+			{
+				int num5 = BuyAnimalsFromSettlement(party, settlement, num4, 1000, IsBasicRidingMount, transactions);
+				bool flag = false;
+			}
+		}
+	}
+
+	private void BuyPackAnimals(MobileParty party, Settlement settlement, int packAnimals, int totalMen, List<(EquipmentElement, int)> transactions)
+	{
+		if (totalMen <= 0)
+		{
+			return;
+		}
+		float num = (float)packAnimals / (float)totalMen;
+		if (num >= 0.15f)
+		{
+			return;
+		}
+		int num2 = (int)((float)totalMen * 0.3f);
+		int num3 = num2 - packAnimals;
+		if (num3 > 0)
+		{
+			int herdRoomForPackAnimals = GetHerdRoomForPackAnimals(party);
+			int num4 = Math.Min(Math.Min(num3, 50), herdRoomForPackAnimals);
+			if (num4 > 0)
+			{
+				int num5 = BuyAnimalsFromSettlement(party, settlement, num4, 150, IsPackAnimal, transactions);
+				bool flag = false;
+			}
+		}
+	}
+
+	private int BuyAnimalsFromSettlement(MobileParty party, Settlement settlement, int maxToBuy, int maxPrice, Func<ItemObject, bool> itemFilter, List<(EquipmentElement, int)> transactions)
+	{
+		int num = 0;
+		ItemRoster itemRoster = settlement.ItemRoster;
+		int num2 = itemRoster.Count - 1;
+		while (num2 >= 0 && num < maxToBuy)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num2);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && itemFilter(item))
+			{
+				int itemPrice = GetItemPrice(settlement, elementCopyAtIndex.EquipmentElement, party);
+				if (itemPrice <= maxPrice && itemPrice > 0)
+				{
+					int spendableGold = GetSpendableGold(party);
+					if (spendableGold >= itemPrice)
+					{
+						int val = spendableGold / itemPrice;
+						int num3 = Math.Min(Math.Min(elementCopyAtIndex.Amount, maxToBuy - num), val);
+						if (num3 > 0 && elementCopyAtIndex.EquipmentElement.ItemModifier == null)
+						{
+							int num4 = 0;
+							for (int i = 0; i < num3; i++)
+							{
+								if (GetSpendableGold(party) < itemPrice)
+								{
+									break;
+								}
+								if (WouldOverburden(party, item.Weight))
+								{
+									break;
+								}
+								if (item.HasHorseComponent && GetFoodDaysRemaining(party) < 5f)
+								{
+									break;
+								}
+								SellItemsAction.Apply(settlement.Party, party.Party, new ItemRosterElement(elementCopyAtIndex.EquipmentElement, 1), 1, settlement);
+								num++;
+								num4++;
+							}
+							if (num4 > 0)
+							{
+								transactions.Add((elementCopyAtIndex.EquipmentElement, -num4));
+							}
+						}
+					}
+				}
+			}
+			num2--;
+		}
+		return num;
+	}
+
+	private static int GetItemPrice(Settlement settlement, EquipmentElement equipment, MobileParty party)
+	{
+		if (settlement.IsTown)
+		{
+			return settlement.Town.GetItemPrice(equipment, party);
+		}
+		if (settlement.IsVillage)
+		{
+			return settlement.Village.GetItemPrice(equipment, party);
+		}
+		return 0;
+	}
+
+	private void SellToTown(MobileParty party, Town town, ItemObject item, int count, List<(EquipmentElement, int)> transactions)
+	{
+		Settlement settlement = town.Owner.Settlement;
+		int num = 0;
+		int num2 = party.ItemRoster.Count - 1;
+		while (num2 >= 0 && num < count)
+		{
+			ItemRosterElement elementCopyAtIndex = party.ItemRoster.GetElementCopyAtIndex(num2);
+			if (elementCopyAtIndex.EquipmentElement.Item == item && elementCopyAtIndex.Amount > 0)
+			{
+				int num3 = Math.Min(elementCopyAtIndex.Amount, count - num);
+				for (int i = 0; i < num3; i++)
+				{
+					SellItemsAction.Apply(party.Party, settlement.Party, new ItemRosterElement(elementCopyAtIndex.EquipmentElement, 1), 1, settlement);
+					num++;
+				}
+				if (num3 > 0)
+				{
+					transactions.Add((elementCopyAtIndex.EquipmentElement, num3));
+				}
+			}
+			num2--;
+		}
+	}
+
+	private static bool IsBasicRidingMount(ItemObject item)
+	{
+		if (item == null || !item.HasHorseComponent)
+		{
+			return false;
+		}
+		if (!item.HorseComponent.IsMount)
+		{
+			return false;
+		}
+		return item.ItemCategory == DefaultItemCategories.Horse;
+	}
+
+	private static bool IsPackAnimal(ItemObject item)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		if (item.ItemCategory == DefaultItemCategories.PackAnimal)
+		{
+			return true;
+		}
+		if (item.HasHorseComponent && item.HorseComponent.IsPackAnimal)
+		{
+			return true;
+		}
+		return false;
+	}
+
+	private int GetSpendableGold(MobileParty party)
+	{
+		Hero leaderHero = party.LeaderHero;
+		if (leaderHero == null)
+		{
+			return 0;
+		}
+		int gold = leaderHero.Gold;
+		return Math.Max(0, gold - 3000);
+	}
+
+	private static float GetFoodDaysRemaining(MobileParty party)
+	{
+		int totalFoodAtInventory = party.TotalFoodAtInventory;
+		float foodChange = party.FoodChange;
+		if (foodChange >= 0f)
+		{
+			return float.MaxValue;
+		}
+		return (float)totalFoodAtInventory / (0f - foodChange);
+	}
+
+	private void FireTransactionNotification(MobileParty party, Settlement settlement, List<(EquipmentElement, int)> transactions)
+	{
+		try
+		{
+			if (settlement.IsTown)
+			{
+				List<(EquipmentElement, int)> list = new List<(EquipmentElement, int)>();
+				List<(EquipmentElement, int)> list2 = new List<(EquipmentElement, int)>();
+				foreach (var transaction in transactions)
+				{
+					if (transaction.Item2 > 0)
+					{
+						list.Add(transaction);
+					}
+					else if (transaction.Item2 < 0)
+					{
+						list2.Add(transaction);
+					}
+				}
+				if (list.Count > 0)
+				{
+					CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(party, settlement.Town, list);
+				}
+				if (list2.Count > 0)
+				{
+					CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(party, settlement.Town, list2);
+				}
+			}
+			else
+			{
+				if (!settlement.IsVillage)
+				{
+					return;
+				}
+				{
+					foreach (var transaction2 in transactions)
+					{
+						int item = transaction2.Item2;
+						ItemRosterElement itemRosterElement = new ItemRosterElement(transaction2.Item1, Math.Abs(item));
+						if (item < 0)
+						{
+							CampaignEventDispatcher.Instance.OnItemSold(settlement.Party, party.Party, itemRosterElement, Math.Abs(item), settlement);
+						}
+						else
+						{
+							CampaignEventDispatcher.Instance.OnItemSold(party.Party, settlement.Party, itemRosterElement, item, settlement);
+						}
+					}
+					return;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in LordHerdManagementBehavior.FireTransactionNotification: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\MarketFulfillmentBehavior.cs =====
+using System.Collections.Generic;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Extensions;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class MarketFulfillmentBehavior : CampaignBehaviorBase
+{
+	private const float SMOOTHING_FACTOR = 0.85f;
+
+	private const float DEFAULT_FULFILLMENT = 1f;
+
+	private const float MIN_DEMAND_THRESHOLD = 0.5f;
+
+	private const float RATIO_CAP = 1.5f;
+
+	private const bool DEBUG_LOG = false;
+
+	private Dictionary<string, float> _fulfillmentAverages = new Dictionary<string, float>();
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.DailyTickTownEvent.AddNonSerializedListener(this, OnDailyTickTown);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		dataStore.SyncData("_marketFulfillment", ref _fulfillmentAverages);
+		if (_fulfillmentAverages == null)
+		{
+			_fulfillmentAverages = new Dictionary<string, float>();
+		}
+	}
+
+	private void OnDailyTickTown(Town town)
+	{
+		if (town != null && town.IsTown)
+		{
+			float num = CalculateMarketHealth(town);
+			string stringId = town.Settlement.StringId;
+			if (!_fulfillmentAverages.TryGetValue(stringId, out var value))
+			{
+				value = 1f;
+			}
+			float value2 = 0.85f * value + 0.14999998f * num;
+			_fulfillmentAverages[stringId] = value2;
+			bool flag = false;
+		}
+	}
+
+	private float CalculateMarketHealth(Town town)
+	{
+		TownMarketData marketData = town.MarketData;
+		if (marketData == null)
+		{
+			return 1f;
+		}
+		float num = 0f;
+		float num2 = 0f;
+		foreach (ItemCategory item in ItemCategories.All)
+		{
+			if (item != null && item.IsValid && item.IsTradeGood && item.Properties != ItemCategory.Property.BonusToFoodStores)
+			{
+				ItemData categoryData = marketData.GetCategoryData(item);
+				float demand = categoryData.Demand;
+				if (!(demand < 0.5f))
+				{
+					float supply = categoryData.Supply;
+					float a = supply / demand;
+					a = MathF.Min(a, 1.5f);
+					a = MathF.Max(a, 0f);
+					num += a * demand;
+					num2 += demand;
+				}
+			}
+		}
+		if (num2 <= 0f)
+		{
+			return 1f;
+		}
+		return num / num2;
+	}
+
+	public static float GetMarketFulfillment(Town town)
+	{
+		if (Campaign.Current == null || town == null)
+		{
+			return 1f;
+		}
+		MarketFulfillmentBehavior campaignBehavior = Campaign.Current.GetCampaignBehavior<MarketFulfillmentBehavior>();
+		if (campaignBehavior?._fulfillmentAverages == null)
+		{
+			return 1f;
+		}
+		if (campaignBehavior._fulfillmentAverages.TryGetValue(town.Settlement.StringId, out var value))
+		{
+			return value;
+		}
+		return 1f;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\PatrolSupplyBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.ObjectSystem;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class PatrolSupplyBehavior : CampaignBehaviorBase
+{
+	private const bool DEBUG_PATROL_SUPPLY = false;
+
+	private static readonly Dictionary<string, (string meatId, int yield)> LivestockMeatMap = new Dictionary<string, (string, int)>(StringComparer.OrdinalIgnoreCase)
+	{
+		{
+			"cow",
+			("meat_beef", 4)
+		},
+		{
+			"sheep",
+			("meat_mutton", 2)
+		},
+		{
+			"hog",
+			("meat_pork", 2)
+		},
+		{
+			"chicken_product",
+			("meat_poultry", 1)
+		},
+		{
+			"goose_product",
+			("meat_poultry", 1)
+		},
+		{
+			"hare",
+			("meat_hare", 1)
+		}
+	};
+
+	private const int MAX_PACK_ANIMALS_KEPT = 10;
+
+	private const float MOUNT_KEEP_RATIO_PER_TROOP = 1f;
+
+	private static int _lastResetDay = -1;
+
+	private readonly Dictionary<MobileParty, bool> _wasHeadingHome = new Dictionary<MobileParty, bool>();
+
+	private readonly Dictionary<MobileParty, CampaignTime> _lastHomeVisit = new Dictionary<MobileParty, CampaignTime>();
+
+	public static Dictionary<string, int> DailyPatrolSupplyTotals { get; private set; } = new Dictionary<string, int>();
+
+	private static void ResetDailyTotalsIfNeeded()
+	{
+		int num = (int)CampaignTime.Now.ToDays;
+		if (num != _lastResetDay)
+		{
+			DailyPatrolSupplyTotals.Clear();
+			_lastResetDay = num;
+		}
+	}
+
+	private static void RecordDailyPatrolSupply(Settlement settlement, int amount)
+	{
+		if (settlement != null && amount > 0)
+		{
+			ResetDailyTotalsIfNeeded();
+			string stringId = settlement.StringId;
+			if (DailyPatrolSupplyTotals.ContainsKey(stringId))
+			{
+				DailyPatrolSupplyTotals[stringId] += amount;
+			}
+			else
+			{
+				DailyPatrolSupplyTotals[stringId] = amount;
+			}
+		}
+	}
+
+	public static int GetDailyPatrolSupplyTotal(Settlement settlement)
+	{
+		if (settlement == null || DailyPatrolSupplyTotals == null)
+		{
+			return 0;
+		}
+		ResetDailyTotalsIfNeeded();
+		int value;
+		return DailyPatrolSupplyTotals.TryGetValue(settlement.StringId, out value) ? value : 0;
+	}
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.SettlementEntered.AddNonSerializedListener(this, OnSettlementEntered);
+		CampaignEvents.HourlyTickPartyEvent.AddNonSerializedListener(this, OnHourlyTickParty);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		if (dataStore.IsLoading)
+		{
+			DailyPatrolSupplyTotals.Clear();
+			_lastResetDay = -1;
+		}
+	}
+
+	private void OnSettlementEntered(MobileParty mobileParty, Settlement settlement, Hero hero)
+	{
+		try
+		{
+			if (mobileParty != null && settlement != null && mobileParty.IsPatrolParty && settlement == mobileParty.HomeSettlement && settlement.Town != null)
+			{
+				DepositFoodToHomeSettlement(mobileParty, settlement.Town);
+				if (settlement.IsTown)
+				{
+					DumpNonFoodItemsToMarket(mobileParty, settlement);
+				}
+				else if (settlement.IsCastle)
+				{
+					ClearBattleLootFromPatrol(mobileParty);
+				}
+				bool flag = false;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in PatrolSupplyBehavior.OnSettlementEntered: " + ex.Message);
+		}
+	}
+
+	private void DepositFoodToHomeSettlement(MobileParty patrol, Town town)
+	{
+		if (patrol.ItemRoster == null || patrol.ItemRoster.Count == 0)
+		{
+			return;
+		}
+		int num = town.FoodStocksUpperLimit();
+		float num2 = (float)num - town.FoodStocks;
+		if (num2 <= 0f)
+		{
+			return;
+		}
+		ItemRoster itemRoster = patrol.ItemRoster;
+		int num3 = 0;
+		List<(EquipmentElement, int)> list = new List<(EquipmentElement, int)>();
+		int num4 = itemRoster.Count - 1;
+		while (num4 >= 0 && (float)num3 < num2)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num4);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && item.IsFood)
+			{
+				int num5 = Math.Min(elementCopyAtIndex.Amount, (int)(num2 - (float)num3));
+				if (num5 > 0)
+				{
+					itemRoster.AddToCounts(item, -num5);
+					town.FoodStocks += num5;
+					num3 += num5;
+					list.Add((elementCopyAtIndex.EquipmentElement, num5));
+					bool flag = false;
+				}
+			}
+			num4--;
+		}
+		if ((float)num3 < num2)
+		{
+			int num6 = itemRoster.Count - 1;
+			while (num6 >= 0 && (float)num3 < num2)
+			{
+				ItemRosterElement elementCopyAtIndex2 = itemRoster.GetElementCopyAtIndex(num6);
+				ItemObject item2 = elementCopyAtIndex2.EquipmentElement.Item;
+				if (item2 != null && elementCopyAtIndex2.Amount > 0 && item2.HasHorseComponent && item2.HorseComponent.IsLiveStock && LivestockMeatMap.TryGetValue(item2.StringId, out (string, int) value))
+				{
+					ItemObject itemObject = MBObjectManager.Instance.GetObject<ItemObject>(value.Item1);
+					if (itemObject != null)
+					{
+						int num7 = (int)(num2 - (float)num3);
+						int num8 = num7 / value.Item2;
+						if (num8 <= 0 && value.Item2 <= 1)
+						{
+							num8 = 1;
+						}
+						int num9 = Math.Min(elementCopyAtIndex2.Amount, Math.Max(1, num8));
+						int num10 = num9 * value.Item2;
+						if ((float)(num3 + num10) > num2)
+						{
+							num10 = (int)(num2 - (float)num3);
+							num9 = (int)Math.Ceiling((double)num10 / (double)value.Item2);
+							num10 = num9 * value.Item2;
+						}
+						if (num9 > 0 && num10 > 0)
+						{
+							itemRoster.AddToCounts(elementCopyAtIndex2.EquipmentElement, -num9);
+							town.FoodStocks += num10;
+							num3 += num10;
+							EquipmentElement item3 = new EquipmentElement(itemObject);
+							list.Add((item3, num10));
+							bool flag2 = false;
+						}
+					}
+				}
+				num6--;
+			}
+		}
+		if (town.FoodStocks > (float)num)
+		{
+			town.FoodStocks = num;
+		}
+		if (num3 > 0 && list.Count > 0)
+		{
+			RecordDailyPatrolSupply(town.Settlement, num3);
+			CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(patrol, town, list);
+			bool flag3 = false;
+		}
+	}
+
+	private void DumpNonFoodItemsToMarket(MobileParty patrol, Settlement settlement)
+	{
+		if (patrol.ItemRoster == null || patrol.ItemRoster.Count == 0 || settlement.ItemRoster == null)
+		{
+			return;
+		}
+		int num = 0;
+		int num2 = Math.Max(1, patrol.MemberRoster?.TotalManCount ?? 1);
+		int num3 = 10;
+		int num4 = (int)((float)num2 * 1f);
+		int num5 = 0;
+		int num6 = 0;
+		ItemRoster itemRoster = patrol.ItemRoster;
+		for (int num7 = itemRoster.Count - 1; num7 >= 0; num7--)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num7);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && !item.IsFood && (!item.HasHorseComponent || !item.HorseComponent.IsLiveStock))
+			{
+				int num9;
+				if (item.HasHorseComponent && item.HorseComponent.IsPackAnimal)
+				{
+					int val = Math.Max(0, num3 - num5);
+					int num8 = Math.Min(val, elementCopyAtIndex.Amount);
+					num5 += num8;
+					num9 = elementCopyAtIndex.Amount - num8;
+				}
+				else if (item.HasHorseComponent && item.HorseComponent.IsMount)
+				{
+					int val2 = Math.Max(0, num4 - num6);
+					int num10 = Math.Min(val2, elementCopyAtIndex.Amount);
+					num6 += num10;
+					num9 = elementCopyAtIndex.Amount - num10;
+				}
+				else
+				{
+					num9 = elementCopyAtIndex.Amount;
+				}
+				if (num9 > 0)
+				{
+					itemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, -num9);
+					settlement.ItemRoster.AddToCo

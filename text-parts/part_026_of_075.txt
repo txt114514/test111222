@@ -1,0 +1,630 @@
+﻿PART 26/75
+
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && item.HasHorseComponent && item.HorseComponent.IsPackAnimal)
+			{
+				num += elementCopyAtIndex.Amount;
+			}
+		}
+		return num;
+	}
+
+	private int CountLivestock(MobileParty party)
+	{
+		if (party?.ItemRoster == null)
+		{
+			return 0;
+		}
+		int num = 0;
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = party.ItemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && item.HasHorseComponent && item.HorseComponent.IsLiveStock)
+			{
+				num += elementCopyAtIndex.Amount;
+			}
+		}
+		return num;
+	}
+
+	private void OnSiegeAftermathApplied(MobileParty attackerParty, Settlement settlement, SiegeAftermathAction.SiegeAftermath aftermathType, Clan previousSettlementOwner, Dictionary<MobileParty, float> partyContributions)
+	{
+		if (!_aiSackPending)
+		{
+			return;
+		}
+		try
+		{
+			_aiSackPending = false;
+			if (settlement?.Town != null)
+			{
+				bool flag = false;
+				_sackPartyContributions = new Dictionary<MobileParty, float>(partyContributions);
+				ApplyAISackDelta(attackerParty, settlement, previousSettlementOwner);
+				int num = CountFoodItems(MobileParty.MainParty);
+				int num2 = CountPackAnimals(MobileParty.MainParty) + CountLivestock(MobileParty.MainParty);
+				int num3 = 0;
+				if (settlement.IsTown)
+				{
+					SeizePackAnimals(settlement);
+					SeizeLivestock(settlement);
+					num3 = SeizeMarketFood(settlement);
+				}
+				int num4 = SeizeGranaryFood(settlement.Town);
+				int num5 = num3 + num4;
+				if (num5 > 0)
+				{
+					RecordSackFood(settlement, num5);
+				}
+				int num6 = CountFoodItems(MobileParty.MainParty) - num;
+				int num7 = CountPackAnimals(MobileParty.MainParty) + CountLivestock(MobileParty.MainParty) - num2;
+				if (num6 > 0 && num7 > 0)
+				{
+					TextObject textObject = new TextObject("{=HAP_SACK_PLAYER_BOTH}Seized {AMOUNT} food and {ANIMALS} animals from {SETTLEMENT_NAME}.");
+					textObject.SetTextVariable("AMOUNT", num6);
+					textObject.SetTextVariable("ANIMALS", num7);
+					textObject.SetTextVariable("SETTLEMENT_NAME", settlement.Name);
+					InformationManager.DisplayMessage(new InformationMessage(textObject.ToString(), Colors.Green));
+				}
+				else if (num6 > 0)
+				{
+					TextObject textObject2 = new TextObject("{=HAP_SACK_PLAYER_FOOD}Seized {AMOUNT} food from {SETTLEMENT_NAME}.");
+					textObject2.SetTextVariable("AMOUNT", num6);
+					textObject2.SetTextVariable("SETTLEMENT_NAME", settlement.Name);
+					InformationManager.DisplayMessage(new InformationMessage(textObject2.ToString(), Colors.Green));
+				}
+				else if (num7 > 0)
+				{
+					TextObject textObject3 = new TextObject("{=HAP_SACK_PLAYER_ANIMALS}Seized {ANIMALS} animals from {SETTLEMENT_NAME}.");
+					textObject3.SetTextVariable("ANIMALS", num7);
+					textObject3.SetTextVariable("SETTLEMENT_NAME", settlement.Name);
+					InformationManager.DisplayMessage(new InformationMessage(textObject3.ToString(), Colors.Green));
+				}
+				bool flag2 = false;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[Sack AI] ERROR in OnSiegeAftermathApplied: " + ex.Message);
+			_aiSackPending = false;
+		}
+	}
+
+	private void ApplyAISackDelta(MobileParty attackerParty, Settlement settlement, Clan previousOwnerClan)
+	{
+		Town town = settlement.Town;
+		float num = CalculateBaseProsperityPenalty(attackerParty, _aiSackProsperityCache);
+		float num2 = 1.5f * num;
+		town.Prosperity += num2;
+		int buildingLevelsLost = GetBuildingLevelsLost(attackerParty);
+		int num3 = MathF.Ceiling(1.5f * (float)MathF.Floor(MathF.Log((float)(attackerParty.Army?.TotalHealthyMembers ?? attackerParty.MemberRoster?.TotalHealthyCount ?? 0) * 0.02f + 2f, 2f)));
+		int num4 = buildingLevelsLost - num3;
+		for (int i = 0; i < num4; i++)
+		{
+			List<Building> list = new List<Building>();
+			foreach (Building building in town.Buildings)
+			{
+				if (!building.BuildingType.IsDailyProject && building.CurrentLevel > 0)
+				{
+					list.Add(building);
+				}
+			}
+			if (list.Count == 0)
+			{
+				break;
+			}
+			list.GetRandomElement().LevelDown();
+		}
+		town.Loyalty += -20f;
+		if (settlement.IsTown)
+		{
+			foreach (Hero notable in settlement.Notables)
+			{
+				notable.AddPower(notable.Power * -0.5f);
+			}
+		}
+		if (attackerParty.LeaderHero != null && previousOwnerClan?.Leader != null)
+		{
+			ChangeRelationAction.ApplyRelationChangeBetweenHeroes(attackerParty.LeaderHero, previousOwnerClan.Leader, -20);
+		}
+		float num5 = 10f;
+		foreach (KeyValuePair<MobileParty, float> sackPartyContribution in _sackPartyContributions)
+		{
+			sackPartyContribution.Key.RecentEventsMorale += num5;
+		}
+	}
+
+	private float CalculateBaseProsperityPenalty(MobileParty attackerParty, float prosperity)
+	{
+		int num = attackerParty.MemberRoster?.TotalHealthyCount ?? 0;
+		if (attackerParty.Army != null)
+		{
+			num = attackerParty.Army.TotalHealthyMembers;
+		}
+		return -1f * (MathF.Log((float)num * 0.04f + 2f, 2f) * 2.5f + 2.5f) * 0.01f * prosperity;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\TownSupplyLineBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using HarvestAndProduction.PartyComponents;
+using Helpers;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
+using TaleWorlds.CampaignSystem.Encounters;
+using TaleWorlds.CampaignSystem.Map;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem.Naval;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Siege;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+using TaleWorlds.ObjectSystem;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class TownSupplyLineBehavior : CampaignBehaviorBase
+{
+	private struct SupplyPlan
+	{
+		public int Food;
+
+		public int Troops;
+
+		public int PackAnimalsTarget;
+
+		public bool Valid;
+	}
+
+	private enum DangerAction
+	{
+		None,
+		FleeFromEnemy,
+		HelpFriendly
+	}
+
+	private class DangerCheckResult
+	{
+		public DangerAction Action = DangerAction.None;
+
+		public MobileParty ThreatParty;
+
+		public MobileParty FriendlyParty;
+
+		public float StrengthRatio;
+	}
+
+	private struct ConversationPartyData
+	{
+		public bool IsValid;
+
+		public bool IsNaval;
+
+		public Settlement HomeTown;
+
+		public Settlement DestinationTown;
+
+		public Clan OriginalClan;
+
+		public Hero PartyOwner;
+
+		public IFaction OriginFaction;
+
+		public bool IsTraveling;
+
+		public bool IsUnloading;
+
+		public bool IsReturning;
+
+		public bool IsWaitingAtHome;
+
+		public bool IsFleeing;
+
+		public bool IsDefending;
+
+		public bool IsHoldingOffshore;
+
+		public bool IsIdle;
+	}
+
+	private const bool DEBUG_SUPPLY = false;
+
+	private const float DANGER_SCAN_RADIUS = 6f;
+
+	private const float NAVAL_DANGER_SCAN_RADIUS = 12f;
+
+	private const float FLEE_STRENGTH_RATIO = 0.8f;
+
+	public const float HELP_FRIENDLY_RADIUS = 10f;
+
+	public const float DONOR_MIN_ABSOLUTE_FOOD = 400f;
+
+	public const float DONOR_POST_TRANSFER_FLOOR_MULTIPLIER = 2f;
+
+	public const int MIN_GARRISON_FOR_SUPPLY = 100;
+
+	public const int TRANSFER_MAX = 300;
+
+	public const int TRANSFER_MIN = 100;
+
+	public const int FOOD_PER_TROOP_RATIO = 3;
+
+	public const float GARRISON_SPARE_PERCENT = 0.2f;
+
+	public const int MIN_TROOP_COUNT = 20;
+
+	public const int MAX_TROOP_COUNT = 120;
+
+	public const int FOOD_PER_PACK_ANIMAL_RATIO = 20;
+
+	public const int UNMOUNTED_TROOPS_PER_RIDING_MOUNT = 3;
+
+	public const int MIN_RIDING_MOUNTS = 5;
+
+	public const int MAX_RIDING_MOUNTS = 30;
+
+	public const int MIN_PACK_ANIMALS = 5;
+
+	public const int MAX_PACK_ANIMALS = 30;
+
+	public const int WEIGHT_PER_FOOD_UNIT = 10;
+
+	public const int EMERGENCY_DAYS_FOR_SUPPLY = 3;
+
+	public const float SPAWN_COOLDOWN_HOURS = 168f;
+
+	public const float RESPAWN_COOLDOWN_AFTER_LOSS = 72f;
+
+	public const float SPAWN_COOLDOWN_AFTER_ABORT = 24f;
+
+	public const float NAVAL_MAX_TRAVEL_DAYS = 6f;
+
+	public const float NAVAL_MAX_HOLD_HOURS = 72f;
+
+	public const int NAVAL_FALLBACK_MIN_CARGO_CAPACITY = 2000;
+
+	public const float MAX_TRAVEL_DAYS = 3f;
+
+	public const float WAIT_HOURS_AT_DESTINATION = 4f;
+
+	public const float WAIT_HOURS_AT_HOME = 2f;
+
+	private static readonly Color _receiveColor = Colors.White;
+
+	private static readonly Color _spendColor = Color.ConvertStringToColor("#E89090FF");
+
+	private static readonly string _saleMessageStr = "{=HAP_PartySaleMessage}{PARTY_NAME} sold items for {GOLD_AMOUNT}{GOLD_ICON} at {SETTLEMENT_NAME}.";
+
+	private static readonly string _saleMessageNoLocationStr = "{=HAP_PartySaleMessageNoLocation}{PARTY_NAME} sold items for {GOLD_AMOUNT}{GOLD_ICON}.";
+
+	private static readonly string _foodPurchaseMessageStr = "{=HAP_PartyFoodPurchaseMessage}{PARTY_NAME} bought food for {GOLD_AMOUNT}{GOLD_ICON} at {SETTLEMENT_NAME}.";
+
+	private static readonly string _packAnimalPurchaseMessageStr = "{=HAP_PartyPackAnimalPurchaseMessage}{PARTY_NAME} bought pack animals for {GOLD_AMOUNT}{GOLD_ICON} at {SETTLEMENT_NAME}.";
+
+	private static readonly string _foodAndAnimalsPurchaseMessageStr = "{=HAP_PartyFoodAndAnimalsPurchaseMessage}{PARTY_NAME} bought food and pack animals for {GOLD_AMOUNT}{GOLD_ICON} at {SETTLEMENT_NAME}.";
+
+	private static readonly string _prisonerSaleMessageStr = "{=HAP_PartyPrisonerSaleMessage}{PARTY_NAME} sold prisoners for {GOLD_AMOUNT}{GOLD_ICON} at {SETTLEMENT_NAME}.";
+
+	private Dictionary<Settlement, MobileParty> _activeSupplyLines = new Dictionary<Settlement, MobileParty>();
+
+	private Dictionary<Settlement, MobileParty> _incomingSupply = new Dictionary<Settlement, MobileParty>();
+
+	private Dictionary<Settlement, CampaignTime> _lastSpawnTime = new Dictionary<Settlement, CampaignTime>();
+
+	private static List<MobileParty> _partiesToDestroy = new List<MobileParty>();
+
+	private static Dictionary<MobileParty, Settlement> _partiesToReturnTroops = new Dictionary<MobileParty, Settlement>();
+
+	private int _supplyLineCounter = 0;
+
+	private Dictionary<string, int> _consecutiveEmergencyDays = new Dictionary<string, int>();
+
+	private Dictionary<Settlement, CampaignTime> _lastFailedSpawnTimes = new Dictionary<Settlement, CampaignTime>();
+
+	private static bool _navalDlcChecked = false;
+
+	private static bool _navalDlcAvailable = false;
+
+	private static int _lastResetDay = -1;
+
+	private static TraitObject _navalSoldierTrait = null;
+
+	private static bool _navalSoldierTraitSearched = false;
+
+	private const int SUPPLY_INTERACTION_NONE = 0;
+
+	private const int SUPPLY_INTERACTION_FRIENDLY = 1;
+
+	private const int SUPPLY_INTERACTION_HOSTILE = 2;
+
+	private Dictionary<MobileParty, int> _interactedSupplyLines = new Dictionary<MobileParty, int>();
+
+	public static Dictionary<Hero, string> PendingSupplyLineTroopNotifications { get; private set; } = new Dictionary<Hero, string>();
+
+	public Dictionary<Settlement, MobileParty>.ValueCollection ActiveSupplyParties => _activeSupplyLines.Values;
+
+	public static Dictionary<string, int> DailySupplyLineTotals { get; private set; } = new Dictionary<string, int>();
+
+	public static Dictionary<string, int> DailySupplyLineDispatches { get; private set; } = new Dictionary<string, int>();
+
+	public static Dictionary<string, int> DailySupplyLineReturns { get; private set; } = new Dictionary<string, int>();
+
+	private static void NotifyPlayerOfTransaction(MobileParty party, Settlement homeSettlement, Settlement transactionLocation, int gold, string locatedTemplate, string noLocationTemplate = null)
+	{
+		if (gold <= 0 || party == null || locatedTemplate == null || homeSettlement?.OwnerClan != Clan.PlayerClan || (GlobalSettings<HAPSettings>.Instance?.SupplyLineNotifications?.SelectedIndex ?? 2) < 2)
+		{
+			return;
+		}
+		Settlement settlement = transactionLocation ?? party.CurrentSettlement;
+		string value;
+		if (settlement != null)
+		{
+			value = locatedTemplate;
+		}
+		else
+		{
+			if (noLocationTemplate == null)
+			{
+				return;
+			}
+			value = noLocationTemplate;
+		}
+		TextObject textObject = new TextObject(value);
+		textObject.SetTextVariable("PARTY_NAME", party.Name);
+		textObject.SetTextVariable("GOLD_AMOUNT", gold);
+		textObject.SetTextVariable("GOLD_ICON", "<img src=\"General\\Icons\\Coin@2x\" extend=\"8\">");
+		if (settlement != null)
+		{
+			textObject.SetTextVariable("SETTLEMENT_NAME", settlement.Name);
+		}
+		Color color = ((locatedTemplate == _foodPurchaseMessageStr || locatedTemplate == _packAnimalPurchaseMessageStr || locatedTemplate == _foodAndAnimalsPurchaseMessageStr) ? _spendColor : _receiveColor);
+		InformationManager.DisplayMessage(new InformationMessage(textObject.ToString(), color));
+	}
+
+	public MobileParty GetActiveSupplyPartyForDonor(Settlement donorTown)
+	{
+		if (donorTown != null && _activeSupplyLines.TryGetValue(donorTown, out var value) && value != null && value.IsActive)
+		{
+			return value;
+		}
+		return null;
+	}
+
+	private static bool IsNavalDlcActive()
+	{
+		if (_navalDlcChecked)
+		{
+			return _navalDlcAvailable;
+		}
+		_navalDlcChecked = true;
+		try
+		{
+			foreach (Town allTown in Town.AllTowns)
+			{
+				if (allTown.Settlement.HasPort)
+				{
+					_navalDlcAvailable = true;
+					Main.Log("[SupplyLine] Naval DLC detected - naval supply convoys enabled");
+					return true;
+				}
+			}
+			_navalDlcAvailable = false;
+		}
+		catch
+		{
+			_navalDlcAvailable = false;
+		}
+		return _navalDlcAvailable;
+	}
+
+	internal static void ClearNavalDlcCache()
+	{
+		_navalDlcChecked = false;
+		_navalDlcAvailable = false;
+		_navalSoldierTraitSearched = false;
+		_navalSoldierTrait = null;
+	}
+
+	private static void ResetDailyTotalsIfNeeded()
+	{
+		int num = (int)CampaignTime.Now.ToDays;
+		if (num != _lastResetDay)
+		{
+			DailySupplyLineTotals.Clear();
+			DailySupplyLineDispatches.Clear();
+			DailySupplyLineReturns.Clear();
+			_lastResetDay = num;
+		}
+	}
+
+	internal static void RecordDailySupply(Settlement recipient, int amount)
+	{
+		if (recipient != null && amount > 0)
+		{
+			ResetDailyTotalsIfNeeded();
+			string stringId = recipient.StringId;
+			if (DailySupplyLineTotals.ContainsKey(stringId))
+			{
+				DailySupplyLineTotals[stringId] += amount;
+			}
+			else
+			{
+				DailySupplyLineTotals[stringId] = amount;
+			}
+		}
+	}
+
+	internal static void RecordDailyDispatch(Settlement donor, int amount)
+	{
+		if (donor != null && amount > 0)
+		{
+			ResetDailyTotalsIfNeeded();
+			string stringId = donor.StringId;
+			if (DailySupplyLineDispatches.ContainsKey(stringId))
+			{
+				DailySupplyLineDispatches[stringId] += amount;
+			}
+			else
+			{
+				DailySupplyLineDispatches[stringId] = amount;
+			}
+		}
+	}
+
+	internal static void RecordDailyReturn(Settlement town, int amount)
+	{
+		if (town != null && amount > 0)
+		{
+			ResetDailyTotalsIfNeeded();
+			string stringId = town.StringId;
+			if (DailySupplyLineReturns.ContainsKey(stringId))
+			{
+				DailySupplyLineReturns[stringId] += amount;
+			}
+			else
+			{
+				DailySupplyLineReturns[stringId] = amount;
+			}
+		}
+	}
+
+	public static int GetDailySupplyLineTotal(Settlement town)
+	{
+		if (town == null || DailySupplyLineTotals == null)
+		{
+			return 0;
+		}
+		ResetDailyTotalsIfNeeded();
+		int value;
+		return DailySupplyLineTotals.TryGetValue(town.StringId, out value) ? value : 0;
+	}
+
+	public static int GetDailyDispatchTotal(Settlement town)
+	{
+		if (town == null || DailySupplyLineDispatches == null)
+		{
+			return 0;
+		}
+		ResetDailyTotalsIfNeeded();
+		int value;
+		return DailySupplyLineDispatches.TryGetValue(town.StringId, out value) ? value : 0;
+	}
+
+	public static int GetDailyReturnTotal(Settlement town)
+	{
+		if (town == null || DailySupplyLineReturns == null)
+		{
+			return 0;
+		}
+		ResetDailyTotalsIfNeeded();
+		int value;
+		return DailySupplyLineReturns.TryGetValue(town.StringId, out value) ? value : 0;
+	}
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.HourlyTickPartyEvent.AddNonSerializedListener(this, OnHourlyTickParty);
+		CampaignEvents.DailyTickTownEvent.AddNonSerializedListener(this, OnDailyTickTown);
+		CampaignEvents.HourlyTickEvent.AddNonSerializedListener(this, ProcessDestroyQueue);
+		CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, ProcessDestroyQueue);
+		CampaignEvents.MapEventStarted.AddNonSerializedListener(this, OnMapEventStarted);
+		CampaignEvents.MapEventEnded.AddNonSerializedListener(this, OnMapEventEnded);
+		CampaignEvents.MobilePartyDestroyed.AddNonSerializedListener(this, OnMobilePartyDestroyed);
+		CampaignEvents.OnGameLoadedEvent.AddNonSerializedListener(this, OnGameLoaded);
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+		CampaignEvents.WeeklyTickEvent.AddNonSerializedListener(this, CleanupStaleEntries);
+		CampaignEvents.WarDeclared.AddNonSerializedListener(this, OnWarDeclared);
+		CampaignEvents.SettlementEntered.AddNonSerializedListener(this, OnSettlementEnteredForPrisoners);
+		CampaignEvents.OnSiegeEventStartedEvent.AddNonSerializedListener(this, OnSiegeEventStarted);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		dataStore.SyncData("HAP_SupplyLineCounter", ref _supplyLineCounter);
+		dataStore.SyncData("HAP_SupplyLineEmergencyDays", ref _consecutiveEmergencyDays);
+		if (dataStore.IsLoading)
+		{
+			_activeSupplyLines.Clear();
+			_incomingSupply.Clear();
+			_lastSpawnTime.Clear();
+			_lastFailedSpawnTimes.Clear();
+			_partiesToDestroy.Clear();
+			_partiesToReturnTroops.Clear();
+			PendingSupplyLineTroopNotifications.Clear();
+			_interactedSupplyLines.Clear();
+			_lastResetDay = -1;
+			if (_consecutiveEmergencyDays == null)
+			{
+				_consecutiveEmergencyDays = new Dictionary<string, int>();
+			}
+		}
+	}
+
+	private void OnGameLoaded(CampaignGameStarter starter)
+	{
+		RebuildSupplyLineTracking();
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		ClearNavalDlcCache();
+		AddDialogs(starter);
+	}
+
+	private void RebuildSupplyLineTracking()
+	{
+		_activeSupplyLines.Clear();
+		_incomingSupply.Clear();
+		Dictionary<Settlement, List<MobileParty>> dictionary = new Dictionary<Settlement, List<MobileParty>>();
+		Dictionary<Settlement, List<MobileParty>> dictionary2 = new Dictionary<Settlement, List<MobileParty>>();
+		foreach (MobileParty item in MobileParty.All)
+		{
+			if (TownSupplyLinePartyComponent.IsSupplyLineParty(item))
+			{
+				TownSupplyLinePartyComponent component = TownSupplyLinePartyComponent.GetComponent(item);
+				if (component == null)
+				{
+					continue;
+				}
+				if (component.OriginalClan != null && item.ActualClan != component.OriginalClan)
+				{
+					item.ActualClan = component.OriginalClan;
+				}
+				if (component.HomeTown != null)
+				{
+					if (!dictionary.TryGetValue(component.HomeTown, out var value))
+					{
+						value = (dictionary[component.HomeTown] = new List<MobileParty>());
+					}
+					value.Add(item);
+				}
+				if (component.DestinationTown != null)
+				{
+					if (!dictionary2.TryGetValue(component.DestinationTown, out var value2))
+					{
+						value2 = (dictionary2[component.DestinationTown] = new List<MobileParty>());
+					}
+					value2.Add(item);
+				}
+			}
+			else
+			{
+				if (!NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(item))
+				{
+					continue;
+				}
+				NavalSupplyConvoyPartyComponent component2 = NavalSupplyConvoyPartyComponent.GetComponent(item);
+				if (component2 == null)
+				{
+					conti

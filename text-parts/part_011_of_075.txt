@@ -1,0 +1,646 @@
+﻿PART 11/75
+nent.ForagerState.Fleeing)
+		{
+			return false;
+		}
+		IFaction faction = foragerComponent.OriginalClan?.MapFaction ?? MobileParty.ConversationParty.MapFaction;
+		if (faction == null || faction.IsAtWarWith(Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		if (GetForagerInteraction(MobileParty.ConversationParty) != 2)
+		{
+			return false;
+		}
+		if (foragerComponent.HomeCastle != null)
+		{
+			MBTextManager.SetTextVariable("CASTLE_LINK", foragerComponent.HomeCastle.EncyclopediaLinkWithName);
+		}
+		return true;
+	}
+
+	private bool forager_talk_fallback_on_condition()
+	{
+		if (MobileParty.ConversationParty == null)
+		{
+			return false;
+		}
+		if (!CastleForagerPartyComponent.IsForagerParty(MobileParty.ConversationParty))
+		{
+			return false;
+		}
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent != null && false)
+		{
+			string text = foragerComponent.OriginalClan?.Name?.ToString() ?? "null";
+			string text2 = MobileParty.ConversationParty.MapFaction?.Name?.ToString() ?? "null";
+			Main.Log("[Forager] Fallback dialogue triggered - State: " + foragerComponent.State.ToString() + ", OriginalClan: " + text + ", MapFaction: " + text2);
+		}
+		return true;
+	}
+
+	private bool forager_talk_fleeing_friendly_on_condition()
+	{
+		if (MobileParty.ConversationParty == null)
+		{
+			return false;
+		}
+		if (!CastleForagerPartyComponent.IsForagerParty(MobileParty.ConversationParty))
+		{
+			return false;
+		}
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent == null)
+		{
+			return false;
+		}
+		bool flag = foragerComponent.State == CastleForagerPartyComponent.ForagerState.Fleeing;
+		bool flag2 = foragerComponent.State == CastleForagerPartyComponent.ForagerState.Defending && (foragerComponent.HomeCastle == null || foragerComponent.HomeCastle.OwnerClan != foragerComponent.OriginalClan);
+		if (!flag && !flag2)
+		{
+			return false;
+		}
+		IFaction faction = foragerComponent.OriginalClan?.MapFaction ?? MobileParty.ConversationParty.MapFaction;
+		if (faction == null)
+		{
+			return false;
+		}
+		if (faction.IsAtWarWith(Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		if (foragerComponent.HomeCastle != null)
+		{
+			MBTextManager.SetTextVariable("CASTLE_NAME", foragerComponent.HomeCastle.Name);
+		}
+		else
+		{
+			MBTextManager.SetTextVariable("CASTLE_NAME", new TextObject("{=HAP_ForagerUnknownCastle}our castle"));
+		}
+		if (foragerComponent.TargetSettlement != null)
+		{
+			MBTextManager.SetTextVariable("FLEE_TARGET", foragerComponent.TargetSettlement.Name);
+		}
+		else
+		{
+			MBTextManager.SetTextVariable("FLEE_TARGET", new TextObject("{=HAP_ForagerSafety}safety"));
+		}
+		return true;
+	}
+
+	private bool forager_talk_fleeing_enemy_on_condition()
+	{
+		if (MobileParty.ConversationParty == null)
+		{
+			return false;
+		}
+		if (!CastleForagerPartyComponent.IsForagerParty(MobileParty.ConversationParty))
+		{
+			return false;
+		}
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent == null)
+		{
+			return false;
+		}
+		bool flag = foragerComponent.State == CastleForagerPartyComponent.ForagerState.Fleeing;
+		bool flag2 = foragerComponent.State == CastleForagerPartyComponent.ForagerState.Defending && (foragerComponent.HomeCastle == null || foragerComponent.HomeCastle.OwnerClan != foragerComponent.OriginalClan);
+		if (!flag && !flag2)
+		{
+			return false;
+		}
+		IFaction faction = foragerComponent.OriginalClan?.MapFaction ?? MobileParty.ConversationParty.MapFaction;
+		if (faction == null)
+		{
+			return false;
+		}
+		if (!faction.IsAtWarWith(Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private bool forager_talk_defending_friendly_on_condition()
+	{
+		if (MobileParty.ConversationParty == null)
+		{
+			return false;
+		}
+		if (!CastleForagerPartyComponent.IsForagerParty(MobileParty.ConversationParty))
+		{
+			return false;
+		}
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent == null)
+		{
+			return false;
+		}
+		if (foragerComponent.State != CastleForagerPartyComponent.ForagerState.Defending)
+		{
+			return false;
+		}
+		if (MobileParty.ConversationParty.MapFaction.IsAtWarWith(Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		if (foragerComponent.HomeCastle == null)
+		{
+			return false;
+		}
+		if (foragerComponent.HomeCastle.MapFaction != MobileParty.ConversationParty.MapFaction)
+		{
+			return false;
+		}
+		MBTextManager.SetTextVariable("CASTLE_LINK", foragerComponent.HomeCastle.EncyclopediaLinkWithName);
+		return true;
+	}
+
+	private bool forager_set_faction_name_on_condition()
+	{
+		MobileParty conversationParty = MobileParty.ConversationParty;
+		if (conversationParty == null)
+		{
+			return false;
+		}
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(conversationParty);
+		if (foragerComponent == null)
+		{
+			return false;
+		}
+		MBTextManager.SetTextVariable("FACTION_NAME", (foragerComponent.OriginalClan?.MapFaction ?? conversationParty.MapFaction)?.Name ?? new TextObject("{=!}their lords"));
+		return true;
+	}
+
+	private bool forager_talk_defending_on_condition()
+	{
+		if (MobileParty.ConversationParty == null)
+		{
+			return false;
+		}
+		if (!CastleForagerPartyComponent.IsForagerParty(MobileParty.ConversationParty))
+		{
+			return false;
+		}
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent == null)
+		{
+			return false;
+		}
+		if (foragerComponent.State != CastleForagerPartyComponent.ForagerState.Defending)
+		{
+			return false;
+		}
+		if (!MobileParty.ConversationParty.MapFaction.IsAtWarWith(Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		if (foragerComponent.HomeCastle == null)
+		{
+			return false;
+		}
+		if (foragerComponent.HomeCastle.MapFaction != MobileParty.ConversationParty.MapFaction)
+		{
+			return false;
+		}
+		MBTextManager.SetTextVariable("CASTLE_LINK", foragerComponent.HomeCastle.EncyclopediaLinkWithName);
+		return true;
+	}
+
+	private void forager_defending_attack_on_consequence()
+	{
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent?.PartyOwner != null)
+		{
+			ChangeRelationAction.ApplyPlayerRelation(foragerComponent.PartyOwner, -5);
+		}
+		BeHostileAction.ApplyEncounterHostileAction(PartyBase.MainParty, MobileParty.ConversationParty.Party);
+	}
+
+	private void forager_defending_leave_on_consequence()
+	{
+		MobileParty conversationParty = MobileParty.ConversationParty;
+		if (conversationParty != null && CastleForagerPartyComponent.IsForagerParty(conversationParty))
+		{
+			CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(conversationParty);
+			if (foragerComponent != null && foragerComponent.HomeCastle != null)
+			{
+				foragerComponent.SetDefendCastle();
+			}
+		}
+		PlayerEncounter.LeaveEncounter = true;
+	}
+
+	private void forager_defending_friendly_help_on_consequence()
+	{
+		MobileParty conversationParty = MobileParty.ConversationParty;
+		if (conversationParty != null && CastleForagerPartyComponent.IsForagerParty(conversationParty))
+		{
+			CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(conversationParty);
+			if (foragerComponent != null && foragerComponent.HomeCastle != null)
+			{
+				foragerComponent.SetDefendCastle();
+			}
+		}
+		PlayerEncounter.LeaveEncounter = true;
+	}
+
+	private bool forager_will_fight_on_condition()
+	{
+		return !forager_will_surrender();
+	}
+
+	private bool forager_will_surrender_on_condition()
+	{
+		return forager_will_surrender();
+	}
+
+	private bool forager_talk_enemy_on_condition()
+	{
+		if (MobileParty.ConversationParty == null)
+		{
+			return false;
+		}
+		if (!CastleForagerPartyComponent.IsForagerParty(MobileParty.ConversationParty))
+		{
+			return false;
+		}
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent == null)
+		{
+			return false;
+		}
+		if (foragerComponent.State == CastleForagerPartyComponent.ForagerState.Defending || foragerComponent.State == CastleForagerPartyComponent.ForagerState.Fleeing)
+		{
+			return false;
+		}
+		IFaction faction = foragerComponent.OriginalClan?.MapFaction ?? MobileParty.ConversationParty.MapFaction;
+		if (faction == null)
+		{
+			return false;
+		}
+		if (!faction.IsAtWarWith(Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		if (foragerComponent.HomeCastle != null)
+		{
+			MBTextManager.SetTextVariable("CASTLE_LINK", foragerComponent.HomeCastle.EncyclopediaLinkWithName);
+		}
+		return true;
+	}
+
+	private bool forager_talk_set_castle_link_condition()
+	{
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent?.HomeCastle != null)
+		{
+			MBTextManager.SetTextVariable("CASTLE_LINK", foragerComponent.HomeCastle.EncyclopediaLinkWithName);
+		}
+		return true;
+	}
+
+	private bool forager_set_faction_name_condition()
+	{
+		if (MobileParty.ConversationParty?.MapFaction != null)
+		{
+			MBTextManager.SetTextVariable("FACTION_NAME", MobileParty.ConversationParty.MapFaction.InformalName);
+		}
+		return true;
+	}
+
+	private bool forager_demand_clickable_condition(out TextObject explanation)
+	{
+		if (MobileParty.ConversationParty.ItemRoster.Count == 0 && MobileParty.ConversationParty.PartyTradeGold <= 0)
+		{
+			explanation = new TextObject("{=HAP_ForagerNoGoods}They don't seem to have any supplies yet.");
+			return false;
+		}
+		explanation = TextObject.GetEmpty();
+		return true;
+	}
+
+	private bool forager_will_surrender()
+	{
+		int totalManCount = MobileParty.ConversationParty.MemberRoster.TotalManCount;
+		int totalManCount2 = MobileParty.MainParty.MemberRoster.TotalManCount;
+		if (totalManCount <= 0)
+		{
+			return true;
+		}
+		float num = (float)totalManCount2 / (float)totalManCount;
+		return num >= 3f;
+	}
+
+	private bool forager_take_goods_warning_condition(out TextObject explanation)
+	{
+		explanation = new TextObject("{=HAP_ForagerCrimeWarning}This will be considered a crime.");
+		return true;
+	}
+
+	private bool forager_war_warning_condition(out TextObject explanation)
+	{
+		explanation = new TextObject("{=1LlH1Jof}This action will start a war.");
+		return true;
+	}
+
+	private bool forager_defending_friendly_take_goods_clickable_condition(out TextObject explanation)
+	{
+		if (MobileParty.ConversationParty.ItemRoster.Count == 0 && MobileParty.ConversationParty.PartyTradeGold <= 0)
+		{
+			explanation = new TextObject("{=HAP_ForagerNoGoods}They don't seem to have any supplies yet.");
+			return false;
+		}
+		explanation = new TextObject("{=HAP_ForagerCrimeWarning}This will be considered a crime.");
+		return true;
+	}
+
+	private void forager_talk_leave_on_consequence()
+	{
+		MobileParty conversationParty = MobileParty.ConversationParty;
+		if (conversationParty != null && CastleForagerPartyComponent.IsForagerParty(conversationParty))
+		{
+			CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(conversationParty);
+			if (foragerComponent != null)
+			{
+				switch (foragerComponent.State)
+				{
+				case CastleForagerPartyComponent.ForagerState.TravelingToTarget:
+					if (foragerComponent.TargetSettlement != null)
+					{
+						foragerComponent.SetDestination(foragerComponent.TargetSettlement);
+					}
+					break;
+				case CastleForagerPartyComponent.ForagerState.Returning:
+					if (foragerComponent.HomeCastle != null)
+					{
+						foragerComponent.SetDestination(foragerComponent.HomeCastle);
+					}
+					break;
+				case CastleForagerPartyComponent.ForagerState.Fleeing:
+					if (foragerComponent.TargetSettlement != null)
+					{
+						foragerComponent.SetDestination(foragerComponent.TargetSettlement);
+					}
+					break;
+				}
+			}
+		}
+		PlayerEncounter.LeaveEncounter = true;
+	}
+
+	private void forager_goods_taken_on_consequence()
+	{
+		ItemRoster itemRoster = new ItemRoster(MobileParty.ConversationParty.ItemRoster);
+		int partyTradeGold = MobileParty.ConversationParty.PartyTradeGold;
+		if (partyTradeGold > 0)
+		{
+			GiveGoldAction.ApplyForPartyToCharacter(MobileParty.ConversationParty.Party, Hero.MainHero, partyTradeGold);
+			MobileParty.ConversationParty.PartyTradeGold = 0;
+		}
+		BeHostileAction.ApplyMajorCoercionHostileAction(PartyBase.MainParty, MobileParty.ConversationParty.Party);
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent?.PartyOwner != null)
+		{
+			ChangeRelationAction.ApplyPlayerRelation(foragerComponent.PartyOwner, -5);
+		}
+		MobileParty.ConversationParty.ItemRoster.Clear();
+		SkillLevelingManager.OnLoot(MobileParty.MainParty, MobileParty.ConversationParty, itemRoster, attacked: false);
+		SetForagerInteraction(MobileParty.ConversationParty, 2);
+		if (itemRoster.Count > 0)
+		{
+			InventoryScreenHelper.OpenScreenAsLoot(new Dictionary<PartyBase, ItemRoster> { 
+			{
+				PartyBase.MainParty,
+				itemRoster
+			} });
+		}
+		else
+		{
+			forager_talk_leave_on_consequence();
+		}
+	}
+
+	private void forager_enemy_goods_taken_on_consequence()
+	{
+		ItemRoster itemRoster = new ItemRoster(MobileParty.ConversationParty.ItemRoster);
+		int partyTradeGold = MobileParty.ConversationParty.PartyTradeGold;
+		if (partyTradeGold > 0)
+		{
+			GiveGoldAction.ApplyForPartyToCharacter(MobileParty.ConversationParty.Party, Hero.MainHero, partyTradeGold);
+			MobileParty.ConversationParty.PartyTradeGold = 0;
+		}
+		MobileParty.ConversationParty.ItemRoster.Clear();
+		SkillLevelingManager.OnLoot(MobileParty.MainParty, MobileParty.ConversationParty, itemRoster, attacked: false);
+		SetForagerInteraction(MobileParty.ConversationParty, 2);
+		if (itemRoster.Count > 0)
+		{
+			InventoryScreenHelper.OpenScreenAsLoot(new Dictionary<PartyBase, ItemRoster> { 
+			{
+				PartyBase.MainParty,
+				itemRoster
+			} });
+		}
+		else
+		{
+			forager_talk_leave_on_consequence();
+		}
+	}
+
+	private void forager_take_prisoner_on_consequence()
+	{
+		try
+		{
+			MobileParty conversationParty = MobileParty.ConversationParty;
+			if (conversationParty == null)
+			{
+				PlayerEncounter.LeaveEncounter = true;
+				return;
+			}
+			SetForagerInteraction(conversationParty, 2);
+			BeHostileAction.ApplyEncounterHostileAction(PartyBase.MainParty, conversationParty.Party);
+			if (PlayerEncounter.Battle == null)
+			{
+				PlayerEncounter.StartBattle();
+			}
+			PlayerEncounter.Battle.SetOverrideWinner(PlayerEncounter.Battle.PlayerSide);
+			PlayerEncounter.EnemySurrender = true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in forager_take_prisoner_on_consequence: " + ex.Message);
+			PlayerEncounter.LeaveEncounter = true;
+		}
+	}
+
+	private void forager_attack_on_consequence()
+	{
+		SetForagerInteraction(MobileParty.ConversationParty, 2);
+		BeHostileAction.ApplyEncounterHostileAction(PartyBase.MainParty, MobileParty.ConversationParty.Party);
+	}
+
+	private bool forager_enemy_has_goods_on_condition(out TextObject explanation)
+	{
+		if (MobileParty.ConversationParty.ItemRoster.Count == 0 && MobileParty.ConversationParty.PartyTradeGold <= 0)
+		{
+			explanation = new TextObject("{=HAP_ForagerNoGoods}They don't seem to have any supplies yet.");
+			return false;
+		}
+		explanation = TextObject.GetEmpty();
+		return true;
+	}
+
+	private bool forager_same_faction_on_condition()
+	{
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent?.HomeCastle == null)
+		{
+			return false;
+		}
+		Clan ownerClan = foragerComponent.HomeCastle.OwnerClan;
+		if (ownerClan == null)
+		{
+			return false;
+		}
+		if (ownerClan == Clan.PlayerClan)
+		{
+			return true;
+		}
+		if (ownerClan.Kingdom != null && ownerClan.Kingdom == Clan.PlayerClan.Kingdom)
+		{
+			return true;
+		}
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\CastleSupplyBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using HarvestAndProduction.PartyComponents;
+using HarvestAndProduction.Patches;
+using Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.ObjectSystem;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class CastleSupplyBehavior : CampaignBehaviorBase
+{
+	private const bool DEBUG_CASTLE_SUPPLY = false;
+
+	private static int _lastResetDay = -1;
+
+	private static readonly Dictionary<string, (string meatId, int yield)> LivestockMeatMap = new Dictionary<string, (string, int)>
+	{
+		{
+			"cow",
+			("meat_beef", 4)
+		},
+		{
+			"sheep",
+			("meat_mutton", 2)
+		},
+		{
+			"hog",
+			("meat_pork", 2)
+		},
+		{
+			"chicken_product",
+			("meat_poultry", 1)
+		},
+		{
+			"goose_product",
+			("meat_poultry", 1)
+		},
+		{
+			"hare",
+			("meat_hare", 1)
+		}
+	};
+
+	public static Dictionary<string, int> DailySupplyTotals { get; private set; } = new Dictionary<string, int>();
+
+	private static void ResetDailyTotalsIfNeeded()
+	{
+		int num = (int)CampaignTime.Now.ToDays;
+		if (num != _lastResetDay)
+		{
+			DailySupplyTotals.Clear();
+			_lastResetDay = num;
+		}
+	}
+
+	private static void RecordDailySupply(Settlement castle, int amount)
+	{
+		ResetDailyTotalsIfNeeded();
+		string stringId = castle.StringId;
+		if (DailySupplyTotals.ContainsKey(stringId))
+		{
+			DailySupplyTotals[stringId] += amount;
+		}
+		else
+		{
+			DailySupplyTotals[stringId] = amount;
+		}
+	}
+
+	public static int GetDailySupplyTotal(Settlement castle)
+	{
+		if (castle == null || DailySupplyTotals == null)
+		{
+			return 0;
+		}
+		ResetDailyTotalsIfNeeded();
+		int value;
+		return DailySupplyTotals.TryGetValue(castle.StringId, out value) ? value : 0;
+	}
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.SettlementEntered.AddNonSerializedListener(this, OnSettlementEntered);
+		CampaignEvents.MobilePartyDestroyed.AddNonSerializedListener(this, OnMobilePartyDestroyed);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		if (dataStore.IsLoading)
+		{
+			DailySupplyTotals.Clear();
+			_lastResetDay = -1;
+			VillagerDestinationPatch.ClearAllCastleVisitFlags();
+		}
+	}
+
+	private void OnMobilePartyDestroyed(MobileParty party, PartyBase destroyerParty)
+	{
+		if (party != null && party.IsVillager)
+		{
+			VillagerDestinationPatch.ClearCastleVisitFlag(party);
+		}
+	}
+
+	private void OnSettlementEntered(MobileParty mobileParty, Settlement settlement, Hero hero)
+	{
+		if (mobileParty != null && mobileParty.IsActive && mobileParty.IsVillager && !HerderPartyComponent.IsHerderParty(mobileParty))
+		{
+			if (settlement.IsCastle)
+			{
+				ProcessCastleArrival(mobileParty, settlement);
+			}
+			else if (settlement.IsTown)
+			{
+				VillagerDestinationPatch.ClearCastleVisitFlag(mobileParty);
+			}
+			else if (settlement.IsVillage && settlement == mobileParty.HomeSettlement)
+			{
+				VillagerDestinationPatch.ClearCastleVisitFlag(mobileParty);
+				ReturnLivestockToVillage(mobileParty

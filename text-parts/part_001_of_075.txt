@@ -1,0 +1,552 @@
+﻿PART 1/75
+HarvestAndProduction: SUCCESS (200 C# files)
+HarvestAndProduction.WarSails: SUCCESS (4 C# files)
+
+===== FILE: HarvestAndProduction.WarSails\HarvestAndProduction.WarSails.csproj =====
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>HarvestAndProduction.WarSails</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <TargetFramework>net472</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>14.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <CheckForOverflowUnderflow>False</CheckForOverflowUnderflow>
+  </PropertyGroup>
+  <PropertyGroup />
+  <ItemGroup />
+  <ItemGroup>
+    <Reference Include="Bannerlord.UIExtenderEx">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\Bannerlord.UIExtenderEx\bin\Win64_Shipping_Client\Bannerlord.UIExtenderEx.dll</HintPath>
+    </Reference>
+    <Reference Include="NavalDLC.ViewModelCollection" />
+    <Reference Include="TaleWorlds.Core.ViewModelCollection">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.Core.ViewModelCollection.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.CampaignSystem">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.CampaignSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="HarvestAndProduction">
+      <HintPath>..\..\..\HarvestAndProduction.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.Library">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.Library.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.Localization">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.Localization.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.CampaignSystem.ViewModelCollection">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.CampaignSystem.ViewModelCollection.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.ObjectSystem">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.ObjectSystem.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>
+===== END FILE =====
+
+===== FILE: HarvestAndProduction.WarSails\HarvestAndProduction\Patches\SettlementOverlayMixin.cs =====
+using System;
+using System.Collections.Generic;
+using Bannerlord.UIExtenderEx.Attributes;
+using Bannerlord.UIExtenderEx.ViewModels;
+using HarvestAndProduction.Models;
+using NavalDLC.ViewModelCollection.Map;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core.ViewModelCollection.Information;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[ViewModelMixin("Refresh")]
+internal class SettlementOverlayMixin : BaseViewModelMixin<NavalSettlementMenuOverlayVM>
+{
+	private string _productionEfficiencyLbl;
+
+	private BasicTooltipViewModel _productionEfficiencyHint;
+
+	private bool _isVillage;
+
+	private Village _lastTooltipVillage;
+
+	private string _garrisonMoraleLbl;
+
+	private BasicTooltipViewModel _garrisonMoraleHint;
+
+	private Settlement _lastMoraleSettlement;
+
+	[DataSourceProperty]
+	public string ProductionEfficiencyLbl
+	{
+		get
+		{
+			return _productionEfficiencyLbl;
+		}
+		set
+		{
+			if (value != _productionEfficiencyLbl)
+			{
+				_productionEfficiencyLbl = value;
+				((ViewModel)(object)base.ViewModel).OnPropertyChangedWithValue(value, "ProductionEfficiencyLbl");
+			}
+		}
+	}
+
+	[DataSourceProperty]
+	public BasicTooltipViewModel ProductionEfficiencyHint
+	{
+		get
+		{
+			return _productionEfficiencyHint;
+		}
+		set
+		{
+			if (value != _productionEfficiencyHint)
+			{
+				_productionEfficiencyHint = value;
+				((ViewModel)(object)base.ViewModel).OnPropertyChangedWithValue(value, "ProductionEfficiencyHint");
+			}
+		}
+	}
+
+	[DataSourceProperty]
+	public bool IsVillage
+	{
+		get
+		{
+			return _isVillage;
+		}
+		set
+		{
+			if (value != _isVillage)
+			{
+				_isVillage = value;
+				((ViewModel)(object)base.ViewModel).OnPropertyChangedWithValue(value, "IsVillage");
+			}
+		}
+	}
+
+	[DataSourceProperty]
+	public string GarrisonMoraleLbl
+	{
+		get
+		{
+			return _garrisonMoraleLbl;
+		}
+		set
+		{
+			if (value != _garrisonMoraleLbl)
+			{
+				_garrisonMoraleLbl = value;
+				((ViewModel)(object)base.ViewModel).OnPropertyChangedWithValue(value, "GarrisonMoraleLbl");
+			}
+		}
+	}
+
+	[DataSourceProperty]
+	public BasicTooltipViewModel GarrisonMoraleHint
+	{
+		get
+		{
+			return _garrisonMoraleHint;
+		}
+		set
+		{
+			if (value != _garrisonMoraleHint)
+			{
+				_garrisonMoraleHint = value;
+				((ViewModel)(object)base.ViewModel).OnPropertyChangedWithValue(value, "GarrisonMoraleHint");
+			}
+		}
+	}
+
+	public SettlementOverlayMixin(NavalSettlementMenuOverlayVM vm)
+		: base(vm)
+	{
+		_productionEfficiencyLbl = "";
+		_productionEfficiencyHint = new BasicTooltipViewModel();
+		_garrisonMoraleLbl = "";
+		_garrisonMoraleHint = new BasicTooltipViewModel();
+	}
+
+	public override void OnRefresh()
+	{
+		try
+		{
+			Settlement settlement = MobileParty.MainParty?.CurrentSettlement ?? MobileParty.MainParty?.LastVisitedSettlement;
+			IsVillage = settlement != null && settlement.IsVillage;
+			bool flag = settlement != null && settlement.IsFortification && settlement.Town?.GarrisonParty != null;
+			bool flag2 = settlement != null && settlement.MilitiaPartyComponent?.MobileParty != null;
+			if (flag | flag2)
+			{
+				float num = (flag ? settlement.Town.GarrisonParty.Morale : 0f);
+				float num2 = (flag2 ? settlement.MilitiaPartyComponent.MobileParty.Morale : 0f);
+				float num3 = ((flag & flag2) ? ((num + num2) / 2f) : ((!flag) ? num2 : num));
+				GarrisonMoraleLbl = ((int)num3).ToString();
+				if (settlement != _lastMoraleSettlement)
+				{
+					_lastMoraleSettlement = settlement;
+					GarrisonMoraleHint = new BasicTooltipViewModel(() => SettlementOverlayTooltipHelper.BuildMoraleTooltip(settlement));
+				}
+			}
+			else
+			{
+				GarrisonMoraleLbl = "-";
+				if (_lastMoraleSettlement != null)
+				{
+					_lastMoraleSettlement = null;
+					GarrisonMoraleHint = new BasicTooltipViewModel(() => new List<TooltipProperty>
+					{
+						new TooltipProperty(new TextObject("{=HAP_NoMoraleData} Settlement Morale").ToString(), "-", 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.Title),
+						new TooltipProperty(new TextObject("{=HAP_NoMoraleDesc}No garrison or militia present").ToString(), "", 0)
+					});
+				}
+			}
+			if (settlement == null || !settlement.IsVillage || settlement.Village == null)
+			{
+				ProductionEfficiencyLbl = "";
+				if (_lastTooltipVillage != null)
+				{
+					_lastTooltipVillage = null;
+					ProductionEfficiencyHint = new BasicTooltipViewModel();
+				}
+				return;
+			}
+			if (!(Campaign.Current?.Models?.VillageProductionCalculatorModel is VillageProductionModel villageProductionModel))
+			{
+				ProductionEfficiencyLbl = "-%";
+				return;
+			}
+			VillageProductionModel.VillageEfficiencyBreakdown villageEfficiencyBreakdown = villageProductionModel.GetVillageEfficiencyBreakdown(settlement.Village);
+			int num4 = (int)Math.Round(villageEfficiencyBreakdown.AverageEfficiency * 100f);
+			ProductionEfficiencyLbl = $"{num4}%";
+			if (settlement.Village != _lastTooltipVillage)
+			{
+				_lastTooltipVillage = settlement.Village;
+				ProductionEfficiencyHint = new BasicTooltipViewModel(() => SettlementOverlayTooltipHelper.BuildEfficiencyTooltip(settlement.Village));
+			}
+		}
+		catch (Exception ex)
+		{
+			ProductionEfficiencyLbl = "ERR";
+			Main.Log("SettlementOverlayMixin.OnRefresh ERROR: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction.WarSails\HarvestAndProduction\WarSails\EncyclopediaSettlementPageNavalMixin.cs =====
+using System;
+using System.Reflection;
+using Bannerlord.UIExtenderEx.Attributes;
+using Bannerlord.UIExtenderEx.ViewModels;
+using HarvestAndProduction.Patches;
+using HarvestAndProduction.ViewModels;
+using NavalDLC.ViewModelCollection.Encyclopedia;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.CampaignSystem.ViewModelCollection.Encyclopedia.Pages;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.WarSails;
+
+[ViewModelMixin("Refresh")]
+internal class EncyclopediaSettlementPageNavalMixin : BaseViewModelMixin<NavalEncyclopediaSettlementPageVM>
+{
+	private static readonly FieldInfo _settlementField = typeof(EncyclopediaSettlementPageVM).GetField("_settlement", BindingFlags.Instance | BindingFlags.NonPublic);
+
+	private MBBindingList<EncyclopediaWorkshopItemVM> _workshopItems;
+
+	private string _workshopsText;
+
+	private bool _hasWorkshops;
+
+	[DataSourceProperty]
+	public MBBindingList<EncyclopediaWorkshopItemVM> WorkshopItems
+	{
+		get
+		{
+			return _workshopItems;
+		}
+		set
+		{
+			if (value != _workshopItems)
+			{
+				_workshopItems = value;
+				((ViewModel)(object)base.ViewModel).OnPropertyChangedWithValue(value, "WorkshopItems");
+			}
+		}
+	}
+
+	[DataSourceProperty]
+	public string WorkshopsText
+	{
+		get
+		{
+			return _workshopsText;
+		}
+		set
+		{
+			if (value != _workshopsText)
+			{
+				_workshopsText = value;
+				((ViewModel)(object)base.ViewModel).OnPropertyChangedWithValue(value, "WorkshopsText");
+			}
+		}
+	}
+
+	[DataSourceProperty]
+	public bool HasWorkshops
+	{
+		get
+		{
+			return _hasWorkshops;
+		}
+		set
+		{
+			if (value != _hasWorkshops)
+			{
+				_hasWorkshops = value;
+				((ViewModel)(object)base.ViewModel).OnPropertyChangedWithValue(value, "HasWorkshops");
+			}
+		}
+	}
+
+	public EncyclopediaSettlementPageNavalMixin(NavalEncyclopediaSettlementPageVM vm)
+		: base(vm)
+	{
+		_workshopItems = new MBBindingList<EncyclopediaWorkshopItemVM>();
+		_workshopsText = new TextObject("{=HAP_Workshops}Workshops").ToString();
+		_hasWorkshops = false;
+	}
+
+	public override void OnRefresh()
+	{
+		try
+		{
+			_workshopItems.Clear();
+			HasWorkshops = false;
+			if (_settlementField == null || !(_settlementField.GetValue(base.ViewModel) is Settlement { IsTown: not false, Town: not null } settlement))
+			{
+				return;
+			}
+			bool flag = !CampaignUIHelper.IsSettlementInformationHidden(settlement, out var _);
+			Workshop[] workshops = settlement.Town.Workshops;
+			if (workshops == null)
+			{
+				return;
+			}
+			Workshop[] array = workshops;
+			foreach (Workshop workshop in array)
+			{
+				if (workshop?.WorkshopType != null && !workshop.WorkshopType.IsHidden)
+				{
+					string iconId = WorkshopIconPatch.GetIconId(workshop.WorkshopType.StringId);
+					bool isScouted = flag || workshop.Owner == Hero.MainHero;
+					_workshopItems.Add(new EncyclopediaWorkshopItemVM(iconId, workshop, isScouted));
+				}
+			}
+			HasWorkshops = _workshopItems.Count > 0;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in EncyclopediaSettlementPageNavalMixin: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction.WarSails\HarvestAndProduction\WarSails\WarSailsIntegration.cs =====
+using System.Reflection;
+using Bannerlord.UIExtenderEx;
+
+namespace HarvestAndProduction.WarSails;
+
+public static class WarSailsIntegration
+{
+	private static UIExtender _uiExtender;
+
+	public static void Initialize()
+	{
+		_uiExtender = UIExtender.Create("HarvestAndProduction.WarSails");
+		_uiExtender.Register(Assembly.GetExecutingAssembly());
+		_uiExtender.Enable();
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction.WarSails\Properties\AssemblyInfo.cs =====
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+
+[assembly: AssemblyTitle("Harvest_and_Production.WarSails")]
+[assembly: AssemblyDescription("")]
+[assembly: AssemblyConfiguration("")]
+[assembly: AssemblyCompany("")]
+[assembly: AssemblyProduct("Harvest_and_Production.WarSails")]
+[assembly: AssemblyCopyright("Copyright ©  2026")]
+[assembly: AssemblyTrademark("")]
+[assembly: ComVisible(false)]
+[assembly: Guid("2ded04ed-4dd8-467b-90fe-35e94774d210")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.0.0.0")]
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\GarrisonSecurityPatch.cs =====
+using HarmonyLib;
+using Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Localization;
+
+[HarmonyPatch(typeof(DefaultSettlementSecurityModel), "CalculateGarrisonEffectsOnSecurity")]
+public static class GarrisonSecurityPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(Town town, ref ExplainedNumber result)
+	{
+		if (!town.IsCastle)
+		{
+			return true;
+		}
+		if (town.GarrisonParty == null || town.GarrisonParty.MemberRoster.Count == 0 || town.GarrisonParty.MemberRoster.TotalHealthyCount == 0)
+		{
+			return false;
+		}
+		ExplainedNumber bonuses = new ExplainedNumber(0.01f);
+		PerkHelper.AddPerkBonusForTown(DefaultPerks.OneHanded.StandUnited, town, ref bonuses);
+		CalculateStrengthOfGarrisonParty(town.GarrisonParty.Party, out var totalStrength, out var archerStrength, out var cavalryStrength);
+		float num = totalStrength * bonuses.ResultNumber * 2f;
+		TextObject description = GameTexts.FindText("str_garrison");
+		result.Add(num, description);
+		if (PerkHelper.GetPerkValueForTown(DefaultPerks.Leadership.Authority, town))
+		{
+			result.Add(num * DefaultPerks.Leadership.Authority.PrimaryBonus, DefaultPerks.Leadership.Authority.Name);
+		}
+		if (PerkHelper.GetPerkValueForTown(DefaultPerks.Riding.ReliefForce, town))
+		{
+			float num2 = cavalryStrength / totalStrength;
+			result.Add(num * num2 * DefaultPerks.Riding.ReliefForce.SecondaryBonus, DefaultPerks.Riding.ReliefForce.Name);
+		}
+		float num3 = archerStrength / totalStrength;
+		if (PerkHelper.GetPerkValueForTown(DefaultPerks.Bow.MountedArchery, town))
+		{
+			result.Add(num * num3 * DefaultPerks.Bow.MountedArchery.SecondaryBonus, DefaultPerks.Bow.MountedArchery.Name);
+		}
+		if (PerkHelper.GetPerkValueForTown(DefaultPerks.Bow.RangersSwiftness, town))
+		{
+			result.Add(num * num3 * DefaultPerks.Bow.RangersSwiftness.SecondaryBonus, DefaultPerks.Bow.RangersSwiftness.Name);
+		}
+		if (PerkHelper.GetPerkValueForTown(DefaultPerks.Crossbow.RenownMarksmen, town))
+		{
+			result.Add(num * num3 * DefaultPerks.Crossbow.RenownMarksmen.SecondaryBonus, DefaultPerks.Crossbow.RenownMarksmen.Name);
+		}
+		return false;
+	}
+
+	private static void CalculateStrengthOfGarrisonParty(PartyBase party, out float totalStrength, out float archerStrength, out float cavalryStrength)
+	{
+		totalStrength = 0f;
+		archerStrength = 0f;
+		cavalryStrength = 0f;
+		float leaderModifier = 0f;
+		MapEvent.PowerCalculationContext context = MapEvent.PowerCalculationContext.Siege;
+		BattleSideEnum side = BattleSideEnum.Defender;
+		if (party.MapEvent != null)
+		{
+			side = party.Side;
+			leaderModifier = party.LeaderHero?.PowerModifier ?? 0f;
+		}
+		for (int i = 0; i < party.MemberRoster.Count; i++)
+		{
+			TroopRosterElement elementCopyAtIndex = party.MemberRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.Character != null)
+			{
+				float troopPower = Campaign.Current.Models.MilitaryPowerModel.GetTroopPower(elementCopyAtIndex.Character, side, context, leaderModifier);
+				float num = (float)(elementCopyAtIndex.Number - elementCopyAtIndex.WoundedNumber) * troopPower;
+				if (elementCopyAtIndex.Character.IsMounted)
+				{
+					cavalryStrength += num;
+				}
+				if (elementCopyAtIndex.Character.IsRanged)
+				{
+					archerStrength += num;
+				}
+				totalStrength += num;
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction.csproj =====
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>HarvestAndProduction</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <TargetFramework>net472</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>14.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <CheckForOverflowUnderflow>False</CheckForOverflowUnderflow>
+  </PropertyGroup>
+  <PropertyGroup />
+  <ItemGroup />
+  <ItemGroup>
+    <Reference Include="TaleWorlds.CampaignSystem">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.CampaignSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\Bannerlord.Harmony\bin\Win64_Shipping_Client\0Harmony.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.Localization">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.Localization.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.Core">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.CampaignSystem.ViewModelCollection">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.CampaignSystem.ViewModelCollection.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.Library">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.Library.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Core" />
+    <Reference Include="MCMv5">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\Bannerlord.MBOptionScreen\bin\Win64_Shipping_Client\MCMv5.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.MountAndBlade">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.MountAndBlade.dll</HintPath>
+    </Reference>
+    <Reference Include="Bannerlord.UIExtenderEx">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\Bannerlord.UIExtenderEx\bin\Win64_Shipping_Client\Bannerlord.UIExtenderEx.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.SaveSystem">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.SaveSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.Engine">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWor

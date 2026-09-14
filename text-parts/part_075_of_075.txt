@@ -1,0 +1,97 @@
+﻿PART 75/75
+ new SelectableItemPropertyVM(text, workshop.Capital.ToString(), isWarning: false, new BasicTooltipViewModel(() => tooltipText.ToString()));
+					break;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("WorkshopCapitalTooltipPatch error: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: SubModule.xml =====
+<?xml version="1.0" encoding="utf-8"?>
+<Module>
+	<Name value="Harvest and Production"/>
+	<Id value="HarvestAndProduction"/>
+	<Version value="v1.6.16"/>
+	<DefaultModule value="false"/>
+	<ModuleCategory value="Singleplayer"/>
+	<Official value="false"/>
+    <DependedModules>
+		<DependedModule Id="Bannerlord.Harmony" />
+		<DependedModule Id="Bannerlord.ButterLib" />
+		<DependedModule Id="Bannerlord.UIExtenderEx" />
+		<DependedModule Id="Bannerlord.MBOptionScreen" />
+		<DependedModule Id="Native" />
+		<DependedModule Id="SandBoxCore" />
+		<DependedModule Id="Sandbox" />
+		<DependedModule Id="StoryMode" />
+		<DependedModule Id="NavalDLC" Optional="true"/>
+    </DependedModules>
+     <SubModules>
+         <SubModule>
+             <Name value="HarvestAndProduction"/>
+             <DLLName value="HarvestAndProduction.dll"/>
+             <SubModuleClassType value="HarvestAndProduction.Main"/>
+             <Tags>
+                 <Tag key="DedicatedServerType" value="none" />
+                 <Tag key="IsNoRenderModeElement" value="false" />
+             </Tags>
+         </SubModule>
+     </SubModules>
+	<Xmls>  
+		<XmlNode>                
+			<XmlName id="SiegeEngines" path="native_siegeengines" />
+			<IncludedGameTypes>
+				<GameType value = "Campaign"/>
+				<GameType value = "CampaignStoryMode"/>
+				<GameType value = "CustomGame"/>
+				<GameType value = "EditorGame"/>		
+			</IncludedGameTypes>
+		</XmlNode> 
+		<XmlNode>
+			<XmlName id="Settlements" path="sandbox_settlements" />
+			<IncludedGameTypes>
+				<GameType value="Campaign" />
+				<GameType value="CampaignStoryMode" />
+			</IncludedGameTypes>
+		</XmlNode>
+		<XmlNode>                
+			<XmlName id="WorkshopTypes" path="sandbox_spworkshops" />
+			<IncludedGameTypes>
+				<GameType value="Campaign" />
+				<GameType value="CampaignStoryMode" />
+			</IncludedGameTypes>
+		</XmlNode> 
+	<XmlNode>
+			<XmlName id="Items" path="sandboxcore_items"/>
+			<IncludedGameTypes>
+				<GameType value = "Campaign"/>
+				<GameType value = "CampaignStoryMode"/>
+				<GameType value = "CustomGame"/>
+				<GameType value = "EditorGame"/>
+			</IncludedGameTypes>
+	</XmlNode>
+		<XmlNode>                
+			<XmlName id="SPCultures" path="sandboxcore_spcultures"/>
+			<IncludedGameTypes>
+				<GameType value = "Campaign"/>
+				<GameType value = "CampaignStoryMode"/>
+				<GameType value = "CustomGame"/>
+			</IncludedGameTypes>
+		</XmlNode> 
+		<XmlNode>                
+			<XmlName id="GameText" path="sandbox_module_strings"/>
+			<IncludedGameTypes>
+				<GameType value = "Campaign"/>
+				 <GameType value = "CampaignStoryMode"/>
+			</IncludedGameTypes>
+		</XmlNode>	
+	</Xmls>
+</Module>
+===== END FILE =====

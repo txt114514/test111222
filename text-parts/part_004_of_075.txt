@@ -1,0 +1,655 @@
+﻿PART 4/75
+LE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\BuildingOverrideBehavior.cs =====
+using System;
+using System.Reflection;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class BuildingOverrideBehavior : CampaignBehaviorBase
+{
+	public override void RegisterEvents()
+	{
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		BuildingInitializer.InitializeBuildings();
+		OverridePerkDescriptions();
+		OverridePolicyDescriptions();
+	}
+
+	private static void OverridePerkDescriptions()
+	{
+		try
+		{
+			FieldInfo field = typeof(PerkObject).GetField("<PrimaryDescription>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
+			if (field == null)
+			{
+				Main.Log("WARNING: Could not find PerkObject.PrimaryDescription backing field for perk override.");
+				return;
+			}
+			PerkObject cleanInfrastructure = DefaultPerks.Medicine.CleanInfrastructure;
+			field.SetValue(cleanInfrastructure, new TextObject("{=HAP_CleanInfrastructurePrimary}30% reduced food spoilage in the governed settlement."));
+			Main.Log("Perk description overrides applied.");
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR overriding perk descriptions: " + ex.Message);
+		}
+	}
+
+	private static void OverridePolicyDescriptions()
+	{
+		try
+		{
+			DefaultPolicies.DebasementOfTheCurrency.Initialize(new TextObject("{=9lygvooT}Debasement Of The Currency"), new TextObject("{=HAP_Policy_Debasement_Desc}The crown orders coins to be re-minted with less silver, generating short-term revenue through inflated tariffs but driving up prices for all who trade in the realm's settlements."), new TextObject("{=HAP_Policy_Debasement_Proposal}debasing the currency to inflate tariff revenue"), new TextObject("{=HAP_Policy_Debasement_Effects}Tariff income is increased by 10%{newline}Trade prices at kingdom settlements are inflated by 10%"), 0.7f, 0.1f, -0.7f);
+			Main.Log("Policy description overrides applied.");
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR overriding policy descriptions: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\CaravanFoodTradeBehavior.cs =====
+using System.Collections.Generic;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.ObjectSystem;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class CaravanFoodTradeBehavior : CampaignBehaviorBase
+{
+	private const float EMPTY_THRESHOLD = 0.3f;
+
+	private const float FULL_THRESHOLD = 0.55f;
+
+	private const float NOTIONAL_LIVESTOCK_WEIGHT = 20f;
+
+	private const float SHORTAGE_THRESHOLD = 0.3f;
+
+	private const float SURPLUS_THRESHOLD = 0.65f;
+
+	private const float SURPLUS_BUY_BONUS = 1.4f;
+
+	private const float SHORTAGE_BUY_PENALTY = 0.65f;
+
+	private const float SHORTAGE_SELL_BONUS = 1.35f;
+
+	private const float SURPLUS_SELL_PENALTY = 0.7f;
+
+	private const float RECENT_VISIT_PENALTY = 0.2f;
+
+	private const float RECENT_VISIT_HOURS = 72f;
+
+	private const int SURPLUS_MIN_MARKET_FOOD = 50;
+
+	private const float CLEANUP_INTERVAL_HOURS = 24f;
+
+	private Dictionary<MBGUID, Dictionary<MBGUID, CampaignTime>> _recentVisits;
+
+	private CampaignTime _lastCleanup;
+
+	private static CaravanFoodTradeBehavior _instance;
+
+	public static CaravanFoodTradeBehavior Instance => _instance;
+
+	public CaravanFoodTradeBehavior()
+	{
+		_recentVisits = new Dictionary<MBGUID, Dictionary<MBGUID, CampaignTime>>();
+		_lastCleanup = CampaignTime.Zero;
+		_instance = this;
+	}
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.OnSettlementLeftEvent.AddNonSerializedListener(this, OnSettlementLeft);
+		CampaignEvents.MobilePartyDestroyed.AddNonSerializedListener(this, OnMobilePartyDestroyed);
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+		CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, OnDailyTick);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		if (dataStore.IsLoading)
+		{
+			_recentVisits = new Dictionary<MBGUID, Dictionary<MBGUID, CampaignTime>>();
+			_lastCleanup = CampaignTime.Zero;
+		}
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		_recentVisits.Clear();
+		_lastCleanup = CampaignTime.Now;
+	}
+
+	private void OnSettlementLeft(MobileParty party, Settlement settlement)
+	{
+		if (party != null && party.IsCaravan && settlement?.Town != null)
+		{
+			MBGUID id = party.Id;
+			MBGUID id2 = settlement.Town.Settlement.Id;
+			if (!_recentVisits.ContainsKey(id))
+			{
+				_recentVisits[id] = new Dictionary<MBGUID, CampaignTime>();
+			}
+			_recentVisits[id][id2] = CampaignTime.Now;
+			if (_lastCleanup.ElapsedHoursUntilNow > 24f)
+			{
+				CleanupStaleEntries();
+				_lastCleanup = CampaignTime.Now;
+			}
+		}
+	}
+
+	private void OnMobilePartyDestroyed(MobileParty party, PartyBase destroyerParty)
+	{
+		if (party != null)
+		{
+			_recentVisits.Remove(party.Id);
+		}
+	}
+
+	private void OnDailyTick()
+	{
+		CleanupStaleEntries();
+	}
+
+	private void CleanupStaleEntries()
+	{
+		float num = 144f;
+		List<MBGUID> list = new List<MBGUID>();
+		foreach (KeyValuePair<MBGUID, Dictionary<MBGUID, CampaignTime>> recentVisit in _recentVisits)
+		{
+			List<MBGUID> list2 = new List<MBGUID>();
+			foreach (KeyValuePair<MBGUID, CampaignTime> item in recentVisit.Value)
+			{
+				if (item.Value.ElapsedHoursUntilNow > num)
+				{
+					list2.Add(item.Key);
+				}
+			}
+			foreach (MBGUID item2 in list2)
+			{
+				recentVisit.Value.Remove(item2);
+			}
+			if (recentVisit.Value.Count == 0)
+			{
+				list.Add(recentVisit.Key);
+			}
+		}
+		foreach (MBGUID item3 in list)
+		{
+			_recentVisits.Remove(item3);
+		}
+	}
+
+	public float GetFoodTradeScoreModifier(MobileParty caravan, Town town)
+	{
+		if (caravan == null || town == null)
+		{
+			return 1f;
+		}
+		float num = 1f;
+		float num2 = CalculateFullness(caravan);
+		int num3 = town.FoodStocksUpperLimit();
+		float num4 = 0.5f;
+		if (num3 > 0)
+		{
+			num4 = town.FoodStocks / (float)num3;
+		}
+		bool flag = num4 < 0.3f;
+		bool flag2 = num4 > 0.65f;
+		bool flag3 = flag2 && CountMarketFood(town) > 50;
+		if (num2 < 0.3f)
+		{
+			if (flag3)
+			{
+				num *= 1.4f;
+			}
+			else if (flag)
+			{
+				num *= 0.65f;
+			}
+		}
+		else if (num2 > 0.55f)
+		{
+			if (flag)
+			{
+				num *= 1.35f;
+			}
+			else if (flag2)
+			{
+				num *= 0.7f;
+			}
+		}
+		return num * GetRecentVisitModifier(caravan, town);
+	}
+
+	private float GetRecentVisitModifier(MobileParty caravan, Town town)
+	{
+		if (!_recentVisits.TryGetValue(caravan.Id, out var value))
+		{
+			return 1f;
+		}
+		if (!value.TryGetValue(town.Settlement.Id, out var value2))
+		{
+			return 1f;
+		}
+		float elapsedHoursUntilNow = value2.ElapsedHoursUntilNow;
+		if (elapsedHoursUntilNow >= 72f)
+		{
+			return 1f;
+		}
+		float num = elapsedHoursUntilNow / 72f;
+		num *= num;
+		return MathF.Lerp(0.2f, 1f, num);
+	}
+
+	private static float CalculateFullness(MobileParty caravan)
+	{
+		if (caravan == null || caravan.InventoryCapacity <= 0)
+		{
+			return 0f;
+		}
+		float num = caravan.TotalWeightCarried;
+		if (!caravan.IsCurrentlyAtSea)
+		{
+			num += (float)caravan.ItemRoster.NumberOfLivestockAnimals * 20f;
+		}
+		return num / (float)caravan.InventoryCapacity;
+	}
+
+	private int CountMarketFood(Town town)
+	{
+		if (town?.Settlement?.ItemRoster == null)
+		{
+			return 0;
+		}
+		int num = 0;
+		ItemRoster itemRoster = town.Settlement.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.EquipmentElement.Item?.ItemCategory != null && elementCopyAtIndex.EquipmentElement.Item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores && elementCopyAtIndex.Amount > 0)
+			{
+				num += elementCopyAtIndex.Amount;
+			}
+		}
+		return num;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\CastleForagerBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using HarvestAndProduction.PartyComponents;
+using Helpers;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.Encounters;
+using TaleWorlds.CampaignSystem.Map;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Siege;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+using TaleWorlds.ObjectSystem;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class CastleForagerBehavior : CampaignBehaviorBase
+{
+	private enum DangerAction
+	{
+		None,
+		FleeFromEnemy,
+		AttackEnemy,
+		HelpFriendly
+	}
+
+	private class DangerCheckResult
+	{
+		public DangerAction Action = DangerAction.None;
+
+		public MobileParty ThreatParty;
+
+		public MobileParty FriendlyParty;
+
+		public float StrengthRatio;
+	}
+
+	private const bool DEBUG_FORAGER = false;
+
+	private const float DANGER_SCAN_RADIUS = 6f;
+
+	private const float FLEE_STRENGTH_RATIO = 0.8f;
+
+	private const float HELP_FRIENDLY_RADIUS = 10f;
+
+	private const float TARGET_FOODSTOCKS_PERCENT = 0.4f;
+
+	private const int MIN_GARRISON_FOR_FORAGER = 50;
+
+	public const int MIN_GARRISON_FOR_EMERGENCY_FORAGER = 20;
+
+	private const float WAIT_HOURS_AT_TARGET = 2f;
+
+	private const float WAIT_HOURS_AT_CASTLE = 2f;
+
+	private const float MAX_TRAVEL_DAYS = 3f;
+
+	private const float SPAWN_COOLDOWN_HOURS = 48f;
+
+	private const int MAX_GOLD_TOTAL = 5000;
+
+	private const int FORAGER_FOOD_PRICE_CAP = 160;
+
+	private const int MAX_PACK_ANIMAL_PRICE = 100;
+
+	private const float DESERT_CAMEL_PRICE_BIAS = 0.5f;
+
+	private const int MAX_TRIPS = 5;
+
+	private const int MAX_REDIRECTS = 3;
+
+	private const float RESPAWN_COOLDOWN_AFTER_LOSS = 24f;
+
+	private const int MEAT_PER_COW = 4;
+
+	private const int MEAT_PER_SHEEP = 2;
+
+	private const int MEAT_PER_HOG = 2;
+
+	private const int MEAT_PER_POULTRY = 1;
+
+	private const int MEAT_PER_HARE = 1;
+
+	private const int MEAT_PER_SUMPTER_HORSE = 3;
+
+	private static readonly Color _receiveColor = Colors.White;
+
+	private static readonly Color _spendColor = Color.ConvertStringToColor("#E89090FF");
+
+	private static readonly string _saleMessageStr = "{=HAP_PartySaleMessage}{PARTY_NAME} sold items for {GOLD_AMOUNT}{GOLD_ICON} at {SETTLEMENT_NAME}.";
+
+	private static readonly string _saleMessageNoLocationStr = "{=HAP_PartySaleMessageNoLocation}{PARTY_NAME} sold items for {GOLD_AMOUNT}{GOLD_ICON}.";
+
+	private static readonly string _foodPurchaseMessageStr = "{=HAP_PartyFoodPurchaseMessage}{PARTY_NAME} bought food for {GOLD_AMOUNT}{GOLD_ICON} at {SETTLEMENT_NAME}.";
+
+	private static readonly string _packAnimalPurchaseMessageStr = "{=HAP_PartyPackAnimalPurchaseMessage}{PARTY_NAME} bought pack animals for {GOLD_AMOUNT}{GOLD_ICON} at {SETTLEMENT_NAME}.";
+
+	private static readonly string _foodAndAnimalsPurchaseMessageStr = "{=HAP_PartyFoodAndAnimalsPurchaseMessage}{PARTY_NAME} bought food and pack animals for {GOLD_AMOUNT}{GOLD_ICON} at {SETTLEMENT_NAME}.";
+
+	private static readonly string _prisonerSaleMessageStr = "{=HAP_PartyPrisonerSaleMessage}{PARTY_NAME} sold prisoners for {GOLD_AMOUNT}{GOLD_ICON} at {SETTLEMENT_NAME}.";
+
+	private Dictionary<Settlement, MobileParty> _activeForagers = new Dictionary<Settlement, MobileParty>();
+
+	public static Dictionary<Hero, string> PendingForagerTroopNotifications = new Dictionary<Hero, string>();
+
+	private Dictionary<Settlement, CampaignTime> _lastSpawnTime = new Dictionary<Settlement, CampaignTime>();
+
+	private static List<MobileParty> _partiesToDestroy = new List<MobileParty>();
+
+	private static Dictionary<MobileParty, Settlement> _partiesToReturnTroops = new Dictionary<MobileParty, Settlement>();
+
+	private int _foragerCounter = 0;
+
+	private static MethodInfo _addNearbyPartyMethod = null;
+
+	private static int _lastResetDay = -1;
+
+	private const int FORAGER_INTERACTION_NONE = 0;
+
+	private const int FORAGER_INTERACTION_FRIENDLY = 1;
+
+	private const int FORAGER_INTERACTION_HOSTILE = 2;
+
+	private Dictionary<MobileParty, int> _interactedForagers = new Dictionary<MobileParty, int>();
+
+	public static Dictionary<string, int> DailyForagerSupplyTotals { get; private set; } = new Dictionary<string, int>();
+
+	private static void NotifyPlayerOfTransaction(MobileParty party, Settlement homeSettlement, Settlement transactionLocation, int gold, string locatedTemplate, string noLocationTemplate = null)
+	{
+		if (gold <= 0 || party == null || locatedTemplate == null || homeSettlement?.OwnerClan != Clan.PlayerClan || (GlobalSettings<HAPSettings>.Instance?.ForagerNotifications?.SelectedIndex ?? 2) < 2)
+		{
+			return;
+		}
+		Settlement settlement = transactionLocation ?? party.CurrentSettlement;
+		string value;
+		if (settlement != null)
+		{
+			value = locatedTemplate;
+		}
+		else
+		{
+			if (noLocationTemplate == null)
+			{
+				return;
+			}
+			value = noLocationTemplate;
+		}
+		TextObject textObject = new TextObject(value);
+		textObject.SetTextVariable("PARTY_NAME", party.Name);
+		textObject.SetTextVariable("GOLD_AMOUNT", gold);
+		textObject.SetTextVariable("GOLD_ICON", "<img src=\"General\\Icons\\Coin@2x\" extend=\"8\">");
+		if (settlement != null)
+		{
+			textObject.SetTextVariable("SETTLEMENT_NAME", settlement.Name);
+		}
+		Color color = ((locatedTemplate == _foodPurchaseMessageStr || locatedTemplate == _packAnimalPurchaseMessageStr || locatedTemplate == _foodAndAnimalsPurchaseMessageStr) ? _spendColor : _receiveColor);
+		InformationManager.DisplayMessage(new InformationMessage(textObject.ToString(), color));
+	}
+
+	private static void ResetDailyTotalsIfNeeded()
+	{
+		int num = (int)CampaignTime.Now.ToDays;
+		if (num != _lastResetDay)
+		{
+			DailyForagerSupplyTotals.Clear();
+			_lastResetDay = num;
+		}
+	}
+
+	private static void RecordDailyForagerSupply(Settlement castle, int amount)
+	{
+		ResetDailyTotalsIfNeeded();
+		string stringId = castle.StringId;
+		if (DailyForagerSupplyTotals.ContainsKey(stringId))
+		{
+			DailyForagerSupplyTotals[stringId] += amount;
+		}
+		else
+		{
+			DailyForagerSupplyTotals[stringId] = amount;
+		}
+	}
+
+	public static int GetDailyForagerSupplyTotal(Settlement castle)
+	{
+		if (castle == null || DailyForagerSupplyTotals == null)
+		{
+			return 0;
+		}
+		ResetDailyTotalsIfNeeded();
+		int value;
+		return DailyForagerSupplyTotals.TryGetValue(castle.StringId, out value) ? value : 0;
+	}
+
+	private void SetFleeFromParty(MobileParty forager, MobileParty threatParty, Settlement destination)
+	{
+		try
+		{
+			if (forager.PartyComponent is CastleForagerPartyComponent castleForagerPartyComponent)
+			{
+				castleForagerPartyComponent.ThreatParty = threatParty;
+			}
+			forager.SetMoveGoToSettlement(destination, MobileParty.NavigationType.Default, isTargetingThePort: false);
+			bool flag = false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in SetFleeFromParty: " + ex.Message);
+			forager.SetMoveGoToSettlement(destination, MobileParty.NavigationType.Default, isTargetingThePort: false);
+		}
+	}
+
+	private void ClearFleeBehavior(MobileParty forager)
+	{
+		if (forager.PartyComponent is CastleForagerPartyComponent castleForagerPartyComponent)
+		{
+			castleForagerPartyComponent.ThreatParty = null;
+		}
+	}
+
+	private DangerCheckResult EvaluateNearbyDanger(MobileParty party, CastleForagerPartyComponent component)
+	{
+		DangerCheckResult dangerCheckResult = new DangerCheckResult();
+		try
+		{
+			if (party.CurrentSettlement != null)
+			{
+				return dangerCheckResult;
+			}
+			float num = party.Party.EstimatedStrength;
+			if (num < 1f)
+			{
+				num = 1f;
+			}
+			MobileParty mobileParty = null;
+			float num2 = float.MaxValue;
+			float num3 = 0f;
+			MobileParty mobileParty2 = null;
+			Vec2 position = party.Position.ToVec2();
+			LocatableSearchData<MobileParty> data = MobileParty.StartFindingLocatablesAroundPosition(position, 6f);
+			for (MobileParty mobileParty3 = MobileParty.FindNextLocatable(ref data); mobileParty3 != null; mobileParty3 = MobileParty.FindNextLocatable(ref data))
+			{
+				if (mobileParty3 != party && mobileParty3.IsActive && mobileParty3.CurrentSettlement == null)
+				{
+					float num4 = position.Distance(mobileParty3.Position.ToVec2());
+					if (FactionManager.IsAtWarAgainstFaction(party.MapFaction, mobileParty3.MapFaction))
+					{
+						float estimatedStrength = mobileParty3.Party.EstimatedStrength;
+						if (!(estimatedStrength < 1f))
+						{
+							float num5 = num / estimatedStrength;
+							if (num5 < 0.8f && num4 < num2)
+							{
+								mobileParty = mobileParty3;
+								num2 = num4;
+								num3 = estimatedStrength;
+							}
+						}
+					}
+					else if (party.MapFaction == mobileParty3.MapFaction && num4 < 10f && mobileParty3.MapEvent != null && mobileParty2 == null && !mobileParty3.MapEvent.IsBlockade && !mobileParty3.MapEvent.IsBlockadeSallyOut)
+					{
+						mobileParty2 = mobileParty3;
+					}
+				}
+			}
+			if (mobileParty != null)
+			{
+				dangerCheckResult.Action = DangerAction.FleeFromEnemy;
+				dangerCheckResult.ThreatParty = mobileParty;
+				dangerCheckResult.StrengthRatio = num / num3;
+				bool flag = false;
+			}
+			else if (mobileParty2 != null)
+			{
+				dangerCheckResult.Action = DangerAction.HelpFriendly;
+				dangerCheckResult.FriendlyParty = mobileParty2;
+				bool flag2 = false;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in EvaluateNearbyDanger: " + ex.Message);
+		}
+		return dangerCheckResult;
+	}
+
+	private void HandleFleeFromEnemy(MobileParty party, CastleForagerPartyComponent component, MobileParty threat)
+	{
+		Vec2 vec = party.Position.ToVec2();
+		Vec2 vec2 = threat.Position.ToVec2();
+		Vec2 vec3 = vec - vec2;
+		float lengthSquared = vec3.LengthSquared;
+		if (lengthSquared < 0.001f)
+		{
+			vec3 = Vec2.One;
+		}
+		vec3.Normalize();
+		Settlement settlement = FindSafeDestinationInDirection(party, vec3);
+		if (settlement != null)
+		{
+			SetFleeFromParty(party, threat, settlement);
+			bool flag = false;
+			return;
+		}
+		Settlement settlement2 = FindNearestFriendlyTown(party);
+		if (settlement2 != null)
+		{
+			SetFleeFromParty(party, threat, settlement2);
+			bool flag2 = false;
+			return;
+		}
+		Vec2 pos = vec + vec3 * 15f;
+		party.SetMoveGoToPoint(new CampaignVec2(pos, isOnLand: true), MobileParty.NavigationType.Default);
+		component.ThreatParty = threat;
+		bool flag3 = false;
+	}
+
+	private void HandleHelpFriendly(MobileParty party, CastleForagerPartyComponent component, MobileParty friendly)
+	{
+		try
+		{
+			if (friendly.MapEvent == null)
+			{
+				return;
+			}
+			foreach (PartyBase involvedParty in friendly.MapEvent.InvolvedParties)
+			{
+				if (involvedParty.IsMobile && FactionManager.IsAtWarAgainstFaction(party.MapFaction, involvedParty.MapFaction))
+				{
+					party.SetMoveEngageParty(involvedParty.MobileParty, MobileParty.NavigationType.Default);
+					bool flag = false;
+					return;
+				}
+			}
+			bool flag2 = false;
+			ReapplyForagerMovement(party, component);
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in HandleHelpFriendly: " + ex.Message);
+		}
+	}
+

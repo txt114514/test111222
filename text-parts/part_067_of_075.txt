@@ -1,0 +1,519 @@
+﻿PART 67/75
+ing TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core.ViewModelCollection.Information;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+public static class SettlementOverlayTooltipHelper
+{
+	public static List<TooltipProperty> BuildEfficiencyTooltip(Village village)
+	{
+		List<TooltipProperty> list = new List<TooltipProperty>();
+		try
+		{
+			if (!(Campaign.Current?.Models?.VillageProductionCalculatorModel is VillageProductionModel villageProductionModel) || village == null)
+			{
+				return list;
+			}
+			VillageProductionModel.VillageEfficiencyBreakdown villageEfficiencyBreakdown = villageProductionModel.GetVillageEfficiencyBreakdown(village);
+			int num = (int)Math.Round(villageEfficiencyBreakdown.AverageEfficiency * 100f);
+			list.Add(new TooltipProperty(new TextObject("{=HAP_ProdEfficiency} Production Efficiency").ToString(), $"{num}%", 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.Title));
+			list.Add(new TooltipProperty("", "", 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.RundownSeperator));
+			list.Add(new TooltipProperty(new TextObject("{=HAP_EffClimate}Climate").ToString(), GetClimateDisplayName(villageEfficiencyBreakdown.Climate), 0));
+			list.Add(new TooltipProperty(new TextObject("{=HAP_EffSeason}Season").ToString(), GetSeasonDisplayName(villageEfficiencyBreakdown.Season), 0));
+			if (village.VillageType != null)
+			{
+				list.Add(new TooltipProperty(new TextObject("{=HAP_EffPrimary}Primary Type").ToString(), village.VillageType.ShortName?.ToString() ?? village.VillageType.StringId, 0));
+			}
+			SecondaryProductionType secondaryType = VillageSecondaryProductionBehavior.GetSecondaryType(village);
+			if (secondaryType != SecondaryProductionType.None)
+			{
+				list.Add(new TooltipProperty(new TextObject("{=HAP_EffSecondary}Secondary Type").ToString(), SecondaryProductionHelper.GetDisplayName(secondaryType), 0));
+			}
+			string value = (villageEfficiencyBreakdown.IsHearthCapped ? new TextObject("{=HAP_EffHearthMax}Max").ToString() : FormatPercent(villageEfficiencyBreakdown.HearthMultiplier));
+			list.Add(new TooltipProperty(new TextObject("{=HAP_EffHearth}Hearth Level").ToString(), value, 0));
+			if (Math.Abs(villageEfficiencyBreakdown.McmMultiplier - 1f) > 0.01f)
+			{
+				list.Add(new TooltipProperty(new TextObject("{=HAP_EffMcm}Production Setting").ToString(), FormatPercent(villageEfficiencyBreakdown.McmMultiplier), 0));
+			}
+			if (Math.Abs(villageEfficiencyBreakdown.PerkAndBuildingBonus) > 0.005f)
+			{
+				list.Add(new TooltipProperty(new TextObject("{=HAP_EffPerks}Perks & Buildings").ToString(), FormatPercent(1f + villageEfficiencyBreakdown.PerkAndBuildingBonus), 0));
+			}
+			if (villageEfficiencyBreakdown.IssueEffects.Count > 0)
+			{
+				foreach (VillageProductionModel.IssueEffectInfo issueEffect in villageEfficiencyBreakdown.IssueEffects)
+				{
+					string value2 = string.Join(", ", issueEffect.AffectedItemNames);
+					list.Add(new TooltipProperty(issueEffect.IssueName, value2, 0));
+					list.Add(new TooltipProperty(new TextObject("{=HAP_EffIssue}Issue Effect").ToString(), FormatPercent(issueEffect.Multiplier), 0));
+				}
+			}
+			if (villageEfficiencyBreakdown.Items.Count > 0)
+			{
+				List<VillageProductionModel.ItemEfficiencyInfo> list2 = new List<VillageProductionModel.ItemEfficiencyInfo>();
+				List<VillageProductionModel.ItemEfficiencyInfo> list3 = new List<VillageProductionModel.ItemEfficiencyInfo>();
+				List<VillageProductionModel.ItemEfficiencyInfo> list4 = new List<VillageProductionModel.ItemEfficiencyInfo>();
+				foreach (VillageProductionModel.ItemEfficiencyInfo item in villageEfficiencyBreakdown.Items)
+				{
+					if (item.SeasonalMultiplier > 1.05f)
+					{
+						list2.Add(item);
+					}
+					else if (item.SeasonalMultiplier < 0.95f)
+					{
+						list3.Add(item);
+					}
+					else
+					{
+						list4.Add(item);
+					}
+				}
+				if (list2.Count > 0)
+				{
+					list.Add(new TooltipProperty("", "", 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.RundownSeperator));
+					list.Add(new TooltipProperty(new TextObject("{=HAP_EffInSeason}In Season").ToString(), "", 0));
+					foreach (VillageProductionModel.ItemEfficiencyInfo item2 in list2)
+					{
+						int num2 = (int)Math.Round(item2.TotalEfficiency * 100f);
+						list.Add(new TooltipProperty("  " + item2.ItemName, $"{num2}%", 0));
+					}
+				}
+				if (list3.Count > 0)
+				{
+					list.Add(new TooltipProperty("", "", 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.RundownSeperator));
+					list.Add(new TooltipProperty(new TextObject("{=HAP_EffOffSeason}Off Season").ToString(), "", 0));
+					foreach (VillageProductionModel.ItemEfficiencyInfo item3 in list3)
+					{
+						int num3 = (int)Math.Round(item3.TotalEfficiency * 100f);
+						list.Add(new TooltipProperty("  " + item3.ItemName, $"{num3}%", 0));
+					}
+				}
+				if (list4.Count > 0)
+				{
+					list.Add(new TooltipProperty("", "", 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.RundownSeperator));
+					list.Add(new TooltipProperty(new TextObject("{=HAP_EffNeutral}Neutral").ToString(), "", 0));
+					foreach (VillageProductionModel.ItemEfficiencyInfo item4 in list4)
+					{
+						int num4 = (int)Math.Round(item4.TotalEfficiency * 100f);
+						list.Add(new TooltipProperty("  " + item4.ItemName, $"{num4}%", 0));
+					}
+				}
+			}
+			List<VillageProductionModel.ExternalTooltipEntry> externalTooltipEntries = VillageProductionModel.GetExternalTooltipEntries(village);
+			if (externalTooltipEntries.Count > 0)
+			{
+				list.Add(new TooltipProperty("", "", 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.RundownSeperator));
+				foreach (VillageProductionModel.ExternalTooltipEntry item5 in externalTooltipEntries)
+				{
+					list.Add(new TooltipProperty(item5.Label, FormatPercent(1f + item5.Factor), 0));
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("BuildEfficiencyTooltip ERROR: " + ex.Message);
+		}
+		return list;
+	}
+
+	public static List<TooltipProperty> BuildMoraleTooltip(Settlement settlement)
+	{
+		List<TooltipProperty> list = new List<TooltipProperty>();
+		try
+		{
+			PartyMoraleModel partyMoraleModel = Campaign.Current.Models.PartyMoraleModel;
+			if (partyMoraleModel == null)
+			{
+				return list;
+			}
+			if (settlement.IsFortification && settlement.Town?.GarrisonParty != null)
+			{
+				MobileParty garrisonParty = settlement.Town.GarrisonParty;
+				list.Add(new TooltipProperty(new TextObject("{=HAP_GarrisonMorale} Garrison Morale").ToString(), ((int)garrisonParty.Morale).ToString(), 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.Title));
+				ExplainedNumber effectivePartyMorale = partyMoraleModel.GetEffectivePartyMorale(garrisonParty, includeDescription: true);
+				list.Add(new TooltipProperty("", "", 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.RundownSeperator));
+				foreach (var (definition, num) in effectivePartyMorale.GetLines())
+				{
+					list.Add(new TooltipProperty(definition, num.ToString("0.##"), 0));
+				}
+				list.Add(new TooltipProperty("", "", 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.RundownSeperator));
+				list.Add(new TooltipProperty(new TextObject("{=HAP_GarrisonMoraleResult}Total").ToString(), ((int)effectivePartyMorale.ResultNumber).ToString(), 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.RundownResult));
+			}
+			if (settlement.MilitiaPartyComponent?.MobileParty != null)
+			{
+				MobileParty mobileParty = settlement.MilitiaPartyComponent.MobileParty;
+				if (list.Count > 0)
+				{
+					list.Add(new TooltipProperty("", "", 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.DefaultSeperator));
+				}
+				list.Add(new TooltipProperty(new TextObject("{=HAP_MilitiaMorale} Militia Morale").ToString(), ((int)mobileParty.Morale).ToString(), 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.Title));
+				ExplainedNumber effectivePartyMorale2 = partyMoraleModel.GetEffectivePartyMorale(mobileParty, includeDescription: true);
+				list.Add(new TooltipProperty("", "", 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.RundownSeperator));
+				foreach (var (definition2, num) in effectivePartyMorale2.GetLines())
+				{
+					list.Add(new TooltipProperty(definition2, num.ToString("0.##"), 0));
+				}
+				list.Add(new TooltipProperty("", "", 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.RundownSeperator));
+				list.Add(new TooltipProperty(new TextObject("{=HAP_MilitiaMoraleResult}Total").ToString(), ((int)effectivePartyMorale2.ResultNumber).ToString(), 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.RundownResult));
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("BuildMoraleTooltip ERROR: " + ex.Message);
+		}
+		return list;
+	}
+
+	public static string FormatPercent(float multiplier)
+	{
+		int num = (int)Math.Round((multiplier - 1f) * 100f);
+		if (num > 0)
+		{
+			return $"+{num}%";
+		}
+		if (num < 0)
+		{
+			return $"{num}%";
+		}
+		return "0%";
+	}
+
+	public static string GetClimateDisplayName(VillageProductionModel.ClimateZone climate)
+	{
+		return climate switch
+		{
+			VillageProductionModel.ClimateZone.Tropical => new TextObject("{=HAP_ClimateTropical}Tropical").ToString(), 
+			VillageProductionModel.ClimateZone.Desert => new TextObject("{=HAP_ClimateDesert}Desert").ToString(), 
+			VillageProductionModel.ClimateZone.Cold => new TextObject("{=HAP_ClimateCold}Cold").ToString(), 
+			_ => new TextObject("{=HAP_ClimateTemperate}Temperate").ToString(), 
+		};
+	}
+
+	public static string GetSeasonDisplayName(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => new TextObject("{=HAP_SeasonSpring}Spring").ToString(), 
+			CampaignTime.Seasons.Summer => new TextObject("{=HAP_SeasonSummer}Summer").ToString(), 
+			CampaignTime.Seasons.Autumn => new TextObject("{=HAP_SeasonAutumn}Autumn").ToString(), 
+			CampaignTime.Seasons.Winter => new TextObject("{=HAP_SeasonWinter}Winter").ToString(), 
+			_ => season.ToString(), 
+		};
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\SettlementOverlayVanillaMixin.cs =====
+using System;
+using System.Collections.Generic;
+using Bannerlord.UIExtenderEx.Attributes;
+using Bannerlord.UIExtenderEx.ViewModels;
+using HarvestAndProduction.Models;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.ViewModelCollection.GameMenu.Overlay;
+using TaleWorlds.Core.ViewModelCollection.Information;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[ViewModelMixin("Refresh")]
+internal class SettlementOverlayVanillaMixin : BaseViewModelMixin<SettlementMenuOverlayVM>
+{
+	private string _productionEfficiencyLbl;
+
+	private BasicTooltipViewModel _productionEfficiencyHint;
+
+	private bool _isVillage;
+
+	private Village _lastTooltipVillage;
+
+	private string _garrisonMoraleLbl;
+
+	private BasicTooltipViewModel _garrisonMoraleHint;
+
+	private Settlement _lastMoraleSettlement;
+
+	[DataSourceProperty]
+	public string ProductionEfficiencyLbl
+	{
+		get
+		{
+			return _productionEfficiencyLbl;
+		}
+		set
+		{
+			if (value != _productionEfficiencyLbl)
+			{
+				_productionEfficiencyLbl = value;
+				base.ViewModel.OnPropertyChangedWithValue(value, "ProductionEfficiencyLbl");
+			}
+		}
+	}
+
+	[DataSourceProperty]
+	public BasicTooltipViewModel ProductionEfficiencyHint
+	{
+		get
+		{
+			return _productionEfficiencyHint;
+		}
+		set
+		{
+			if (value != _productionEfficiencyHint)
+			{
+				_productionEfficiencyHint = value;
+				base.ViewModel.OnPropertyChangedWithValue(value, "ProductionEfficiencyHint");
+			}
+		}
+	}
+
+	[DataSourceProperty]
+	public bool IsVillage
+	{
+		get
+		{
+			return _isVillage;
+		}
+		set
+		{
+			if (value != _isVillage)
+			{
+				_isVillage = value;
+				base.ViewModel.OnPropertyChangedWithValue(value, "IsVillage");
+			}
+		}
+	}
+
+	[DataSourceProperty]
+	public string GarrisonMoraleLbl
+	{
+		get
+		{
+			return _garrisonMoraleLbl;
+		}
+		set
+		{
+			if (value != _garrisonMoraleLbl)
+			{
+				_garrisonMoraleLbl = value;
+				base.ViewModel.OnPropertyChangedWithValue(value, "GarrisonMoraleLbl");
+			}
+		}
+	}
+
+	[DataSourceProperty]
+	public BasicTooltipViewModel GarrisonMoraleHint
+	{
+		get
+		{
+			return _garrisonMoraleHint;
+		}
+		set
+		{
+			if (value != _garrisonMoraleHint)
+			{
+				_garrisonMoraleHint = value;
+				base.ViewModel.OnPropertyChangedWithValue(value, "GarrisonMoraleHint");
+			}
+		}
+	}
+
+	public SettlementOverlayVanillaMixin(SettlementMenuOverlayVM vm)
+		: base(vm)
+	{
+		_productionEfficiencyLbl = "";
+		_productionEfficiencyHint = new BasicTooltipViewModel();
+		_garrisonMoraleLbl = "";
+		_garrisonMoraleHint = new BasicTooltipViewModel();
+	}
+
+	public override void OnRefresh()
+	{
+		try
+		{
+			Settlement settlement = MobileParty.MainParty?.CurrentSettlement ?? MobileParty.MainParty?.LastVisitedSettlement;
+			IsVillage = settlement != null && settlement.IsVillage;
+			bool flag = settlement != null && settlement.IsFortification && settlement.Town?.GarrisonParty != null;
+			bool flag2 = settlement != null && settlement.MilitiaPartyComponent?.MobileParty != null;
+			if (flag | flag2)
+			{
+				float num = (flag ? settlement.Town.GarrisonParty.Morale : 0f);
+				float num2 = (flag2 ? settlement.MilitiaPartyComponent.MobileParty.Morale : 0f);
+				float num3 = ((flag & flag2) ? ((num + num2) / 2f) : ((!flag) ? num2 : num));
+				GarrisonMoraleLbl = ((int)num3).ToString();
+				if (settlement != _lastMoraleSettlement)
+				{
+					_lastMoraleSettlement = settlement;
+					GarrisonMoraleHint = new BasicTooltipViewModel(() => SettlementOverlayTooltipHelper.BuildMoraleTooltip(settlement));
+				}
+			}
+			else
+			{
+				GarrisonMoraleLbl = "-";
+				if (_lastMoraleSettlement != null)
+				{
+					_lastMoraleSettlement = null;
+					GarrisonMoraleHint = new BasicTooltipViewModel(() => new List<TooltipProperty>
+					{
+						new TooltipProperty(new TextObject("{=HAP_NoMoraleData} Settlement Morale").ToString(), "-", 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.Title),
+						new TooltipProperty(new TextObject("{=HAP_NoMoraleDesc}No garrison or militia present").ToString(), "", 0)
+					});
+				}
+			}
+			if (settlement == null || !settlement.IsVillage || settlement.Village == null)
+			{
+				ProductionEfficiencyLbl = "";
+				if (_lastTooltipVillage != null)
+				{
+					_lastTooltipVillage = null;
+					ProductionEfficiencyHint = new BasicTooltipViewModel();
+				}
+				return;
+			}
+			if (!(Campaign.Current?.Models?.VillageProductionCalculatorModel is VillageProductionModel villageProductionModel))
+			{
+				ProductionEfficiencyLbl = "-%";
+				return;
+			}
+			VillageProductionModel.VillageEfficiencyBreakdown villageEfficiencyBreakdown = villageProductionModel.GetVillageEfficiencyBreakdown(settlement.Village);
+			int num4 = (int)Math.Round(villageEfficiencyBreakdown.AverageEfficiency * 100f);
+			ProductionEfficiencyLbl = $"{num4}%";
+			if (settlement.Village != _lastTooltipVillage)
+			{
+				_lastTooltipVillage = settlement.Village;
+				ProductionEfficiencyHint = new BasicTooltipViewModel(() => SettlementOverlayTooltipHelper.BuildEfficiencyTooltip(settlement.Village));
+			}
+		}
+		catch (Exception ex)
+		{
+			ProductionEfficiencyLbl = "ERR";
+			Main.Log("SettlementOverlayVanillaMixin.OnRefresh ERROR: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\SiegeAssaultZeroDefendersPatch.cs =====
+using System.Collections.Generic;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Encounters;
+using TaleWorlds.CampaignSystem.GameMenus;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Party.PartyComponents;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Siege;
+using TaleWorlds.Core;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+public static class SiegeAssaultZeroDefendersPatch
+{
+	[HarmonyPatch(typeof(SiegeEventCampaignBehavior), "game_menu_siege_strategies_lead_assault_on_condition")]
+	public static class LeadAssaultPatch
+	{
+		[HarmonyPostfix]
+		public static void Postfix(ref bool __result, MenuCallbackArgs args)
+		{
+			if (__result)
+			{
+				Settlement settlement = PlayerSiege.PlayerSiegeEvent?.BesiegedSettlement;
+				if (settlement != null && CountDefenders(settlement) <= 0)
+				{
+					args.IsEnabled = false;
+					args.Tooltip = _noDefendersText;
+				}
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(SiegeEventCampaignBehavior), "game_menu_siege_strategies_order_assault_on_condition")]
+	public static class OrderAssaultPatch
+	{
+		[HarmonyPostfix]
+		public static void Postfix(ref bool __result, MenuCallbackArgs args)
+		{
+			if (__result)
+			{
+				Settlement settlement = PlayerSiege.PlayerSiegeEvent?.BesiegedSettlement;
+				if (settlement != null && CountDefenders(settlement) <= 0)
+				{
+					args.IsEnabled = false;
+					args.Tooltip = _noDefendersText;
+				}
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(SiegeEventCampaignBehavior), "game_menu_siege_strategies_on_tick")]
+	public static class SiegeTickZeroDefendersPatch
+	{
+		[HarmonyPostfix]
+		public static void Postfix(MenuCallbackArgs args, CampaignTime dt)
+		{
+			if (PlayerSiege.PlayerSiegeEvent == null || PlayerSiege.PlayerSide != BattleSideEnum.Attacker)
+			{
+				return;
+			}
+			Hero leaderOfSiegeEvent = Campaign.Current.Models.EncounterModel.GetLeaderOfSiegeEvent(PlayerSiege.PlayerSiegeEvent, PlayerSiege.PlayerSide);
+			if (leaderOfSiegeEvent != Hero.MainHero)
+			{
+				return;
+			}
+			Settlement besiegedSettlement = PlayerSiege.PlayerSiegeEvent.BesiegedSettlement;
+			if (besiegedSettlement == null || CountDefenders(besiegedSettlement) > 0)
+			{
+				return;
+			}
+			List<Hero> list = new List<Hero>();
+			foreach (MobileParty party in besiegedSettlement.Parties)
+			{
+				if (party.IsLordParty && party.LeaderHero != null)
+				{
+					list.Add(party.LeaderHero);
+				}
+			}
+			foreach (Hero item in list)
+			{
+				TakePrisonerAction.Apply(MobileParty.MainParty.Party, item);
+			}
+			MobileParty mobileParty = besiegedSettlement.Town?.GarrisonParty;
+			if (mobileParty != null && mobileParty.MemberRoster.TotalManCount > 0)
+			{
+				mobileParty.MemberRoster.Clear();
+			}
+			IFaction mapFaction = besiegedSettlement.MapFaction;
+			Hero newOwner = Hero.MainHero.Clan?.Kingdom?.Leader ?? Hero.MainHero;
+			ChangeOwnerOfSettlementAction.ApplyBySiege(newOwner, Hero.MainHero, besiegedSettlement);
+			if (besiegedSettlement.SiegeEvent != null)
+			{
+				besiegedSettlement.SiegeEvent.FinalizeSiegeEvent();
+			}
+			if (mapFaction != null)
+			{
+				foreach (WarPartyComponent warPartyComponent in mapFaction.WarPartyComponents)
+				{
+					MobileParty mobileParty2 = warPartyComponent.MobileParty;
+					if (mobileParty2.TargetSettlement == besiegedSettlement && mobileParty2.CurrentSettlement != besiegedSettlement)
+					{
+						mobileParty2.SetMoveModeHold();
+					}
+				}
+			}
+			if (besiegedSettlement.Town != null)
+			{
+				besiegedSettlement.Militia = Campaign.Current.Models.SettlementMilitiaModel.MilitiaToSpawnAfterSiege(besiegedSettlement.Town);
+			}
+			PlayerEncounter.Finish();
+			MobileParty attackerParty = ((MobileParty.MainParty.Army != null) ? MobileParty.MainParty.Army.LeaderParty : M

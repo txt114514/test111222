@@ -1,0 +1,598 @@
+﻿PART 63/75
+ogs += elementNumber;
+					break;
+				case "chicken":
+				case "chicken_product":
+				case "goose":
+				case "goose_product":
+					counts.Poultry += elementNumber;
+					break;
+				case "hare":
+					counts.Hares += elementNumber;
+					break;
+				default:
+					counts.OtherAnimals += elementNumber;
+					break;
+				}
+			}
+			else
+			{
+				if (!itemAtIndex.HasHorseComponent || itemAtIndex.HorseComponent == null)
+				{
+					continue;
+				}
+				HorseComponent horseComponent = itemAtIndex.HorseComponent;
+				if (horseComponent.IsPackAnimal)
+				{
+					counts.PackAnimals += elementNumber;
+					counts.TotalHerd += elementNumber;
+					string text = itemAtIndex.StringId ?? "";
+					if (text == "mule" || text == "mule_unmountable")
+					{
+						counts.Mules += elementNumber;
+					}
+					else if (IsCamelItem(itemAtIndex))
+					{
+						counts.PackCamels += elementNumber;
+					}
+					else
+					{
+						counts.PackHorses += elementNumber;
+					}
+				}
+				else if (horseComponent.IsMount)
+				{
+					counts.Mounts += elementNumber;
+					counts.TotalHerd += elementNumber;
+					if (IsCamelItem(itemAtIndex))
+					{
+						counts.RidingCamels += elementNumber;
+					}
+					else
+					{
+						counts.RidingHorses += elementNumber;
+					}
+				}
+			}
+		}
+	}
+
+	private static bool IsCamelItem(ItemObject item)
+	{
+		if (item == null || item.StringId == null)
+		{
+			return false;
+		}
+		return item.StringId.IndexOf("camel", StringComparison.OrdinalIgnoreCase) >= 0;
+	}
+
+	private static void AddDetailedHerdInfo(List<TooltipProperty> properties, HerdCounts herdCounts, bool isExtended)
+	{
+		TextObject textObject = new TextObject("{=HAP_HerdTooltip}Herd");
+		TextObject textObject2 = new TextObject("{=HAP_HerdCount} ({HERD_COUNT})");
+		textObject2.SetTextVariable("HERD_COUNT", herdCounts.TotalHerd);
+		properties.Add(new TooltipProperty(textObject.ToString(), textObject2.ToString(), 0));
+		properties.Add(new TooltipProperty(string.Empty, string.Empty, 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.RundownSeperator));
+		if (!isExtended)
+		{
+			if (herdCounts.Mounts > 0)
+			{
+				AddHerdLine(properties, "{=HAP_HerdMounts}Mounts", herdCounts.Mounts);
+			}
+			if (herdCounts.PackAnimals > 0)
+			{
+				AddHerdLine(properties, "{=HAP_HerdPack}Pack Animals", herdCounts.PackAnimals);
+			}
+			if (herdCounts.Livestock > 0)
+			{
+				AddHerdLine(properties, "{=HAP_HerdLivestock}Livestock", herdCounts.Livestock);
+			}
+			return;
+		}
+		if (herdCounts.Cattle > 0)
+		{
+			AddHerdLine(properties, "{=HAP_HerdCattle}Cattle", herdCounts.Cattle);
+		}
+		if (herdCounts.Sheep > 0)
+		{
+			AddHerdLine(properties, "{=HAP_HerdSheep}Sheep", herdCounts.Sheep);
+		}
+		if (herdCounts.Hogs > 0)
+		{
+			AddHerdLine(properties, "{=HAP_HerdHogs}Hogs", herdCounts.Hogs);
+		}
+		if (herdCounts.Poultry > 0)
+		{
+			AddHerdLine(properties, "{=HAP_HerdPoultry}Poultry", herdCounts.Poultry);
+		}
+		if (herdCounts.Hares > 0)
+		{
+			AddHerdLine(properties, "{=HAP_HerdHares}Hares", herdCounts.Hares);
+		}
+		if (herdCounts.OtherAnimals > 0)
+		{
+			AddHerdLine(properties, "{=HAP_HerdOther}Other Animals", herdCounts.OtherAnimals);
+		}
+		if (herdCounts.Mules > 0)
+		{
+			AddHerdLine(properties, "{=HAP_HerdMules}Mules", herdCounts.Mules);
+		}
+		if (herdCounts.PackHorses > 0)
+		{
+			AddHerdLine(properties, "{=HAP_HerdPackHorses}Pack Horses", herdCounts.PackHorses);
+		}
+		if (herdCounts.PackCamels > 0)
+		{
+			AddHerdLine(properties, "{=HAP_HerdPackCamels}Pack Camels", herdCounts.PackCamels);
+		}
+		if (herdCounts.RidingHorses > 0)
+		{
+			AddHerdLine(properties, "{=HAP_HerdRidingHorses}Riding Horses", herdCounts.RidingHorses);
+		}
+		if (herdCounts.RidingCamels > 0)
+		{
+			AddHerdLine(properties, "{=HAP_HerdRidingCamels}Riding Camels", herdCounts.RidingCamels);
+		}
+	}
+
+	private static void AddHerdLine(List<TooltipProperty> properties, string locId, int count)
+	{
+		properties.Add(new TooltipProperty(new TextObject(locId).ToString(), $" {count}", 0));
+	}
+
+	private static void AddQuestionMarkHerdInfo(List<TooltipProperty> properties, int totalSize)
+	{
+		string text = ((totalSize >= 1000) ? "????" : ((totalSize >= 100) ? "???" : ((totalSize < 10) ? "?" : "??")));
+		TextObject textObject = new TextObject("{=HAP_HerdTooltip}Herd");
+		properties.Add(new TooltipProperty(textObject.ToString(), " (" + text + ")", 0));
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\InventoryReserveButtonPatch.cs =====
+using Bannerlord.UIExtenderEx.Attributes;
+using Bannerlord.UIExtenderEx.Prefabs2;
+
+namespace HarvestAndProduction.Patches;
+
+[PrefabExtension("InventoryItemTuple", "descendant::Widget[@Id='ButtonCarrier']/Children/ButtonWidget[@Id='PreviewButton']")]
+internal sealed class InventoryReserveButtonPatch : PrefabExtensionInsertPatch
+{
+	public override InsertType Type => InsertType.Prepend;
+
+	[PrefabExtensionText(false)]
+	public string Xml => "<ButtonWidget Id=\"HAPReserveButton\" UpdateChildrenStates=\"true\" DoNotPassEventsToChildren=\"true\" ButtonType=\"Toggle\" IsVisible=\"@HAPCanReserve\" IsSelected=\"@HAPIsReserved\" WidthSizePolicy=\"Fixed\" HeightSizePolicy=\"Fixed\" SuggestedWidth=\"!Inventory.Tuple.Extension.SpecialButton.Width\" SuggestedHeight=\"!Inventory.Tuple.Extension.SpecialButton.Height\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\" MarginRight=\"65\" Command.Click=\"ExecuteHAPReserveToggle\" Brush=\"Inventory.Tuple.Extension.SpecialButton\" GamepadNavigationIndex=\"4\">  <Children>    <TextWidget Text=\"R\"      IsHidden=\"@HAPIsReserved\"      DoNotAcceptEvents=\"true\"      WidthSizePolicy=\"StretchToParent\"      HeightSizePolicy=\"StretchToParent\"      Brush=\"InventoryDefaultFontBrush\"      Brush.FontSize=\"28\"      Brush.FontColor=\"#B8AA91FF\"      Brush.TextHorizontalAlignment=\"Center\"      Brush.TextVerticalAlignment=\"Center\" />    <TextWidget Text=\"R\"      IsVisible=\"@HAPIsReserved\"      DoNotAcceptEvents=\"true\"      WidthSizePolicy=\"StretchToParent\"      HeightSizePolicy=\"StretchToParent\"      Brush=\"InventoryDefaultFontBrush\"      Brush.FontSize=\"28\"      Brush.FontColor=\"#F1C75BFF\"      Brush.TextHorizontalAlignment=\"Center\"      Brush.TextVerticalAlignment=\"Center\" />    <HintWidget DataSource=\"{HAPReserveHint}\"      Command.HoverBegin=\"ExecuteBeginHint\"      Command.HoverEnd=\"ExecuteEndHint\"      WidthSizePolicy=\"StretchToParent\"      HeightSizePolicy=\"StretchToParent\" />  </Children></ButtonWidget>";
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\IsGarrisonStarvingPatch.cs =====
+using HarmonyLib;
+using Helpers;
+using TaleWorlds.CampaignSystem.Settlements;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(SettlementHelper), "IsGarrisonStarving")]
+public static class IsGarrisonStarvingPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(Settlement settlement, ref bool __result)
+	{
+		__result = settlement?.IsStarving ?? false;
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\ItemDisplayLimitPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using HarmonyLib;
+using SandBox.ViewModelCollection;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(SandBoxUIHelper))]
+public static class ItemDisplayLimitPatch
+{
+	private static readonly TextObject _soldStr = new TextObject("{=YgyHVu8S}Sold{ITEMS}");
+
+	private static readonly TextObject _purchasedStr = new TextObject("{=qIeDZoSx}Purchased{ITEMS}");
+
+	private static readonly TextObject _itemTransactionStr = new TextObject("{=CqAhj27p} {ITEM_NAME} x{ITEM_NUMBER}");
+
+	[HarmonyPatch("GetItemsTradedNotificationText")]
+	[HarmonyPrefix]
+	public static bool GetItemsTradedNotificationTextPrefix(List<(EquipmentElement, int)> items, bool isSelling, ref string __result)
+	{
+		try
+		{
+			TextObject textObject = (isSelling ? _soldStr : _purchasedStr);
+			List<IGrouping<ItemCategory, (EquipmentElement, int)>> sortedGroups = (from i in items
+				where i.Item1.Item != null && i.Item1.Item.ItemCategory != null
+				group i by i.Item1.Item.ItemCategory into g
+				orderby g.Sum(((EquipmentElement, int) e) => e.Item2 * e.Item1.Item.Value) descending
+				select g).ToList();
+			List<(string, int)> list = NotificationTextHelpers.BuildDisplayEntries(sortedGroups);
+			MBStringBuilder mBStringBuilder = default(MBStringBuilder);
+			mBStringBuilder.Initialize(16, "GetItemsTradedNotificationText");
+			int num = MathF.Min(12, list.Count);
+			for (int num2 = 0; num2 < num; num2++)
+			{
+				_itemTransactionStr.SetTextVariable("ITEM_NAME", list[num2].Item1);
+				_itemTransactionStr.SetTextVariable("ITEM_NUMBER", list[num2].Item2);
+				mBStringBuilder.Append(_itemTransactionStr.ToString());
+			}
+			textObject.SetTextVariable("ITEMS", mBStringBuilder.ToStringAndRelease());
+			__result = textObject.ToString();
+			return false;
+		}
+		catch (Exception)
+		{
+			return true;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\ItemObject_IsTradeGood_Patch.cs =====
+using HarmonyLib;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(ItemObject), "IsTradeGood", MethodType.Getter)]
+public static class ItemObject_IsTradeGood_Patch
+{
+	[HarmonyPostfix]
+	public static void Postfix(ItemObject __instance, ref bool __result)
+	{
+		if (!__result && __instance != null && (__instance.IsMountable || __instance.HasHorseComponent))
+		{
+			__result = true;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\LooterSpawnCapPatch.cs =====
+using HarmonyLib;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(BanditSpawnCampaignBehavior), "GetCurrentLimitForLooters")]
+public static class LooterSpawnCapPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(ref int __result)
+	{
+		float num = GlobalSettings<HAPSettings>.Instance?.LooterSpawnMultiplier ?? 2f;
+		__result = MathF.Round((float)__result * num);
+		if (num > 0f && __result < 1)
+		{
+			__result = 1;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\LordResupplyNotificationPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using SandBox.ViewModelCollection.Nameplate.NameplateNotifications;
+using SandBox.ViewModelCollection.Nameplate.NameplateNotifications.SettlementNotificationTypes;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(CaravanTransactionNotificationItemVM))]
+public static class LordResupplyNotificationPatch
+{
+	private static readonly TextObject _resuppliedStr = new TextObject("{=HAP_Resupplied}Resupplied{ITEMS}");
+
+	private static readonly TextObject _itemTransactionStr = new TextObject("{=CqAhj27p} {ITEM_NAME} x{ITEM_NUMBER}");
+
+	[HarmonyPatch(MethodType.Constructor, new Type[]
+	{
+		typeof(Action<SettlementNotificationItemBaseVM>),
+		typeof(MobileParty),
+		typeof(List<ValueTuple<EquipmentElement, int>>),
+		typeof(int)
+	})]
+	[HarmonyPostfix]
+	public static void ConstructorPostfix(CaravanTransactionNotificationItemVM __instance, MobileParty caravanParty, List<(EquipmentElement, int)> items)
+	{
+		try
+		{
+			if (items.Count <= 0 || items[0].Item2 >= 0)
+			{
+				return;
+			}
+			if (LordCastleResupplyBehavior.IsSiegeRationTransaction)
+			{
+				int num = 0;
+				foreach (var item in items)
+				{
+					num += Math.Abs(item.Item2);
+				}
+				TextObject textObject = new TextObject("{=HAP_SiegeRationNotification}Resupplied food x{AMOUNT}");
+				textObject.SetTextVariable("AMOUNT", num);
+				__instance.Text = textObject.ToString();
+			}
+			else if (IsLordResupply(caravanParty))
+			{
+				string text = GenerateResuppliedText(items);
+				if (!string.IsNullOrEmpty(text))
+				{
+					__instance.Text = text;
+				}
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	private static bool IsLordResupply(MobileParty party)
+	{
+		if (party == null)
+		{
+			return false;
+		}
+		return LordCastleResupplyBehavior.ActiveResupplyParties.Contains(party);
+	}
+
+	private static string GenerateResuppliedText(List<(EquipmentElement, int)> items)
+	{
+		List<IGrouping<ItemCategory, (EquipmentElement, int)>> list = (from i in items
+			where i.Item1.Item != null && i.Item1.Item.ItemCategory != null
+			group i by i.Item1.Item.ItemCategory into g
+			orderby MathF.Abs(g.Sum(((EquipmentElement, int) e) => e.Item2)) descending
+			select g).ToList();
+		if (list.Count == 0)
+		{
+			return null;
+		}
+		List<(string, int)> list2 = NotificationTextHelpers.BuildDisplayEntries(list);
+		MBStringBuilder mBStringBuilder = default(MBStringBuilder);
+		mBStringBuilder.Initialize(16, "GenerateResuppliedText");
+		int num = MathF.Min(12, list2.Count);
+		for (int num2 = 0; num2 < num; num2++)
+		{
+			_itemTransactionStr.SetTextVariable("ITEM_NAME", list2[num2].Item1);
+			_itemTransactionStr.SetTextVariable("ITEM_NUMBER", list2[num2].Item2);
+			mBStringBuilder.Append(_itemTransactionStr.ToString());
+		}
+		_resuppliedStr.SetTextVariable("ITEMS", mBStringBuilder.ToStringAndRelease());
+		return _resuppliedStr.ToString();
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\LordSpawnFoodPatch.cs =====
+using System;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Party.PartyComponents;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(LordPartyComponent.InitializationArgs), "InitializeLordPartyProperties")]
+public static class LordSpawnFoodPatch
+{
+	private const int SPAWN_GRAIN_MIN = 50;
+
+	private const int SPAWN_GRAIN_MAX = 200;
+
+	[HarmonyPostfix]
+	public static void Postfix(MobileParty mobileParty)
+	{
+		try
+		{
+			if (mobileParty == null || mobileParty.ItemRoster == null || mobileParty.IsMainParty)
+			{
+				return;
+			}
+			ItemObject grain = DefaultItems.Grain;
+			if (grain != null)
+			{
+				int itemNumber = mobileParty.ItemRoster.GetItemNumber(grain);
+				if (itemNumber > 0)
+				{
+					mobileParty.ItemRoster.AddToCounts(grain, -itemNumber);
+				}
+				mobileParty.ItemRoster.AddToCounts(grain, MBRandom.RandomInt(50, 200));
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("LordSpawnFoodPatch error: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\MobilePartyDesertionFixPatch.cs =====
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultPartyDesertionModel), "GetTroopsToDesert")]
+public static class MobilePartyDesertionFixPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(MobileParty mobileParty, ref TroopRoster __result)
+	{
+		if (mobileParty.IsGarrison)
+		{
+			return;
+		}
+		PartyDesertionModel partyDesertionModel = Campaign.Current.Models.PartyDesertionModel;
+		int moraleThresholdForTroopDesertion = partyDesertionModel.GetMoraleThresholdForTroopDesertion();
+		if (mobileParty.Morale >= (float)moraleThresholdForTroopDesertion)
+		{
+			return;
+		}
+		int numberOfRegularMembers = mobileParty.Party.NumberOfRegularMembers;
+		if (numberOfRegularMembers <= 0)
+		{
+			return;
+		}
+		float num = MathF.Min(mobileParty.Morale, (float)moraleThresholdForTroopDesertion);
+		float num2 = 1f - MathF.Pow(0.19999999f, 0.1f * ((float)moraleThresholdForTroopDesertion - num) / (float)moraleThresholdForTroopDesertion);
+		int num3 = (int)((float)numberOfRegularMembers * num2);
+		if (num3 > 0)
+		{
+			return;
+		}
+		int num4 = MBRandom.RoundRandomized((float)numberOfRegularMembers * num2);
+		if (num4 <= 0)
+		{
+			return;
+		}
+		int num5 = 0;
+		int num6 = mobileParty.MemberRoster.Count - 1;
+		while (num6 >= 0 && num5 < num4)
+		{
+			TroopRosterElement troopRosterElement = mobileParty.MemberRoster.GetElementCopyAtIndex(num6);
+			if (troopRosterElement.Character.HeroObject == null)
+			{
+				float desertionChanceForTroop = partyDesertionModel.GetDesertionChanceForTroop(mobileParty, in troopRosterElement);
+				int troopCount = __result.GetTroopCount(troopRosterElement.Character);
+				int num7 = 0;
+				for (int i = 0; i < troopRosterElement.WoundedNumber - troopCount; i++)
+				{
+					if (num5 + num7 >= num4)
+					{
+						break;
+					}
+					if (desertionChanceForTroop > mobileParty.RandomFloatWithSeed((uint)(CampaignTime.Now.ToHours + (double)(num6 * 100 + i))))
+					{
+						num7++;
+					}
+				}
+				int num8 = 0;
+				for (int j = 0; j < troopRosterElement.Number - troopRosterElement.WoundedNumber - troopCount; j++)
+				{
+					if (num5 + num7 + num8 >= num4)
+					{
+						break;
+					}
+					if (desertionChanceForTroop > mobileParty.RandomFloatWithSeed((uint)(CampaignTime.Now.ToHours + (double)(num6 * 100 + j))))
+					{
+						num8++;
+					}
+				}
+				if (num7 > 0 || num8 > 0)
+				{
+					int num9 = num7 + num8;
+					__result.AddToCounts(troopRosterElement.Character, num9, insertAtFront: false, num7);
+					num5 += num9;
+				}
+			}
+			num6--;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\NativeCharcoalCategoryPatch.cs =====
+using System;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultItems), "InitializeAll")]
+public class NativeCharcoalCategoryPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(DefaultItems __instance)
+	{
+		try
+		{
+			FieldInfo field = typeof(DefaultItems).GetField("_itemCharcoal", BindingFlags.Instance | BindingFlags.NonPublic);
+			if (field != null)
+			{
+				ItemObject itemObject = (ItemObject)field.GetValue(__instance);
+				if (itemObject != null)
+				{
+					ItemCategory itemCategory = Game.Current.ObjectManager.GetObject<ItemCategory>("charcoal");
+					if (itemCategory != null)
+					{
+						ItemObject.InitializeTradeGood(itemObject, itemObject.Name, itemObject.MultiMeshName, itemCategory, 40, 5f, ItemObject.ItemTypeEnum.Goods);
+					}
+					else
+					{
+						Main.Log("ERROR: Charcoal category not found in ObjectManager");
+					}
+				}
+				else
+				{
+					Main.Log("ERROR: Charcoal item is null");
+				}
+			}
+			else
+			{
+				Main.Log("ERROR: Could not find _itemCharcoal field in DefaultItems");
+			}
+		}
+		catch (Exception arg)
+		{
+			Main.Log($"ERROR in NativeCharcoalCategoryPatch: {arg}");
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\NativeFeltCategoryPatch.cs =====
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultItemCategories), "InitializeAll")]
+public class NativeFeltCategoryPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(DefaultItemCategories __instance)
+	{
+		FieldInfo field = typeof(DefaultItemCategories).GetField("_itemCategoryFelt", BindingFlags.Instance | BindingFlags.NonPublic);
+		if (field != null)
+		{
+			((ItemCategory)field.GetValue(__insta

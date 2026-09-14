@@ -1,0 +1,721 @@
+﻿PART 65/75
+
+				{
+					HerdTooltipHelper.AddHerdTooltip(propertyBasedTooltipVM, simplifiedHerdCounts, showDetails);
+				}
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\PatrolLoadedReturnPatch.cs =====
+using System;
+using HarmonyLib;
+using Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(PatrolPartiesCampaignBehavior), "CalculateVisitHomeSettlementScore")]
+public static class PatrolLoadedReturnPatch
+{
+	private const float LOAD_THRESHOLD = 0.5f;
+
+	private const float BOOST_MAX = 2.4f;
+
+	[HarmonyPostfix]
+	public static void Postfix(MobileParty mobileParty, PartyThinkParams p)
+	{
+		try
+		{
+			if (mobileParty == null || !mobileParty.IsPatrolParty || mobileParty.HomeSettlement == null)
+			{
+				return;
+			}
+			int inventoryCapacity = mobileParty.InventoryCapacity;
+			if (inventoryCapacity <= 0)
+			{
+				return;
+			}
+			float num = mobileParty.TotalWeightCarried / (float)inventoryCapacity;
+			if (!(num < 0.5f))
+			{
+				bool isTargetingPort = mobileParty.HomeSettlement.HasPort && mobileParty.IsCurrentlyAtSea;
+				AiHelper.GetBestNavigationTypeAndAdjustedDistanceOfSettlementForMobileParty(mobileParty, mobileParty.HomeSettlement, isTargetingPort, out var bestNavigationType, out var _, out var isFromPort);
+				AIBehaviorData aiBehaviorData = new AIBehaviorData(mobileParty.HomeSettlement, AiBehavior.GoToSettlement, bestNavigationType, willGatherArmy: false, isFromPort, isTargetingPort);
+				float num2 = (num - 0.5f) * 4.8f;
+				if (p.TryGetBehaviorScore(in aiBehaviorData, out var score))
+				{
+					p.SetBehaviorScore(in aiBehaviorData, score + num2);
+				}
+				else
+				{
+					p.AddBehaviorScore((aiBehaviorData, num2));
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("PatrolLoadedReturnPatch error: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\PatrolSpawnGrainPatch.cs =====
+using System;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Party.PartyComponents;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(PatrolPartyComponent), "CreatePatrolParty")]
+public static class PatrolSpawnGrainPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(MobileParty __result)
+	{
+		try
+		{
+			if (__result == null || __result.ItemRoster == null)
+			{
+				return;
+			}
+			ItemObject grain = DefaultItems.Grain;
+			if (grain != null)
+			{
+				int itemNumber = __result.ItemRoster.GetItemNumber(grain);
+				if (itemNumber > 0)
+				{
+					__result.ItemRoster.AddToCounts(grain, -itemNumber);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("PatrolSpawnGrainPatch error: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\PlayerVillageTaxPatch.cs =====
+using System.Collections.Generic;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Inventory;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(InventoryLogic), "DoneLogic")]
+public static class PlayerVillageTaxPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(InventoryLogic __instance, bool __result)
+	{
+		if (!__result || !__instance.IsTrading)
+		{
+			return;
+		}
+		Settlement currentSettlement = Settlement.CurrentSettlement;
+		if (currentSettlement == null || !currentSettlement.IsVillage)
+		{
+			return;
+		}
+		Village village = currentSettlement.Village;
+		if (village == null)
+		{
+			return;
+		}
+		List<(ItemRosterElement, int)> boughtItems = __instance.GetBoughtItems();
+		if (boughtItems == null || boughtItems.Count == 0)
+		{
+			return;
+		}
+		int num = 0;
+		for (int i = 0; i < boughtItems.Count; i++)
+		{
+			num += boughtItems[i].Item2;
+		}
+		if (num > 0)
+		{
+			float villageTaxRatio = Campaign.Current.Models.SettlementTaxModel.GetVillageTaxRatio(village);
+			int num2 = MBRandom.RoundRandomized((float)num * villageTaxRatio);
+			if (num2 > 0)
+			{
+				village.ChangeGold(-num2);
+				village.TradeTaxAccumulated += num2;
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\ProvisionerCorpsWagePatch.cs =====
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultPartyWageModel), "GetTotalWage")]
+public static class ProvisionerCorpsWagePatch
+{
+	private static readonly TextObject _provisionerCorpsText = new TextObject("{=HAP_Policy_ProvisionerCorps}Provisioner Corps");
+
+	[HarmonyPostfix]
+	public static void Postfix(MobileParty mobileParty, ref ExplainedNumber __result)
+	{
+		if (mobileParty != null && (mobileParty.PartyComponent is CastleForagerPartyComponent || mobileParty.PartyComponent is TownSupplyLinePartyComponent || mobileParty.PartyComponent is NavalSupplyConvoyPartyComponent))
+		{
+			Kingdom kingdom = mobileParty.ActualClan?.Kingdom;
+			if (kingdom != null && HAPPolicies.ProvisionerCorps != null && kingdom.ActivePolicies.Contains(HAPPolicies.ProvisionerCorps))
+			{
+				__result.AddFactor(-0.2f, _provisionerCorpsText);
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\RaidHearthDamagePatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection.Emit;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.MapEvents;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(RaidEventComponent), "Update")]
+public static class RaidHearthDamagePatch
+{
+	private static bool _patched;
+
+	[HarmonyTranspiler]
+	private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+	{
+		List<CodeInstruction> list = new List<CodeInstruction>(instructions);
+		for (int i = 0; i < list.Count - 2; i++)
+		{
+			if (list[i].opcode == OpCodes.Ldc_R4 && list[i].operand is float num && Math.Abs(num - 0.5f) < 0.001f)
+			{
+				list[i].operand = 1f;
+				_patched = true;
+				break;
+			}
+		}
+		return list.AsEnumerable();
+	}
+
+	public static bool WasPatched()
+	{
+		return _patched;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\RaidProductionLootPatch.cs =====
+using System;
+using System.Reflection;
+using HarmonyLib;
+using HarvestAndProduction.Models;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+public static class RaidProductionLootPatch
+{
+	private static FieldInfo _productionsField;
+
+	private static MBList<(ItemObject, float)> _savedProductions;
+
+	private static VillageType _savedVillageType;
+
+	public static void Apply(Harmony harmony)
+	{
+		try
+		{
+			_productionsField = AccessTools.Field(typeof(VillageType), "_productions");
+			if (_productionsField == null)
+			{
+				Main.Log("ERROR: RaidProductionLootPatch — cannot find VillageType._productions");
+				return;
+			}
+			harmony.Patch(AccessTools.Method(typeof(RaidEventComponent), "Update"), new HarmonyMethod(typeof(RaidProductionLootPatch), "Prefix"), new HarmonyMethod(typeof(RaidProductionLootPatch), "Postfix"));
+			Main.Log("RaidProductionLootPatch applied — raid loot filtered through VillageProductionModel");
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR applying RaidProductionLootPatch: " + ex.Message);
+		}
+	}
+
+	private static void Prefix(RaidEventComponent __instance)
+	{
+		try
+		{
+			Settlement mapEventSettlement = __instance.MapEventSettlement;
+			if (mapEventSettlement == null || !mapEventSettlement.IsVillage)
+			{
+				return;
+			}
+			Village village = mapEventSettlement.Village;
+			VillageType villageType = village.VillageType;
+			if (villageType == null || !(Campaign.Current?.Models?.VillageProductionCalculatorModel is VillageProductionModel villageProductionModel))
+			{
+				return;
+			}
+			MBList<(ItemObject, float)> mBList = (MBList<(ItemObject, float)>)_productionsField.GetValue(villageType);
+			if (mBList == null)
+			{
+				return;
+			}
+			_savedProductions = mBList;
+			_savedVillageType = villageType;
+			MBList<(ItemObject, float)> mBList2 = new MBList<(ItemObject, float)>();
+			foreach (var item in mBList)
+			{
+				if (item.Item1 != null && villageProductionModel.CanProduceItemForRaid(village, item.Item1))
+				{
+					mBList2.Add(item);
+				}
+			}
+			_productionsField.SetValue(villageType, mBList2);
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in RaidProductionLootPatch.Prefix: " + ex.Message);
+			_savedVillageType = null;
+			_savedProductions = null;
+		}
+	}
+
+	private static void Postfix()
+	{
+		try
+		{
+			if (_savedVillageType != null && _savedProductions != null)
+			{
+				_productionsField.SetValue(_savedVillageType, _savedProductions);
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in RaidProductionLootPatch.Postfix: " + ex.Message);
+		}
+		finally
+		{
+			_savedVillageType = null;
+			_savedProductions = null;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\RebelClanRenamePatch.cs =====
+using System.Collections.Generic;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(RebellionsCampaignBehavior), "DailyTickClan")]
+public static class RebelClanRenamePatch
+{
+	private static bool _wasRebelClan;
+
+	[HarmonyPrefix]
+	public static void Prefix(Clan clan)
+	{
+		_wasRebelClan = clan.IsRebelClan;
+	}
+
+	[HarmonyPostfix]
+	public static void Postfix(Clan clan)
+	{
+		if (!_wasRebelClan || clan.IsRebelClan || clan.Leader == null || clan.Settlements.Count == 0)
+		{
+			return;
+		}
+		CultureObject culture = clan.Culture;
+		if (culture == null)
+		{
+			return;
+		}
+		MBReadOnlyList<TextObject> clanNameList = culture.ClanNameList;
+		if (clanNameList == null || clanNameList.Count == 0)
+		{
+			return;
+		}
+		HashSet<string> hashSet = new HashSet<string>();
+		foreach (Clan item in Clan.All)
+		{
+			if (item.Name != null)
+			{
+				hashSet.Add(item.Name.ToString());
+			}
+		}
+		List<TextObject> list = new List<TextObject>();
+		foreach (TextObject item2 in clanNameList)
+		{
+			if (!hashSet.Contains(item2.ToString()))
+			{
+				list.Add(item2);
+			}
+		}
+		TextObject textObject = ((list.Count <= 0) ? clanNameList.GetRandomElement() : list.GetRandomElement());
+		textObject.SetTextVariable("ORIGIN_SETTLEMENT", clan.HomeSettlement.Name);
+		clan.ChangeClanName(textObject, textObject);
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\RebellionFoodPatch.cs =====
+using System;
+using System.Collections.Generic;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(RebellionsCampaignBehavior), "StartRebellionEvent")]
+public static class RebellionFoodPatch
+{
+	private const bool DEBUG_REBELLION = false;
+
+	private const float PROSPERITY_SEIZED_PERCENT = 0.3f;
+
+	private const float FOOD_PER_PROSPERITY = 0.5f;
+
+	private static readonly Dictionary<string, int> _dailyRebellionFood = new Dictionary<string, int>();
+
+	private static int _rebellionLastResetDay = -1;
+
+	private static float _savedFoodStocks;
+
+	private static void ResetRebellionTotalsIfNeeded()
+	{
+		int num = (int)CampaignTime.Now.ToDays;
+		if (num != _rebellionLastResetDay)
+		{
+			_dailyRebellionFood.Clear();
+			_rebellionLastResetDay = num;
+		}
+	}
+
+	private static void RecordRebellionFood(Settlement settlement, int amount)
+	{
+		if (settlement != null && amount > 0)
+		{
+			ResetRebellionTotalsIfNeeded();
+			string stringId = settlement.StringId;
+			if (_dailyRebellionFood.ContainsKey(stringId))
+			{
+				_dailyRebellionFood[stringId] += amount;
+			}
+			else
+			{
+				_dailyRebellionFood[stringId] = amount;
+			}
+		}
+	}
+
+	public static int GetDailyRebellionFood(Settlement settlement)
+	{
+		if (settlement == null)
+		{
+			return 0;
+		}
+		ResetRebellionTotalsIfNeeded();
+		int value;
+		return _dailyRebellionFood.TryGetValue(settlement.StringId, out value) ? value : 0;
+	}
+
+	public static void ClearDailyTracking()
+	{
+		_dailyRebellionFood.Clear();
+		_rebellionLastResetDay = -1;
+	}
+
+	private static void Prefix(Settlement settlement)
+	{
+		_savedFoodStocks = (settlement?.Town?.FoodStocks).GetValueOrDefault();
+	}
+
+	private static void Postfix(Settlement settlement)
+	{
+		if (settlement?.Town == null)
+		{
+			return;
+		}
+		try
+		{
+			Town town = settlement.Town;
+			int num = town.FoodStocksUpperLimit();
+			town.FoodStocks = _savedFoodStocks;
+			float num2 = (settlement.IsTown ? SeizeMarketFood(settlement) : 0f);
+			float num3 = ConvertProsperityToFood(town);
+			town.FoodStocks += num2 + num3;
+			if (town.FoodStocks > (float)num)
+			{
+				town.FoodStocks = num;
+			}
+			int num4 = (int)(town.FoodStocks - _savedFoodStocks);
+			if (num4 > 0)
+			{
+				RecordRebellionFood(settlement, num4);
+			}
+			bool flag = false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log($"RebellionFoodPatch ERROR for {settlement?.Name}: {ex.Message}");
+		}
+	}
+
+	private static float SeizeMarketFood(Settlement settlement)
+	{
+		float num = 0f;
+		ItemRoster itemRoster = settlement.ItemRoster;
+		for (int num2 = itemRoster.Count - 1; num2 >= 0; num2--)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num2);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0)
+			{
+				if ((item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores) || item.IsFood)
+				{
+					num += (float)elementCopyAtIndex.Amount;
+					itemRoster.AddToCounts(item, -elementCopyAtIndex.Amount);
+				}
+				else
+				{
+					int slaughterMeatValue = GetSlaughterMeatValue(item);
+					if (slaughterMeatValue > 0)
+					{
+						num += (float)(elementCopyAtIndex.Amount * slaughterMeatValue);
+						itemRoster.AddToCounts(item, -elementCopyAtIndex.Amount);
+					}
+				}
+			}
+		}
+		return num;
+	}
+
+	private static float ConvertProsperityToFood(Town town)
+	{
+		float num = town.Prosperity * 0.3f;
+		if (num <= 0f)
+		{
+			return 0f;
+		}
+		town.Prosperity -= num;
+		if (town.Prosperity < 0f)
+		{
+			town.Prosperity = 0f;
+		}
+		return num * 0.5f;
+	}
+
+	private static int GetSlaughterMeatValue(ItemObject item)
+	{
+		if (item == null)
+		{
+			return 0;
+		}
+		switch (item.StringId)
+		{
+		case "cow":
+			return 4;
+		case "sheep":
+			return 2;
+		case "hog":
+			return 2;
+		case "chicken_product":
+			return 1;
+		case "goose_product":
+			return 1;
+		case "hare":
+			return 1;
+		default:
+			if (item.HasHorseComponent && item.ItemCategory != null && item.ItemCategory.StringId == "sumpter_horse")
+			{
+				return 3;
+			}
+			return 0;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\RemoveItemFromItemRosterPatch.cs =====
+using System;
+using System.Collections.Generic;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(PartyScreenLogic), "RemoveItemFromItemRoster")]
+public static class RemoveItemFromItemRosterPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(PartyScreenLogic __instance, ItemCategory itemCategory, int numOfItemsLeftToRemove, ref List<(EquipmentElement, int)> __result)
+	{
+		if (itemCategory == null || numOfItemsLeftToRemove <= 0)
+		{
+			__result = new List<(EquipmentElement, int)>();
+			return false;
+		}
+		PartyBase rightOwnerParty = __instance.RightOwnerParty;
+		if (rightOwnerParty?.ItemRoster == null)
+		{
+			__result = new List<(EquipmentElement, int)>();
+			return false;
+		}
+		List<(ItemRosterElement, int)> list = new List<(ItemRosterElement, int)>();
+		for (int i = 0; i < rightOwnerParty.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = rightOwnerParty.ItemRoster.GetElementCopyAtIndex(i);
+			ItemCategory itemCategory2 = elementCopyAtIndex.EquipmentElement.Item?.ItemCategory;
+			if (TroopUpgradeItemPatch.CategoriesMatch(itemCategory2, itemCategory))
+			{
+				list.Add((elementCopyAtIndex, i));
+			}
+		}
+		if (list.Count == 0)
+		{
+			__result = new List<(EquipmentElement, int)>();
+			return false;
+		}
+		list.Sort(((ItemRosterElement element, int index) a, (ItemRosterElement element, int index) b) => a.element.EquipmentElement.Item.Value.CompareTo(b.element.EquipmentElement.Item.Value));
+		__result = new List<(EquipmentElement, int)>();
+		int num = numOfItemsLeftToRemove;
+		foreach (var (itemRosterElement, num2) in list)
+		{
+			if (num <= 0)
+			{
+				break;
+			}
+			int num3 = Math.Min(num, itemRosterElement.Amount);
+			rightOwnerParty.ItemRoster.AddToCounts(itemRosterElement.EquipmentElement, -num3);
+			__result.Add((itemRosterElement.EquipmentElement, num3));
+			num -= num3;
+		}
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\ReplaceSlaughteredMeatPatch.cs =====
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Inventory;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(InventoryLogic), "SlaughterItem")]
+public class ReplaceSlaughteredMeatPatch
+{
+	internal static bool _batching = false;
+
+	internal static bool _skipStateUpdate = false;
+
+	internal static readonly List<TransferCommandResult> _batchTransferResults = new List<TransferCommandResult>();
+
+	private static readonly Dictionary<string, int> _batchAnimals = new Dictionary<string, int>();
+
+	private static readonly Dictionary<string, int> _batchMeat = new Dictionary<string, int>();
+
+	private static readonly Dictionary<string, int> _batchHides = new Dictionary<string, int>();
+
+	private static int _batchTotalHides;
+
+	private static void AccumulateBatch(string animalName, string meatName, int meatCount, string hideName, int hideCount)
+	{
+		if (_batchAnimals.ContainsKey(animalName))
+		{
+			_batchAnimals[animalName]++;
+		}
+		else
+		{
+			_batchAnimals[animalName] = 1;
+		}
+		if (_batchMeat.ContainsKey(meatName))
+		{
+			_batchMeat[meatName] += meatCount;
+		}
+		else
+		{
+			_batchMeat[meatName] = meatCount;
+		}
+		if (hideCount > 0 && hideName != null)
+		{
+			if (_batchHides.ContainsKey(hideName))
+			{
+				_batchHides[hideName] += hideCount;
+			}
+			else
+			{
+				_batchHides[hideName] = hideCount;
+			}
+			_batchTotalHides += hideCount;
+		}
+	}
+
+	internal static void FlushBatch()
+	{
+		if (_batchAnimals.Count == 0)
+		{
+			return;
+		}
+		Color color = Color.ConvertStringToColor("#CD5C5CFF");
+		List<string> list = new List<string>();
+		foreach (KeyValuePair<string, int> batchAnimal in _batchAnimals)
+		{
+			lis

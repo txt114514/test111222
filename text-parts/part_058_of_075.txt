@@ -1,0 +1,664 @@
+﻿PART 58/75
+on("melon_fruit", 10, 27, arg3, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("honey", 8, 30, arg2, 0.01f, arg6: false, ItemCategory.Property.BonusToProsperity);
+			action("milk", 18, 0, arg2, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("heavy_cream", 10, 15, arg5, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("bread", 60, 5, arg2, 0.5f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("pie", 6, 80, arg2, 0.03f, arg6: false, ItemCategory.Property.BonusToLoyalty);
+			action("dough", 15, 5, arg2, 0.3f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("flour", 22, 5, arg2, 0.4f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("nuts", 10, 20, arg2, 0.05f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("stew", 15, 35, arg2, 0.1f, arg6: false, ItemCategory.Property.BonusToLoyalty);
+			action("egg", 18, 0, arg2, 0.1f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("mead", 10, 35, null, 0f, arg6: false, ItemCategory.Property.BonusToLoyalty);
+			action("ale", 23, 15, null, 0f, arg6: false, ItemCategory.Property.BonusToFoodStores);
+			action("cider", 12, 22, null, 0f, arg6: false, ItemCategory.Property.BonusToLoyalty);
+			action("small_hides", 30, 15, null, 0f, arg6: false, ItemCategory.Property.BonusToProsperity);
+			action("medium_hides", 30, 15, null, 0f, arg6: false, ItemCategory.Property.BonusToProsperity);
+			action("black_pepper", 6, 60, null, 0f, arg6: false, ItemCategory.Property.BonusToProsperity);
+			action("herbs", 22, 22, null, 0f, arg6: false, ItemCategory.Property.BonusToProsperity);
+			action("straw", 20, 15, null, 0f, arg6: false, ItemCategory.Property.BonusToLoyalty);
+			action("furniture", 25, 25, null, 0f, arg6: false, ItemCategory.Property.BonusToProsperity);
+			action("cut_stone", 15, 15, null, 0f, arg6: false, ItemCategory.Property.BonusToProsperity);
+			action("gold_ore", 0, 25, null, 0f, arg6: false, ItemCategory.Property.BonusToTax);
+			action("wool_carpet", 6, 44, null, 0f, arg6: false, ItemCategory.Property.BonusToProsperity);
+			action("linen_carpet", 22, 30, null, 0f, arg6: false, ItemCategory.Property.BonusToLoyalty);
+			action("charcoal", 48, 23, null, 0f, arg6: false, ItemCategory.Property.BonusToProsperity);
+			action("workshop_horse", 140, 0, null, 0f, arg6: true, ItemCategory.Property.BonusToProsperity);
+			action("workshop_war_horse", 120, 20, null, 0f, arg6: true, ItemCategory.Property.BonusToGarrison);
+			Main.Log("Custom ItemCategories successfully registered.");
+		}
+		catch (Exception arg6)
+		{
+			Main.Log($"ERROR in DefaultItemCategories patch: {arg6}");
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\DeserterSpawnCapPatch.cs =====
+using HarmonyLib;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultBanditDensityModel), "GetMaxSupportedNumberOfLootersForClan")]
+public static class DeserterSpawnCapPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(Clan clan, ref int __result)
+	{
+		if (!(clan?.StringId != "deserters"))
+		{
+			float num = GlobalSettings<HAPSettings>.Instance?.DeserterSpawnMultiplier ?? 2f;
+			__result = MathF.Round((float)__result * num);
+			if (num > 0f && __result < 1)
+			{
+				__result = 1;
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\DiscardItemsBugfixPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+public static class DiscardItemsBugfixPatch
+{
+	private struct DiscardCandidate
+	{
+		public EquipmentElement Equipment;
+
+		public int Amount;
+
+		public int Priority;
+
+		public int Value;
+
+		public bool CamelOutOfRegion;
+	}
+
+	private static bool _patchApplied;
+
+	private const int PRIORITY_LIVESTOCK = 0;
+
+	private const int PRIORITY_PACK_ANIMAL = 1;
+
+	private const int PRIORITY_MOUNT_HORSE = 2;
+
+	private const int PRIORITY_MOUNT_WAR_HORSE = 3;
+
+	private const int PRIORITY_MOUNT_NOBLE_HORSE = 4;
+
+	public static void ApplyPatch(Harmony harmony)
+	{
+		if (_patchApplied)
+		{
+			return;
+		}
+		_patchApplied = true;
+		try
+		{
+			MethodInfo methodInfo = AccessTools.Method(typeof(DiscardItemsCampaignBehavior), "DiscardOverburdeningItemsForParty");
+			if (methodInfo != null)
+			{
+				harmony.Patch(methodInfo, new HarmonyMethod(AccessTools.Method(typeof(DiscardItemsBugfixPatch), "DiscardOverburdeningItemsForParty_Prefix")));
+			}
+			else
+			{
+				Main.Log("[DiscardFix] WARNING: Could not find DiscardOverburdeningItemsForParty");
+			}
+			MethodInfo methodInfo2 = AccessTools.Method(typeof(DiscardItemsCampaignBehavior), "DiscardAnimalsCausingHerdingPenalty");
+			if (methodInfo2 != null)
+			{
+				harmony.Patch(methodInfo2, new HarmonyMethod(AccessTools.Method(typeof(DiscardItemsBugfixPatch), "DiscardAnimalsCausingHerdingPenalty_Prefix")));
+			}
+			else
+			{
+				Main.Log("[DiscardFix] WARNING: Could not find DiscardAnimalsCausingHerdingPenalty");
+			}
+			Main.Log("[DiscardFix] Discard behavior bugfix patches applied");
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[DiscardFix] ERROR applying patches: " + ex.Message);
+		}
+	}
+
+	public static bool DiscardOverburdeningItemsForParty_Prefix(MobileParty mobileParty, float totalWeightToDiscard)
+	{
+		try
+		{
+			int num = (int)(mobileParty.FoodChange * -20f);
+			float weightLeft = totalWeightToDiscard;
+			int num2 = mobileParty.ItemRoster.Count - 1;
+			while (num2 >= 0 && !(weightLeft <= 0f))
+			{
+				ItemRosterElement element = mobileParty.ItemRoster[num2];
+				ItemObject item = element.EquipmentElement.Item;
+				if (item != null && element.Amount > 0)
+				{
+					float itemEffectiveWeight = Campaign.Current.Models.InventoryCapacityModel.GetItemEffectiveWeight(element.EquipmentElement, mobileParty, mobileParty.IsCurrentlyAtSea, out var _);
+					if (!(itemEffectiveWeight <= 0f))
+					{
+						if (num > 0 && item.IsFood)
+						{
+							if (element.Amount > num)
+							{
+								int discardLimit = element.Amount - num;
+								num = 0;
+								DiscardByWeight(mobileParty, element, ref weightLeft, discardLimit);
+							}
+							else
+							{
+								num -= element.Amount;
+							}
+						}
+						else
+						{
+							DiscardByWeight(mobileParty, element, ref weightLeft, int.MaxValue);
+						}
+					}
+				}
+				num2--;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[DiscardFix] ERROR in DiscardOverburdeningItemsForParty: " + ex.Message);
+		}
+		return false;
+	}
+
+	private static void DiscardByWeight(MobileParty mobileParty, ItemRosterElement element, ref float weightLeft, int discardLimit)
+	{
+		float itemEffectiveWeight = Campaign.Current.Models.InventoryCapacityModel.GetItemEffectiveWeight(element.EquipmentElement, mobileParty, mobileParty.IsCurrentlyAtSea, out var _);
+		if (!(itemEffectiveWeight <= 0f))
+		{
+			float num = itemEffectiveWeight * (float)element.Amount;
+			int num2 = MBMath.ClampInt((num <= weightLeft) ? element.Amount : MathF.Ceiling(weightLeft / itemEffectiveWeight), 0, discardLimit);
+			if (num2 > 0)
+			{
+				weightLeft -= itemEffectiveWeight * (float)num2;
+				mobileParty.ItemRoster.AddToCounts(element.EquipmentElement, -num2);
+			}
+		}
+	}
+
+	public static bool DiscardAnimalsCausingHerdingPenalty_Prefix(MobileParty mobileParty, int amount)
+	{
+		try
+		{
+			if (amount <= 0)
+			{
+				return false;
+			}
+			bool flag = IsCamelFriendlyLocation(mobileParty);
+			List<DiscardCandidate> list = new List<DiscardCandidate>();
+			for (int i = 0; i < mobileParty.ItemRoster.Count; i++)
+			{
+				ItemRosterElement itemRosterElement = mobileParty.ItemRoster[i];
+				ItemObject item = itemRosterElement.EquipmentElement.Item;
+				if (item != null && itemRosterElement.Amount > 0)
+				{
+					int discardPriority = GetDiscardPriority(item);
+					if (discardPriority >= 0)
+					{
+						bool camelOutOfRegion = !flag && IsCamelItem(item);
+						list.Add(new DiscardCandidate
+						{
+							Equipment = itemRosterElement.EquipmentElement,
+							Amount = itemRosterElement.Amount,
+							Priority = discardPriority,
+							Value = item.Value,
+							CamelOutOfRegion = camelOutOfRegion
+						});
+					}
+				}
+			}
+			if (list.Count == 0)
+			{
+				return false;
+			}
+			list.Sort(delegate(DiscardCandidate a, DiscardCandidate b)
+			{
+				int num4 = a.Priority.CompareTo(b.Priority);
+				if (num4 != 0)
+				{
+					return num4;
+				}
+				return (a.CamelOutOfRegion != b.CamelOutOfRegion) ? ((!a.CamelOutOfRegion) ? 1 : (-1)) : a.Value.CompareTo(b.Value);
+			});
+			int num = amount;
+			foreach (DiscardCandidate item3 in list)
+			{
+				if (num <= 0)
+				{
+					break;
+				}
+				int val = 0;
+				for (int num2 = 0; num2 < mobileParty.ItemRoster.Count; num2++)
+				{
+					ItemRosterElement itemRosterElement2 = mobileParty.ItemRoster[num2];
+					ItemObject item2 = itemRosterElement2.EquipmentElement.Item;
+					EquipmentElement equipment = item3.Equipment;
+					if (item2 == equipment.Item)
+					{
+						ItemModifier itemModifier = itemRosterElement2.EquipmentElement.ItemModifier;
+						equipment = item3.Equipment;
+						if (itemModifier == equipment.ItemModifier)
+						{
+							val = itemRosterElement2.Amount;
+							break;
+						}
+					}
+				}
+				int num3 = Math.Min(val, num);
+				if (num3 > 0)
+				{
+					mobileParty.ItemRoster.AddToCounts(item3.Equipment, -num3);
+					num -= num3;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[DiscardFix] ERROR in DiscardAnimalsCausingHerdingPenalty: " + ex.Message);
+		}
+		return false;
+	}
+
+	private static int GetDiscardPriority(ItemObject item)
+	{
+		if (item.Type == ItemObject.ItemTypeEnum.Animal)
+		{
+			return 0;
+		}
+		if (!item.HasHorseComponent)
+		{
+			return -1;
+		}
+		if (item.HorseComponent.IsPackAnimal)
+		{
+			return 1;
+		}
+		if (item.HorseComponent.IsMount)
+		{
+			string text = item.ItemCategory?.StringId;
+			if (text == null)
+			{
+				return 2;
+			}
+			switch (text)
+			{
+			case "horse":
+			case "workshop_horse":
+				return 2;
+			case "war_horse":
+			case "workshop_war_horse":
+				return 3;
+			case "noble_horse":
+				return 4;
+			default:
+				return 2;
+			}
+		}
+		if (item.HorseComponent.IsLiveStock)
+		{
+			return 0;
+		}
+		return -1;
+	}
+
+	private static bool IsCamelItem(ItemObject item)
+	{
+		if (item == null || item.StringId == null)
+		{
+			return false;
+		}
+		return item.StringId.IndexOf("camel", StringComparison.OrdinalIgnoreCase) >= 0;
+	}
+
+	private static bool IsCamelFriendlyLocation(MobileParty party)
+	{
+		try
+		{
+			if (party == null || Campaign.Current?.MapSceneWrapper == null)
+			{
+				return false;
+			}
+			Vec2 getPosition2D = party.GetPosition2D;
+			PathFaceRecord faceIndex = Campaign.Current.MapSceneWrapper.GetFaceIndex(new CampaignVec2(getPosition2D, isOnLand: true));
+			TerrainType faceTerrainType = Campaign.Current.MapSceneWrapper.GetFaceTerrainType(faceIndex);
+			if (faceTerrainType == TerrainType.Desert || faceTerrainType == TerrainType.Dune)
+			{
+				return true;
+			}
+			float num = Campaign.Current.MapSceneWrapper.GetTerrainSize().Y;
+			if (num <= 0f)
+			{
+				num = 1f;
+			}
+			float num2 = getPosition2D.Y / num;
+			if (num2 < 0.32f)
+			{
+				return true;
+			}
+			return false;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\DoesPartyHaveRequiredItemsPatch.cs =====
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultPartyTroopUpgradeModel), "DoesPartyHaveRequiredItemsForUpgrade")]
+public static class DoesPartyHaveRequiredItemsPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(PartyBase party, CharacterObject upgradeTarget, ref bool __result)
+	{
+		ItemCategory itemCategory = upgradeTarget?.UpgradeRequiresItemFromCategory;
+		if (itemCategory == null)
+		{
+			__result = true;
+			return false;
+		}
+		int num = 0;
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemRosterElement itemRosterElement = party.ItemRoster[i];
+			ItemCategory itemCategory2 = itemRosterElement.EquipmentElement.Item?.ItemCategory;
+			if (TroopUpgradeItemPatch.CategoriesMatch(itemCategory2, itemCategory))
+			{
+				num += itemRosterElement.Amount;
+			}
+		}
+		__result = num > 0;
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\EmptySettlementEncounterPatch.cs =====
+using System;
+using System.Collections.Generic;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.Encounters;
+using TaleWorlds.CampaignSystem.GameMenus;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Party.PartyComponents;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Siege;
+using TaleWorlds.Core;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(EncounterManager), "StartSettlementEncounter")]
+public static class EmptySettlementEncounterPatch
+{
+	private const bool DEBUG_GUARD = false;
+
+	internal static bool _reentrant;
+
+	[HarmonyPrefix]
+	public static bool Prefix(MobileParty attackerParty, Settlement settlement)
+	{
+		try
+		{
+			if (_reentrant)
+			{
+				return true;
+			}
+			SiegeEvent siegeEvent = settlement?.SiegeEvent;
+			if (siegeEvent == null)
+			{
+				return true;
+			}
+			if (siegeEvent.BesiegerCamp?.LeaderParty != attackerParty)
+			{
+				return true;
+			}
+			if (settlement.MapFaction == attackerParty.MapFaction)
+			{
+				return true;
+			}
+			int num = 0;
+			MobileParty mobileParty = settlement.Town?.GarrisonParty;
+			if (mobileParty != null)
+			{
+				num += mobileParty.MemberRoster.TotalHealthyCount;
+			}
+			if (settlement.Militia >= 1f)
+			{
+				num += (int)settlement.Militia;
+			}
+			foreach (MobileParty party in settlement.Parties)
+			{
+				if (party.IsLordParty)
+				{
+					num += party.MemberRoster.TotalHealthyCount;
+				}
+			}
+			if (num > 0)
+			{
+				return true;
+			}
+			bool flag = false;
+			List<Hero> list = new List<Hero>();
+			foreach (MobileParty party2 in settlement.Parties)
+			{
+				if (party2.IsLordParty && party2.LeaderHero != null)
+				{
+					list.Add(party2.LeaderHero);
+				}
+			}
+			foreach (Hero item in list)
+			{
+				bool flag2 = false;
+				TakePrisonerAction.Apply(attackerParty.Party, item);
+			}
+			if (mobileParty != null && mobileParty.MemberRoster.TotalManCount > 0)
+			{
+				bool flag3 = false;
+				mobileParty.MemberRoster.Clear();
+			}
+			Hero hero = attackerParty.LeaderHero ?? attackerParty.ActualClan?.Leader;
+			if (hero == null)
+			{
+				Main.Log("[EmptySettlement] No valid owner found — falling through to vanilla.");
+				return true;
+			}
+			bool flag4 = PlayerSiege.PlayerSiegeEvent == siegeEvent && PlayerSiege.PlayerSide == BattleSideEnum.Attacker;
+			IFaction mapFaction = settlement.MapFaction;
+			Hero newOwner = hero.Clan?.Kingdom?.Leader ?? hero;
+			ChangeOwnerOfSettlementAction.ApplyBySiege(newOwner, hero, settlement);
+			if (settlement.SiegeEvent != null)
+			{
+				settlement.SiegeEvent.FinalizeSiegeEvent();
+			}
+			if (mapFaction != null)
+			{
+				foreach (WarPartyComponent warPartyComponent in mapFaction.WarPartyComponents)
+				{
+					MobileParty mobileParty2 = warPartyComponent.MobileParty;
+					if (mobileParty2.TargetSettlement == settlement && mobileParty2.CurrentSettlement != settlement)
+					{
+						mobileParty2.SetMoveModeHold();
+					}
+				}
+			}
+			if (settlement.Town != null)
+			{
+				settlement.Militia = Campaign.Current.Models.SettlementMilitiaModel.MilitiaToSpawnAfterSiege(settlement.Town);
+			}
+			if (attackerParty.Army != null)
+			{
+				foreach (MobileParty party3 in attackerParty.Army.Parties)
+				{
+					if (party3.CurrentSettlement != settlement)
+					{
+						EnterSettlementAction.ApplyForParty(party3, settlement);
+						party3.Ai.DisableForHours(5);
+					}
+				}
+			}
+			else
+			{
+				EnterSettlementAction.ApplyForParty(attackerParty, settlement);
+				attackerParty.Ai.DisableForHours(5);
+			}
+			if (flag4)
+			{
+				PlayerEncounter.Finish();
+				MobileParty attackerParty2 = ((MobileParty.MainParty.Army != null) ? MobileParty.MainParty.Army.LeaderParty : MobileParty.MainParty);
+				_reentrant = true;
+				try
+				{
+					EncounterManager.StartSettlementEncounter(attackerParty2, settlement);
+				}
+				finally
+				{
+					_reentrant = false;
+				}
+				MBTextManager.SetTextVariable("SETTLEMENT", settlement.EncyclopediaLinkWithName);
+				MBTextManager.SetTextVariable("FACTION", attackerParty.MapFaction.EncyclopediaLinkWithName);
+				GameMenu.SwitchToMenu("hap_empty_siege");
+			}
+			return false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[EmptySettlement] ERROR: " + ex.Message + "\n" + ex.StackTrace);
+			return true;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\EncyclopediaSettlementPageMixin.cs =====
+using System;
+using System.Reflection;
+using Bannerlord.UIExtenderEx.Attributes;
+using Bannerlord.UIExtenderEx.ViewModels;
+using HarvestAndProduction.ViewModels;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.CampaignSystem.ViewModelCollection.Encyclopedia.Pages;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[ViewModelMixin("Refresh")]
+internal class EncyclopediaSettlementPageMixin : BaseViewModelMixin<EncyclopediaSettlementPageVM>
+{
+	private static readonly FieldInfo _settlementField = typeof(EncyclopediaSettlementPageVM).GetField("_settlement", BindingFlags.Instance | BindingFlags.NonPublic);
+
+	private MBBindingList<EncyclopediaWorkshopItemVM> _workshopItems;
+
+	private string _workshopsText;
+
+	private bool _hasWorkshops;
+
+	[DataSourceProperty]
+	public MBBindingList<EncyclopediaWorkshopItemVM> WorkshopItems
+	{
+		get
+		{
+			return _workshopItems;
+		}
+		set
+		{
+			if (value != _workshopItems)
+			{
+				_workshopItems = value;
+				base.ViewModel.OnPropertyChangedWithValue(value, "WorkshopItems");
+			}
+		}
+	}
+
+	[DataSourceProperty]
+	public string WorkshopsText
+	{
+		get
+		{
+			return _workshopsText;
+		}
+		set
+		{
+			if (value != _workshopsText)
+			{
+				_workshopsText = value;
+				base.ViewModel.OnPropertyChangedWithValue(value, "WorkshopsText");
+			}
+		}
+	}
+
+	[DataSourceProperty]
+	public bool HasWorkshops
+	{
+		get
+		{
+			return _hasWorkshops;
+		}
+		set
+		{
+			if (value != _hasWorkshops)
+			{
+				_hasWorkshops = value;
+				base.ViewModel.OnPropertyChangedWithValue(value, "HasWorkshops");
+			}
+		}
+	}
+
+	public EncyclopediaSettlementPageMixin(EncyclopediaSettlementPageVM vm)
+		: base(vm)
+	{
+		_workshopItems = new MBBindingList<EncyclopediaWorkshopItemVM>();
+		_workshopsText = new TextObject("{=HAP_Workshops}Workshops").ToString();
+		_hasWorkshops = false;
+	}
+
+	public override void OnRefresh()
+	{
+		try
+		{
+			_workshopItems.Clear();
+			HasWorkshops = false;
+			if (_settlementField == null || 

@@ -1,0 +1,617 @@
+﻿PART 34/75
+n = TextObject.GetEmpty();
+		return true;
+	}
+
+	private bool supply_war_warning_condition(out TextObject explanation)
+	{
+		explanation = TextObject.GetEmpty();
+		ConversationPartyData conversationPartyData = GetConversationPartyData();
+		if (!conversationPartyData.IsValid)
+		{
+			return true;
+		}
+		Clan originalClan = conversationPartyData.OriginalClan;
+		if (originalClan == null || originalClan.MapFaction == null)
+		{
+			return true;
+		}
+		if (originalClan.MapFaction == Hero.MainHero.MapFaction)
+		{
+			return true;
+		}
+		if (!FactionManager.IsAtWarAgainstFaction(originalClan.MapFaction, Hero.MainHero.MapFaction))
+		{
+			explanation = new TextObject("{=1LlH1Jof}This action will start a war.");
+		}
+		return true;
+	}
+
+	private bool supply_take_goods_warning_condition(out TextObject explanation)
+	{
+		explanation = new TextObject("{=HAP_SupplyCrimeWarning}This will be considered a crime.");
+		return true;
+	}
+
+	private bool supply_enemy_has_goods_on_condition(out TextObject explanation)
+	{
+		MobileParty conversationParty = MobileParty.ConversationParty;
+		if (conversationParty?.ItemRoster == null || conversationParty.ItemRoster.Count == 0)
+		{
+			bool flag = NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(conversationParty);
+			explanation = (flag ? new TextObject("{=HAP_NavalConvoyNoGoods}This convoy has no goods left.") : new TextObject("{=HAP_SupplyNoGoods}This caravan has no goods left."));
+			return false;
+		}
+		explanation = TextObject.GetEmpty();
+		return true;
+	}
+
+	private void supply_talk_leave_on_consequence()
+	{
+		PlayerEncounter.LeaveEncounter = true;
+	}
+
+	private void supply_defending_leave_on_consequence()
+	{
+		MobileParty conversationParty = MobileParty.ConversationParty;
+		if (conversationParty != null)
+		{
+			TownSupplyLinePartyComponent component = TownSupplyLinePartyComponent.GetComponent(conversationParty);
+			if (component != null && component.HomeTown != null)
+			{
+				component.SetDefendTown();
+			}
+		}
+		PlayerEncounter.LeaveEncounter = true;
+	}
+
+	private void supply_defending_friendly_help_on_consequence()
+	{
+		MobileParty conversationParty = MobileParty.ConversationParty;
+		if (conversationParty != null)
+		{
+			TownSupplyLinePartyComponent component = TownSupplyLinePartyComponent.GetComponent(conversationParty);
+			if (component != null && component.HomeTown != null)
+			{
+				component.SetDefendTown();
+			}
+		}
+		PlayerEncounter.LeaveEncounter = true;
+	}
+
+	private void supply_attack_on_consequence()
+	{
+		SetSupplyInteraction(MobileParty.ConversationParty, 2);
+		BeHostileAction.ApplyEncounterHostileAction(PartyBase.MainParty, MobileParty.ConversationParty.Party);
+	}
+
+	private void supply_goods_taken_on_consequence()
+	{
+		try
+		{
+			MobileParty conversationParty = MobileParty.ConversationParty;
+			if (conversationParty == null)
+			{
+				PlayerEncounter.LeaveEncounter = true;
+				return;
+			}
+			ItemRoster itemRoster = new ItemRoster(conversationParty.ItemRoster);
+			BeHostileAction.ApplyMajorCoercionHostileAction(PartyBase.MainParty, conversationParty.Party);
+			ConversationPartyData conversationPartyData = GetConversationPartyData();
+			if (conversationPartyData.PartyOwner != null && conversationPartyData.OriginalClan != Clan.PlayerClan)
+			{
+				ChangeRelationAction.ApplyPlayerRelation(conversationPartyData.PartyOwner, -5);
+			}
+			conversationParty.ItemRoster.Clear();
+			SkillLevelingManager.OnLoot(MobileParty.MainParty, conversationParty, itemRoster, attacked: false);
+			SetSupplyInteraction(conversationParty, 2);
+			if (itemRoster.Count > 0)
+			{
+				InventoryScreenHelper.OpenScreenAsLoot(new Dictionary<PartyBase, ItemRoster> { 
+				{
+					PartyBase.MainParty,
+					itemRoster
+				} });
+			}
+			else
+			{
+				PlayerEncounter.LeaveEncounter = true;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in supply_goods_taken_on_consequence: " + ex.Message);
+			PlayerEncounter.LeaveEncounter = true;
+		}
+	}
+
+	private void supply_enemy_goods_taken_on_consequence()
+	{
+		try
+		{
+			MobileParty conversationParty = MobileParty.ConversationParty;
+			if (conversationParty == null)
+			{
+				PlayerEncounter.LeaveEncounter = true;
+				return;
+			}
+			ItemRoster itemRoster = new ItemRoster(conversationParty.ItemRoster);
+			conversationParty.ItemRoster.Clear();
+			SkillLevelingManager.OnLoot(MobileParty.MainParty, conversationParty, itemRoster, attacked: false);
+			if (itemRoster.Count > 0)
+			{
+				InventoryScreenHelper.OpenScreenAsLoot(new Dictionary<PartyBase, ItemRoster> { 
+				{
+					PartyBase.MainParty,
+					itemRoster
+				} });
+			}
+			else
+			{
+				PlayerEncounter.LeaveEncounter = true;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in supply_enemy_goods_taken_on_consequence: " + ex.Message);
+			PlayerEncounter.LeaveEncounter = true;
+		}
+	}
+
+	private void supply_take_prisoner_on_consequence()
+	{
+		try
+		{
+			MobileParty conversationParty = MobileParty.ConversationParty;
+			if (conversationParty == null)
+			{
+				PlayerEncounter.LeaveEncounter = true;
+				return;
+			}
+			SetSupplyInteraction(conversationParty, 2);
+			BeHostileAction.ApplyEncounterHostileAction(PartyBase.MainParty, conversationParty.Party);
+			if (PlayerEncounter.Battle == null)
+			{
+				PlayerEncounter.StartBattle();
+			}
+			PlayerEncounter.Battle.SetOverrideWinner(PlayerEncounter.Battle.PlayerSide);
+			PlayerEncounter.EnemySurrender = true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in supply_take_prisoner_on_consequence: " + ex.Message);
+			PlayerEncounter.LeaveEncounter = true;
+		}
+	}
+
+	private void SetLinkVariables(TownSupplyLinePartyComponent component)
+	{
+		TextObject text = ((component.HomeTown != null) ? component.HomeTown.EncyclopediaLinkWithName : new TextObject("{=HAP_SupplyFallbackHome}their town"));
+		TextObject text2 = ((component.DestinationTown != null) ? component.DestinationTown.EncyclopediaLinkWithName : new TextObject("{=HAP_SupplyFallbackDest}another town"));
+		MBTextManager.SetTextVariable("HOME_LINK", text);
+		MBTextManager.SetTextVariable("DEST_LINK", text2);
+		IFaction faction = component.OriginalClan?.MapFaction;
+		MBTextManager.SetTextVariable("FACTION_NAME", (faction != null) ? faction.Name : new TextObject("{=HAP_SupplyFallbackFaction}their realm"));
+	}
+
+	private void SetFleeTargetVariable(TownSupplyLinePartyComponent component)
+	{
+		TextObject text = ((component.DestinationTown != null) ? component.DestinationTown.EncyclopediaLinkWithName : new TextObject("{=HAP_SupplyFallbackFlee}a safe place"));
+		MBTextManager.SetTextVariable("FLEE_TARGET", text);
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\VillageProductionControlBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarvestAndProduction.Models;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class VillageProductionControlBehavior : CampaignBehaviorBase
+{
+	private static bool _productionsControlled = false;
+
+	private static readonly HashSet<string> _itemsToRemove = new HashSet<string>
+	{
+		"grain", "butter", "cheese", "cow", "sheep", "hog", "fish", "wool", "hardwood", "clay",
+		"salt", "iron", "silver", "fur", "walrus_tusk", "whale_oil", "grape", "date_fruit", "olives", "flax",
+		"cotton", "empire_horse", "t2_empire_horse", "t3_empire_horse", "vlandia_horse", "t2_vlandia_horse", "t3_vlandia_horse", "battania_horse", "t2_battania_horse", "t3_battania_horse",
+		"sturgia_horse", "t2_sturgia_horse", "t3_sturgia_horse", "khuzait_horse", "t2_khuzait_horse", "t3_khuzait_horse", "aserai_horse", "t2_aserai_horse", "t3_aserai_horse", "camel",
+		"war_camel", "pack_camel", "sumpter_horse", "mule", "saddle_horse", "old_horse", "hunter", "charger"
+	};
+
+	private static readonly Dictionary<string, Dictionary<string, float>> _ourProductions = new Dictionary<string, Dictionary<string, float>>
+	{
+		["wheat_farm"] = new Dictionary<string, float> { ["grain"] = 26.2f },
+		["fisherman"] = new Dictionary<string, float> { ["fish"] = 28f },
+		["cattle_farm"] = new Dictionary<string, float>
+		{
+			["cow"] = 4f,
+			["butter"] = 6f,
+			["cheese"] = 6f
+		},
+		["sheep_farm"] = new Dictionary<string, float>
+		{
+			["sheep"] = 4.6f,
+			["wool"] = 2f,
+			["butter"] = 2.5f,
+			["cheese"] = 2.5f
+		},
+		["swine_farm"] = new Dictionary<string, float> { ["hog"] = 6f },
+		["lumberjack"] = new Dictionary<string, float> { ["hardwood"] = 18.2f },
+		["clay_mine"] = new Dictionary<string, float> { ["clay"] = 5.6f },
+		["salt_mine"] = new Dictionary<string, float> { ["salt"] = 18f },
+		["iron_mine"] = new Dictionary<string, float> { ["iron"] = 9.6f },
+		["silver_mine"] = new Dictionary<string, float> { ["silver"] = 2.4f },
+		["trapper"] = new Dictionary<string, float> { ["fur"] = 1.7f },
+		["walrus_hunter"] = new Dictionary<string, float>
+		{
+			["walrus_tusk"] = 1.7f,
+			["fish"] = 6f
+		},
+		["whaler"] = new Dictionary<string, float>
+		{
+			["whale_oil"] = 2.2f,
+			["fish"] = 6f
+		},
+		["vineyard"] = new Dictionary<string, float> { ["grape"] = 13.6f },
+		["flax_plant"] = new Dictionary<string, float> { ["flax"] = 14.4f },
+		["date_farm"] = new Dictionary<string, float> { ["date_fruit"] = 12f },
+		["olive_trees"] = new Dictionary<string, float> { ["olives"] = 14f },
+		["silk_plant"] = new Dictionary<string, float> { ["cotton"] = 9.6f },
+		["europe_horse_ranch"] = new Dictionary<string, float>
+		{
+			["empire_horse"] = 3.6f,
+			["t2_empire_horse"] = 0.4f,
+			["t3_empire_horse"] = 0.08f,
+			["sumpter_horse"] = 1.2f,
+			["mule"] = 1.8f,
+			["saddle_horse"] = 1.2f,
+			["old_horse"] = 1.2f
+		},
+		["vlandian_horse_ranch"] = new Dictionary<string, float>
+		{
+			["vlandia_horse"] = 3.6f,
+			["t2_vlandia_horse"] = 0.4f,
+			["t3_vlandia_horse"] = 0.08f,
+			["sumpter_horse"] = 1.2f,
+			["mule"] = 1.8f,
+			["saddle_horse"] = 1.2f,
+			["old_horse"] = 1.2f
+		},
+		["battanian_horse_ranch"] = new Dictionary<string, float>
+		{
+			["battania_horse"] = 3.2f,
+			["t2_battania_horse"] = 0.25f,
+			["t3_battania_horse"] = 0.04f,
+			["sumpter_horse"] = 0.8f,
+			["mule"] = 1.8f,
+			["saddle_horse"] = 1.2f,
+			["old_horse"] = 1.2f
+		},
+		["sturgian_horse_ranch"] = new Dictionary<string, float>
+		{
+			["sturgia_horse"] = 3.3f,
+			["t2_sturgia_horse"] = 0.25f,
+			["t3_sturgia_horse"] = 0.05f,
+			["sumpter_horse"] = 0.8f,
+			["mule"] = 1.8f,
+			["saddle_horse"] = 1.2f,
+			["old_horse"] = 1.2f
+		},
+		["steppe_horse_ranch"] = new Dictionary<string, float>
+		{
+			["khuzait_horse"] = 3.2f,
+			["t2_khuzait_horse"] = 0.4f,
+			["t3_khuzait_horse"] = 0.09f,
+			["sumpter_horse"] = 1.2f,
+			["mule"] = 0.8f
+		},
+		["desert_horse_ranch"] = new Dictionary<string, float>
+		{
+			["aserai_horse"] = 3f,
+			["t2_aserai_horse"] = 0.5f,
+			["t3_aserai_horse"] = 0.08f,
+			["camel"] = 1f,
+			["war_camel"] = 0.1f,
+			["pack_camel"] = 1.8f,
+			["sumpter_horse"] = 0.6f,
+			["mule"] = 1.6f
+		}
+	};
+
+	private static readonly Dictionary<SecondaryProductionType, Dictionary<string, float>> _secondaryBaseAmounts = new Dictionary<SecondaryProductionType, Dictionary<string, float>>
+	{
+		[SecondaryProductionType.Livestock] = new Dictionary<string, float>
+		{
+			["cow"] = 0.4f,
+			["sheep"] = 0.5f,
+			["hog"] = 0.6f,
+			["wool"] = 0.25f,
+			["butter"] = 1f,
+			["cheese"] = 1f
+		},
+		[SecondaryProductionType.Farmland] = new Dictionary<string, float> { ["grain"] = 6.3f },
+		[SecondaryProductionType.Forester] = new Dictionary<string, float> { ["hardwood"] = 3.2f },
+		[SecondaryProductionType.Paddock] = new Dictionary<string, float>
+		{
+			["sumpter_horse"] = 0.6f,
+			["mule"] = 0.8f,
+			["saddle_horse"] = 0.3f,
+			["old_horse"] = 0.3f,
+			["pack_camel"] = 0.6f
+		}
+	};
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+		CampaignEvents.OnGameLoadedEvent.AddNonSerializedListener(this, OnGameLoaded);
+		CampaignEvents.OnNewGameCreatedEvent.AddNonSerializedListener(this, OnNewGameCreated);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		ControlVillageProductions();
+		VillageProductionModel.PreWarmClimateCaches();
+	}
+
+	private void OnGameLoaded(CampaignGameStarter starter)
+	{
+		ControlVillageProductions();
+	}
+
+	private void OnNewGameCreated(CampaignGameStarter starter)
+	{
+		ControlVillageProductions();
+	}
+
+	private void ControlVillageProductions()
+	{
+		if (_productionsControlled)
+		{
+			Main.Log("Village productions already controlled, skipping...");
+			return;
+		}
+		try
+		{
+			Main.Log("=================================================");
+			Main.Log("VillageProductionControlBehavior: Taking control of ALL native productions");
+			Main.Log("Removing vanilla assignments and adding controlled amounts...");
+			Main.Log("=================================================");
+			if (Game.Current == null || Game.Current.ObjectManager == null)
+			{
+				Main.Log("ERROR: Game.Current not available yet!");
+				return;
+			}
+			int num = 0;
+			int num2 = 0;
+			FieldInfo field = typeof(VillageType).GetField("_productions", BindingFlags.Instance | BindingFlags.NonPublic);
+			if (field == null)
+			{
+				Main.Log("ERROR: Could not access VillageType._productions field!");
+				return;
+			}
+			foreach (VillageType item in VillageType.All)
+			{
+				string stringId = item.StringId;
+				if (!(field.GetValue(item) is MBList<(ItemObject, float)> mBList))
+				{
+					continue;
+				}
+				List<(ItemObject, float)> list = new List<(ItemObject, float)>();
+				foreach (var item2 in mBList)
+				{
+					if (item2.Item1 != null && _itemsToRemove.Contains(item2.Item1.StringId))
+					{
+						list.Add(item2);
+					}
+				}
+				foreach (var item3 in list)
+				{
+					mBList.Remove(item3);
+					num++;
+				}
+				foreach (KeyValuePair<SecondaryProductionType, Dictionary<string, float>> secondaryBaseAmount in _secondaryBaseAmounts)
+				{
+					Dictionary<string, float> value = secondaryBaseAmount.Value;
+					foreach (KeyValuePair<string, float> item4 in value)
+					{
+						string key = item4.Key;
+						float value2 = item4.Value;
+						ItemObject itemObject = Game.Current.ObjectManager.GetObject<ItemObject>(key);
+						if (itemObject == null)
+						{
+							continue;
+						}
+						bool flag = false;
+						foreach (var item5 in mBList)
+						{
+							if (item5.Item1 == itemObject)
+							{
+								flag = true;
+								break;
+							}
+						}
+						if (!flag)
+						{
+							mBList.Add((itemObject, value2));
+							num2++;
+						}
+					}
+				}
+				if (!_ourProductions.ContainsKey(stringId))
+				{
+					continue;
+				}
+				Main.LogVerbose("  Configuring " + stringId + " (primary productions):");
+				Dictionary<string, float> dictionary = _ourProductions[stringId];
+				foreach (KeyValuePair<string, float> item6 in dictionary)
+				{
+					string key2 = item6.Key;
+					float value3 = item6.Value;
+					ItemObject itemObject2 = Game.Current.ObjectManager.GetObject<ItemObject>(key2);
+					if (itemObject2 != null)
+					{
+						bool flag2 = false;
+						for (int i = 0; i < mBList.Count; i++)
+						{
+							if (mBList[i].Item1 == itemObject2)
+							{
+								mBList[i] = (itemObject2, value3);
+								Main.LogVerbose($"    + {key2} ({value3}) [primary - overrides fallback]");
+								flag2 = true;
+								break;
+							}
+						}
+						if (!flag2)
+						{
+							mBList.Add((itemObject2, value3));
+							Main.LogVerbose($"    + {key2} ({value3}) [primary]");
+							num2++;
+						}
+					}
+					else
+					{
+						Main.Log("    WARNING: Item '" + key2 + "' not found!");
+					}
+				}
+			}
+			Main.Log("=================================================");
+			Main.Log($"Production control complete: {num} removed, {num2} added");
+			Main.Log("=================================================");
+			_productionsControlled = true;
+		}
+		catch (Exception arg)
+		{
+			Main.Log($"ERROR in VillageProductionControlBehavior: {arg}");
+		}
+	}
+
+	public static void ResetControl()
+	{
+		_productionsControlled = false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\VillageRaidImpactBehavior.cs =====
+using System;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class VillageRaidImpactBehavior : CampaignBehaviorBase
+{
+	private const float MINIMUM_HEARTH = 10f;
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.VillageLooted.AddNonSerializedListener(this, OnVillageLooted);
+		CampaignEvents.ForceVolunteersCompletedEvent.AddNonSerializedListener(this, OnForceVolunteersCompleted);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+	}
+
+	private void OnVillageLooted(Village village)
+	{
+		if (village != null)
+		{
+			village.Hearth = 10f;
+		}
+	}
+
+	private void OnForceVolunteersCompleted(BattleSideEnum winnerSide, ForceVolunteersEventComponent forceVolunteersEvent)
+	{
+		if (winnerSide == BattleSideEnum.Attacker)
+		{
+			Village village = (forceVolunteersEvent?.MapEvent?.MapEventSettlement)?.Village;
+			if (village != null)
+			{
+				int num = (int)Math.Ceiling((double)village.Hearth / 28.0);
+				float num2 = num / 2;
+				village.Hearth = Math.Max(village.Hearth - num2, 10f);
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\VillagerPartyDialogueBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using HarvestAndProduction.PartyComponents;
+using Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.Encounters;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class VillagerPartyDialogueBehavior : CampaignBehaviorBase
+{
+	private int _cachedBribeGold = 0;
+
+	private ItemRoster _cachedBribeItems = null;
+
+	private ItemRoster _stashedPackAnimals = null;
+
+	private const int INTERACTION_NONE = 0;
+
+	private const int INTERACTION_FRIENDLY = 1;
+
+	private const int INTERACTION_HOSTILE = 2;
+
+	private Dictionary<MobileParty, int> _interactedVillagers = new Dictionary<MobileParty, int>();
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+		CampaignEvents.MobilePartyDestroyed.AddNonSerializedListener(this, OnMobilePartyDestroyed);
+	}
+
+	private void OnMobilePartyDestroyed(MobileParty party, PartyBase destroyer)
+	{
+		_interactedVillagers.Remove(party);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		_interactedVillagers.Clear();
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		AddDialogues(starter);
+	}
+
+	private void AddDialogues(CampaignGameStarter starter)
+	{
+		starter.AddDialogLine("villager_friendly_start_criminal", "start", "villager_friendly_talk", "{=HAP_VillagerGreetCriminal}You... we've heard about you. Please, {PLAYER_ADDRESS}, we're just villagers from {SETTLEMENT_NAME}. We want no trouble.[rf:idle_angry][ib:nervous]", villager_criminal_first_encounter_condition, null, 111);
+		starter.AddDialogLine("villager_friendly_start_has_goods", "start", "villager_friendly_talk", "{=HAP_V

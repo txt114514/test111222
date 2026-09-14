@@ -1,0 +1,704 @@
+﻿PART 19/75
+ct textObject = ((num4 == 1) ? new TextObject("{=HAP_EggsSingular}{COUNT} basket of eggs") : new TextObject("{=HAP_EggsPlural}{COUNT} baskets of eggs"));
+				textObject.SetTextVariable("COUNT", num4);
+				TextObject textObject2 = new TextObject("{=HAP_EggsProduced}Your {POULTRY_TEXT} produced {EGG_TEXT}.");
+				textObject2.SetTextVariable("POULTRY_TEXT", poultryCountDescriptionLocalized);
+				textObject2.SetTextVariable("EGG_TEXT", textObject);
+				Color color = Color.ConvertStringToColor("#85BB65FF");
+				InformationManager.DisplayMessage(new InformationMessage(textObject2.ToString(), color));
+			}
+		}
+		_lastEggProductionCheck = CampaignTime.Now;
+	}
+
+	private int GetPoultryCount(MobileParty party)
+	{
+		int num = 0;
+		int num2 = 0;
+		ItemObject itemObject = Game.Current.ObjectManager.GetObject<ItemObject>("chicken_product");
+		ItemObject itemObject2 = Game.Current.ObjectManager.GetObject<ItemObject>("goose_product");
+		if (itemObject != null)
+		{
+			for (int i = 0; i < party.ItemRoster.Count; i++)
+			{
+				ItemObject itemAtIndex = party.ItemRoster.GetItemAtIndex(i);
+				if (itemAtIndex != null && itemAtIndex.StringId == "chicken_product")
+				{
+					num = party.ItemRoster.GetElementNumber(i);
+					break;
+				}
+			}
+		}
+		if (itemObject2 != null)
+		{
+			for (int j = 0; j < party.ItemRoster.Count; j++)
+			{
+				ItemObject itemAtIndex2 = party.ItemRoster.GetItemAtIndex(j);
+				if (itemAtIndex2 != null && itemAtIndex2.StringId == "goose_product")
+				{
+					num2 = party.ItemRoster.GetElementNumber(j);
+					break;
+				}
+			}
+		}
+		return num + num2;
+	}
+
+	private TextObject GetPoultryCountDescriptionLocalized(MobileParty party)
+	{
+		int num = 0;
+		int num2 = 0;
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemObject itemAtIndex = party.ItemRoster.GetItemAtIndex(i);
+			if (itemAtIndex != null)
+			{
+				if (itemAtIndex.StringId == "chicken_product")
+				{
+					num = party.ItemRoster.GetElementNumber(i);
+				}
+				else if (itemAtIndex.StringId == "goose_product")
+				{
+					num2 = party.ItemRoster.GetElementNumber(i);
+				}
+			}
+		}
+		TextObject textObject = null;
+		if (num > 0)
+		{
+			textObject = ((num == 1) ? new TextObject("{=HAP_ChickenSingular}{COUNT} chicken") : new TextObject("{=HAP_ChickenPlural}{COUNT} chickens"));
+			textObject.SetTextVariable("COUNT", num);
+		}
+		TextObject textObject2 = null;
+		if (num2 > 0)
+		{
+			textObject2 = ((num2 == 1) ? new TextObject("{=HAP_GooseSingular}{COUNT} goose") : new TextObject("{=HAP_GoosePlural}{COUNT} geese"));
+			textObject2.SetTextVariable("COUNT", num2);
+		}
+		if (textObject != null && textObject2 != null)
+		{
+			TextObject textObject3 = new TextObject("{=HAP_PoultryBoth}{CHICKENS} and {GEESE}");
+			textObject3.SetTextVariable("CHICKENS", textObject);
+			textObject3.SetTextVariable("GEESE", textObject2);
+			return textObject3;
+		}
+		if (textObject != null)
+		{
+			return textObject;
+		}
+		if (textObject2 != null)
+		{
+			return textObject2;
+		}
+		return new TextObject("{=HAP_PoultryFallback}poultry");
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\LordCastleResupplyBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
+using TaleWorlds.CampaignSystem.GameMenus;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class LordCastleResupplyBehavior : CampaignBehaviorBase
+{
+	private const bool DEBUG_RESUPPLY = false;
+
+	private const float MIN_FOODSTOCKS_PERCENT = 0.2f;
+
+	private const float MAX_DRAIN_PERCENT = 0.2f;
+
+	private const float FOOD_PER_PARTY_MEMBER = 0.3f;
+
+	private const float ARMY_FOOD_PER_PARTY_MEMBER = 0.3f;
+
+	private const int MIN_RESUPPLY_AMOUNT = 1;
+
+	private const float RESUPPLY_COOLDOWN_HOURS = 24f;
+
+	private const float ARMY_MAX_DRAIN_PERCENT = 0.3f;
+
+	private Dictionary<(string heroId, string settlementId), CampaignTime> _lastResupplyTime = new Dictionary<(string, string), CampaignTime>();
+
+	private int _resupplyCounter = 0;
+
+	private const int CLEANUP_INTERVAL = 50;
+
+	private const int MAX_COOLDOWN_ENTRIES = 300;
+
+	private static int _lastResetDay = -1;
+
+	public static bool IsSiegeRationTransaction { get; set; } = false;
+
+	public static HashSet<MobileParty> ActiveResupplyParties { get; } = new HashSet<MobileParty>();
+
+	public static Dictionary<string, int> DailyResupplyTotals { get; private set; } = new Dictionary<string, int>();
+
+	private static void ResetDailyTotalsIfNeeded()
+	{
+		int num = (int)CampaignTime.Now.ToDays;
+		if (num != _lastResetDay)
+		{
+			DailyResupplyTotals.Clear();
+			_lastResetDay = num;
+		}
+	}
+
+	private static void RecordDailyResupply(Settlement castle, int amount)
+	{
+		ResetDailyTotalsIfNeeded();
+		string stringId = castle.StringId;
+		if (DailyResupplyTotals.ContainsKey(stringId))
+		{
+			DailyResupplyTotals[stringId] += amount;
+		}
+		else
+		{
+			DailyResupplyTotals[stringId] = amount;
+		}
+	}
+
+	public static int GetDailyResupplyTotal(Settlement castle)
+	{
+		if (castle == null || DailyResupplyTotals == null)
+		{
+			return 0;
+		}
+		ResetDailyTotalsIfNeeded();
+		int value;
+		return DailyResupplyTotals.TryGetValue(castle.StringId, out value) ? value : 0;
+	}
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.SettlementEntered.AddNonSerializedListener(this, OnSettlementEntered);
+		CampaignEvents.OnGameLoadedEvent.AddNonSerializedListener(this, OnGameLoaded);
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		if (dataStore.IsLoading)
+		{
+			_lastResupplyTime.Clear();
+			_resupplyCounter = 0;
+			DailyResupplyTotals.Clear();
+			_lastResetDay = -1;
+		}
+	}
+
+	private void OnGameLoaded(CampaignGameStarter starter)
+	{
+		_lastResupplyTime.Clear();
+		_resupplyCounter = 0;
+	}
+
+	public void ProcessSiegeRations(Town town)
+	{
+		if (!town.IsUnderSiege)
+		{
+			return;
+		}
+		Settlement settlement = town.Settlement;
+		if (settlement == null)
+		{
+			return;
+		}
+		float num = ((town.FoodChange < 0f) ? MathF.Abs(town.FoodChange) : (town.Prosperity / 80f + ((town.GarrisonParty != null) ? ((float)town.GarrisonParty.Party.NumberOfAllMembers / 40f) : 0f)));
+		float num2 = num;
+		float num3 = town.FoodStocks + (float)TownFoodEconomyBehavior.GetDailyLivestockSlaughter(settlement) - num2;
+		if (num3 <= 0f)
+		{
+			return;
+		}
+		int num4 = 0;
+		bool flag = false;
+		foreach (MobileParty party in settlement.Parties)
+		{
+			if (party == null || !party.IsActive || (!party.IsLordParty && !party.IsMainParty) || party.MapFaction != settlement.MapFaction)
+			{
+				continue;
+			}
+			float a = (float)party.MemberRoster.TotalManCount / 20f;
+			float b = ((party.FoodChange < 0f) ? MathF.Abs(party.FoodChange) : 0f);
+			float num5 = MathF.Max(a, b);
+			if (num5 <= 0f)
+			{
+				continue;
+			}
+			float num6 = ((party.Food > 0f) ? (party.Food / num5) : 0f);
+			if (num6 >= 2f)
+			{
+				continue;
+			}
+			float f = num5 * 2f - MathF.Max(0f, party.Food);
+			int num7 = MathF.Ceiling(f);
+			if (num7 <= 0)
+			{
+				continue;
+			}
+			num7 = (int)MathF.Min((float)num7, num3 - (float)num4);
+			if (num7 <= 0)
+			{
+				break;
+			}
+			List<(ItemObject, int)> list = GenerateFoodFromVillages(settlement, num7);
+			int num8 = 0;
+			foreach (var (item, num9) in list)
+			{
+				if (num9 > 0)
+				{
+					party.ItemRoster.AddToCounts(item, num9);
+					num8 += num9;
+				}
+			}
+			if (num8 <= 0)
+			{
+				continue;
+			}
+			num4 += num8;
+			if (party.IsMainParty)
+			{
+				flag = true;
+			}
+			else
+			{
+				List<(EquipmentElement, int)> list2 = new List<(EquipmentElement, int)>();
+				foreach (var (item2, num10) in list)
+				{
+					if (num10 > 0)
+					{
+						list2.Add((new EquipmentElement(item2), -num10));
+					}
+				}
+				if (list2.Count > 0)
+				{
+					try
+					{
+						IsSiegeRationTransaction = true;
+						CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(party, town, list2);
+					}
+					finally
+					{
+						IsSiegeRationTransaction = false;
+					}
+				}
+			}
+			bool flag2 = false;
+		}
+		if (num3 <= 0f)
+		{
+			return;
+		}
+		town.FoodStocks = MathF.Max(0f, town.FoodStocks - (float)num4);
+		RecordDailyResupply(settlement, num4);
+		if (flag)
+		{
+			HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+			if (instance != null && instance.SettlementInformation)
+			{
+				TextObject textObject = new TextObject("{=HAP_SiegeRations}{SETTLEMENT_NAME}: Distributed {AMOUNT} food rations to defending parties");
+				textObject.SetTextVariable("SETTLEMENT_NAME", settlement.Name);
+				textObject.SetTextVariable("AMOUNT", num4);
+				InformationManager.DisplayMessage(new InformationMessage(textObject.ToString(), Colors.Green));
+			}
+		}
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		starter.AddGameMenuOption("castle", "castle_resupply_hap", "{=HAP_RESUPPLY_OPTION}Resupply from stores", PlayerResupplyOnCondition, PlayerResupplyOnConsequence, isLeave: false, 0);
+		starter.AddGameMenuOption("castle", "castle_army_resupply_hap", "{=HAP_ARMY_RESUPPLY_OPTION}Resupply army from stores", ArmyResupplyOnCondition, ArmyResupplyOnConsequence, isLeave: false, 0);
+	}
+
+	private bool PlayerResupplyOnCondition(MenuCallbackArgs args)
+	{
+		args.optionLeaveType = GameMenuOption.LeaveType.Trade;
+		if (MobileParty.MainParty.Army != null && MobileParty.MainParty.Army.LeaderParty == MobileParty.MainParty)
+		{
+			return false;
+		}
+		Settlement currentSettlement = Settlement.CurrentSettlement;
+		if (currentSettlement == null || !currentSettlement.IsCastle)
+		{
+			return false;
+		}
+		if (!HasResupplyAccess(Clan.PlayerClan, currentSettlement))
+		{
+			return false;
+		}
+		Town town = currentSettlement.Town;
+		if (town == null)
+		{
+			return false;
+		}
+		int num = town.FoodStocksUpperLimit();
+		float foodStocks = town.FoodStocks;
+		float num2 = ((num > 0) ? (foodStocks / (float)num) : 0f);
+		if (num2 < 0.2f)
+		{
+			args.Tooltip = new TextObject("{=HAP_RESUPPLY_LOW_STOCKS}Castle food stores are too low to resupply.");
+			args.IsEnabled = false;
+			return true;
+		}
+		if (IsOnCooldown(Hero.MainHero, currentSettlement))
+		{
+			args.Tooltip = new TextObject("{=HAP_RESUPPLY_COOLDOWN}You have recently resupplied here. Wait before resupplying again.");
+			args.IsEnabled = false;
+			return true;
+		}
+		return true;
+	}
+
+	private void PlayerResupplyOnConsequence(MenuCallbackArgs args)
+	{
+		try
+		{
+			Settlement currentSettlement = Settlement.CurrentSettlement;
+			if (currentSettlement == null)
+			{
+				return;
+			}
+			ProcessResupply(MobileParty.MainParty, currentSettlement);
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in PlayerResupplyOnConsequence: " + ex.Message);
+		}
+		GameMenu.SwitchToMenu("castle");
+	}
+
+	private bool ArmyResupplyOnCondition(MenuCallbackArgs args)
+	{
+		args.optionLeaveType = GameMenuOption.LeaveType.Trade;
+		if (MobileParty.MainParty.Army == null || MobileParty.MainParty.Army.LeaderParty != MobileParty.MainParty)
+		{
+			return false;
+		}
+		Settlement currentSettlement = Settlement.CurrentSettlement;
+		if (currentSettlement == null || !currentSettlement.IsCastle)
+		{
+			return false;
+		}
+		if (!HasResupplyAccess(Clan.PlayerClan, currentSettlement))
+		{
+			return false;
+		}
+		Town town = currentSettlement.Town;
+		if (town == null)
+		{
+			return false;
+		}
+		int num = town.FoodStocksUpperLimit();
+		float foodStocks = town.FoodStocks;
+		float num2 = ((num > 0) ? (foodStocks / (float)num) : 0f);
+		if (num2 < 0.2f)
+		{
+			args.Tooltip = new TextObject("{=HAP_RESUPPLY_LOW_STOCKS}Castle food stores are too low to resupply.");
+			args.IsEnabled = false;
+			return true;
+		}
+		bool flag = false;
+		foreach (MobileParty party in MobileParty.MainParty.Army.Parties)
+		{
+			if (party != null && party.IsActive)
+			{
+				Hero hero = (party.IsMainParty ? Hero.MainHero : party.LeaderHero);
+				if (hero != null && !IsOnCooldown(hero, currentSettlement))
+				{
+					flag = true;
+					break;
+				}
+			}
+		}
+		if (!flag)
+		{
+			args.Tooltip = new TextObject("{=HAP_ARMY_RESUPPLY_NONE}All army parties have recently been supplied.");
+			args.IsEnabled = false;
+			return true;
+		}
+		return true;
+	}
+
+	private void ArmyResupplyOnConsequence(MenuCallbackArgs args)
+	{
+		try
+		{
+			Settlement currentSettlement = Settlement.CurrentSettlement;
+			if (currentSettlement == null)
+			{
+				return;
+			}
+			ProcessArmyResupply(currentSettlement, isPlayerInitiated: true);
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in ArmyResupplyOnConsequence: " + ex.Message);
+		}
+		GameMenu.SwitchToMenu("castle");
+	}
+
+	private void ProcessArmyResupply(Settlement settlement, bool isPlayerInitiated, Army army = null)
+	{
+		Town town = settlement.Town;
+		if (town == null)
+		{
+			return;
+		}
+		if (army == null)
+		{
+			army = (isPlayerInitiated ? MobileParty.MainParty.Army : null);
+		}
+		if (army == null)
+		{
+			return;
+		}
+		int num = town.FoodStocksUpperLimit();
+		float foodStocks = town.FoodStocks;
+		float num2 = ((num > 0) ? (foodStocks / (float)num) : 0f);
+		if (num2 < 0.2f)
+		{
+			return;
+		}
+		List<(MobileParty, int)> list = new List<(MobileParty, int)>();
+		int num3 = 0;
+		int num4 = 0;
+		foreach (MobileParty party in army.Parties)
+		{
+			if (party == null || !party.IsActive)
+			{
+				continue;
+			}
+			Hero hero = (party.IsMainParty ? Hero.MainHero : party.LeaderHero);
+			if (hero == null)
+			{
+				continue;
+			}
+			if (IsOnCooldown(hero, settlement))
+			{
+				num4++;
+				continue;
+			}
+			int totalManCount = party.MemberRoster.TotalManCount;
+			if (totalManCount > 0)
+			{
+				float num5 = (float)totalManCount * 0.3f;
+				float num6 = num5 * num2;
+				int val = Math.Max(1, (int)num6);
+				float num7 = (float)party.InventoryCapacity - party.TotalWeightCarried;
+				if (!(num7 <= 0f))
+				{
+					val = Math.Min(val, Math.Max(1, (int)num7));
+					list.Add((party, val));
+					num3 += val;
+				}
+			}
+		}
+		if (list.Count == 0)
+		{
+			if ((num4 > 0) & isPlayerInitiated)
+			{
+				TextObject textObject = new TextObject("{=HAP_ARMY_RESUPPLY_NONE}All army parties have recently been supplied.");
+				InformationManager.DisplayMessage(new InformationMessage(textObject.ToString(), Colors.Gray));
+			}
+			return;
+		}
+		float num8 = foodStocks * 0.3f;
+		float num9 = 1f;
+		if ((float)num3 > num8)
+		{
+			num9 = num8 / (float)num3;
+		}
+		List<(ItemObject, int)> list2 = GenerateFoodFromVillages(settlement, 100);
+		if (list2.Count == 0)
+		{
+			return;
+		}
+		int num10 = 0;
+		foreach (var item5 in list2)
+		{
+			int item = item5.Item2;
+			num10 += item;
+		}
+		int num11 = 0;
+		int num12 = 0;
+		foreach (var item6 in list)
+		{
+			MobileParty item2 = item6.Item1;
+			int item3 = item6.Item2;
+			int num13 = Math.Max(1, (int)((float)item3 * num9));
+			int num14 = 0;
+			List<(EquipmentElement, int)> list3 = new List<(EquipmentElement, int)>();
+			foreach (var (item4, num15) in list2)
+			{
+				if (num14 >= num13)
+				{
+					break;
+				}
+				int num16 = ((num10 > 0) ? Math.Max(1, MathF.Round((float)num15 / (float)num10 * (float)num13)) : 0);
+				if (num16 > 0)
+				{
+					num16 = Math.Min(num16, num13 - num14);
+					item2.ItemRoster.AddToCounts(item4, num16);
+					num14 += num16;
+					list3.Add((new EquipmentElement(item4), -num16));
+				}
+			}
+			if (num14 <= 0)
+			{
+				continue;
+			}
+			num11 += num14;
+			num12++;
+			Hero hero2 = (item2.IsMainParty ? Hero.MainHero : item2.LeaderHero);
+			if (hero2 != null)
+			{
+				RecordResupply(hero2, settlement);
+			}
+			if (!isPlayerInitiated && list3.Count > 0)
+			{
+				if (item2.IsMainParty)
+				{
+					TextObject textObject2 = new TextObject("{=HAP_PLAYER_RESUPPLY}Resupplied {AMOUNT} food from {CASTLE_NAME}.");
+					textObject2.SetTextVariable("AMOUNT", num14);
+					textObject2.SetTextVariable("CASTLE_NAME", settlement.Name);
+					InformationManager.DisplayMessage(new InformationMessage(textObject2.ToString(), Colors.Green));
+				}
+				else
+				{
+					try
+					{
+						ActiveResupplyParties.Add(item2);
+						CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(item2, town, list3);
+					}
+					finally
+					{
+						ActiveResupplyParties.Remove(item2);
+					}
+				}
+			}
+			bool flag = false;
+		}
+		if (num11 <= 0)
+		{
+			return;
+		}
+		town.FoodStocks = MathF.Max(0f, town.FoodStocks - (float)num11);
+		RecordDailyResupply(settlement, num11);
+		if (isPlayerInitiated)
+		{
+			TextObject textObject3;
+			if (num4 > 0)
+			{
+				textObject3 = new TextObject("{=HAP_ARMY_RESUPPLY_PARTIAL}Resupplied {COUNT} parties ({AMOUNT} food) from {NAME}. {SKIPPED} already supplied.");
+				textObject3.SetTextVariable("SKIPPED", num4);
+			}
+			else
+			{
+				textObject3 = new TextObject("{=HAP_ARMY_RESUPPLY_FULL}Resupplied {COUNT} parties ({AMOUNT} food) from {NAME}.");
+			}
+			textObject3.SetTextVariable("COUNT", num12);
+			textObject3.SetTextVariable("AMOUNT", num11);
+			textObject3.SetTextVariable("NAME", settlement.Name);
+			InformationManager.DisplayMessage(new InformationMessage(textObject3.ToString(), Colors.Green));
+		}
+		bool flag2 = false;
+	}
+
+	private void OnSettlementEntered(MobileParty mobileParty, Settlement settlement, Hero hero)
+	{
+		try
+		{
+			if (settlement == null || mobileParty == null || !mobileParty.IsActive)
+			{
+				return;
+			}
+			if (mobileParty.Army != null && mobileParty.Army.LeaderParty == mobileParty && settlement.IsFortification && (mobileParty.IsMainParty ? Hero.MainHero.MapFaction : mobileParty.LeaderHero?.MapFaction) != null && settlement.MapFaction == (mobileParty.IsMainParty ? Hero.MainHero.MapFaction : mobileParty.LeaderHero.MapFaction))
+			{
+				ProcessArmyResupply(settlement, isPlayerInitiated: false, mobileParty.Army);
+			}
+			if (!settlement.IsCastle || !IsLordParty(mobileParty))
+			{
+				return;
+			}
+			Hero leaderHero = mobileParty.LeaderHero;
+			if (leaderHero != null && leaderHero.Clan != null)
+			{
+				if (!HasResupplyAccess(leaderHero.Clan, settlement))
+				{
+					bool flag = false;
+				}
+				else if (IsOnCooldown(leaderHero, settlement))
+				{
+					bool flag2 = false;
+				}
+				else
+				{
+					ProcessResupply(mobileParty, settlement);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in LordCastleResupplyBehavior.OnSettlementEntered: " + ex.Message);
+		}
+	}
+
+	private bool IsLordParty(MobileParty party)
+	{
+		if (party.IsMainParty)
+		{
+			return false;
+		}
+		if (!party.IsLordParty)
+		{
+			return false;
+		}
+		if (party.LeaderHero == null || party.LeaderHero.Clan == null)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private bool HasResupplyAccess(Clan partyClan, Settlement castle)
+	{
+		if (partyClan == null || castle == null)
+		{
+			return false;
+		}
+		if (castle.OwnerClan == partyClan)
+		{
+			return true;
+		}
+		if (HAPPolicies.RightOfBilleting != null && partyClan.Kingdom != null && partyClan.Kingdom == castle.OwnerClan?.Kingdom && partyClan.Kingdom.ActivePolicies.Contains(HAPPolicies.RightOfBilleting))
+		{
+			return true;
+		}
+		return false;
+	}
+
+	private bool IsOnCooldown(Hero leader, Settlement castle)
+	{
+		(string, string) key = (leader.StringId, castle.StringId);
+		if (_lastResupplyTime.TryGetValue(key, out var value))
+		{
+			float num = (float)(CampaignTime.Now - value).ToHours;
+			return num < 24f;
+		}
+		return false;
+	}
+
+	private void R

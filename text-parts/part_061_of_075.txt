@@ -1,0 +1,644 @@
+﻿PART 61/75
+odHeaderIndex)
+			{
+				num2 = i;
+				break;
+			}
+		}
+		if (num2 < 0)
+		{
+			return;
+		}
+		int num3 = num2 + 2;
+		ItemRoster itemRoster = MobileParty.MainParty?.ItemRoster;
+		if (itemRoster == null)
+		{
+			return;
+		}
+		for (int j = num3; j < list.Count; j++)
+		{
+			TooltipProperty tooltipProperty2 = list[j];
+			if (IsEndOfItemSection(tooltipProperty2))
+			{
+				break;
+			}
+			if (string.IsNullOrEmpty(tooltipProperty2.DefinitionLabel))
+			{
+				continue;
+			}
+			for (int k = 0; k < itemRoster.Count; k++)
+			{
+				ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(k);
+				ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+				if (item != null && elementCopyAtIndex.Amount > 0 && item.HasHorseComponent && item.HorseComponent.IsLiveStock)
+				{
+					string text = elementCopyAtIndex.EquipmentElement.GetModifiedItemName().ToString();
+					if (text == tooltipProperty2.DefinitionLabel && ReservedItemService.IsReserved(item))
+					{
+						tooltipProperty2.DefinitionLabel += " (R)";
+						break;
+					}
+				}
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\FoodTooltipSplitPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.Core;
+using TaleWorlds.Core.ViewModelCollection.Information;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+public static class FoodTooltipSplitPatch
+{
+	private static bool _patchApplied = false;
+
+	private static readonly TextObject _sectionTitle = new TextObject("{=HAP_DailyAdditions}Daily Additions");
+
+	private static readonly TextObject _marketReqText = new TextObject("{=HAP_MarketFood}Market Requisition");
+
+	private static readonly TextObject _slaughterText = new TextObject("{=HAP_EmergencySlaughter}Emergency Slaughter");
+
+	private static readonly TextObject _storedFoodText = new TextObject("{=HAP_StoredFood}Stored Food");
+
+	private static readonly TextObject _lordResupplyText = new TextObject("{=HAP_LordResupply}Lord Resupply");
+
+	private static readonly TextObject _villageSupplyText = new TextObject("{=HAP_VillageSupply}Village Supply");
+
+	private static readonly TextObject _garrisonSupplyText = new TextObject("{=HAP_GarrisonSupply}Garrison Supply");
+
+	private static readonly TextObject _patrolSupplyText = new TextObject("{=HAP_PatrolSupply}Patrol Supply");
+
+	private static readonly TextObject _supplyLineText = new TextObject("{=HAP_SupplyLineFoodEntry}Supply Line");
+
+	private static readonly TextObject _rebellionText = new TextObject("{=HAP_RebellionFood}Rebellion Seizure");
+
+	private static readonly TextObject _sackText = new TextObject("{=HAP_SackFood}Sack Seizure");
+
+	private static readonly TextObject _emergencyModeText = new TextObject("{=HAP_EmergencyMode}Emergency Mode");
+
+	private static readonly TextObject _marketSectionTitle = new TextObject("{=HAP_MarketInventory}Market Inventory");
+
+	private static readonly TextObject _marketFoodText = new TextObject("{=HAP_MarketFoodCount}Food");
+
+	private static readonly TextObject _marketLivestockText = new TextObject("{=HAP_MarketLivestock}Livestock");
+
+	private static readonly TextObject _marketPackAnimalsText = new TextObject("{=HAP_MarketPackAnimals}Pack Animals");
+
+	private static readonly TextObject _marketMountsText = new TextObject("{=HAP_MarketMounts}Mounts");
+
+	private static readonly TextObject _externalReqText = new TextObject("{=HAP_ExternalRequisition}Provision Requisition");
+
+	public static void ApplyPatch(Harmony harmony)
+	{
+		if (_patchApplied)
+		{
+			return;
+		}
+		try
+		{
+			MethodInfo method = typeof(CampaignUIHelper).GetMethod("GetTownFoodTooltip", BindingFlags.Static | BindingFlags.Public);
+			MethodInfo method2 = typeof(FoodTooltipSplitPatch).GetMethod("Postfix", BindingFlags.Static | BindingFlags.Public);
+			if (method != null && method2 != null)
+			{
+				harmony.Patch(method, null, new HarmonyMethod(method2));
+				_patchApplied = true;
+				Main.Log("FoodTooltipSplitPatch: Patched GetTownFoodTooltip");
+			}
+			else
+			{
+				Main.Log($"FoodTooltipSplitPatch: Method not found (original={method != null}, postfix={method2 != null})");
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("FoodTooltipSplitPatch ERROR: " + ex.Message);
+		}
+	}
+
+	public static void Postfix(ref List<TooltipProperty> __result, Town town)
+	{
+		if (town == null || town.Settlement == null || __result == null)
+		{
+			return;
+		}
+		try
+		{
+			Settlement settlement = town.Settlement;
+			List<(TextObject, int)> list = new List<(TextObject, int)>();
+			if (town.IsTown)
+			{
+				int dailyMarketRequisition = TownFoodEconomyBehavior.GetDailyMarketRequisition(settlement);
+				if (dailyMarketRequisition != 0)
+				{
+					list.Add((_marketReqText, dailyMarketRequisition));
+				}
+			}
+			if (town.IsTown)
+			{
+				int dailyExternalRequisition = TownFoodEconomyBehavior.GetDailyExternalRequisition(settlement);
+				if (dailyExternalRequisition != 0)
+				{
+					list.Add((_externalReqText, dailyExternalRequisition));
+				}
+			}
+			if (town.IsTown)
+			{
+				int dailyLivestockSlaughter = TownFoodEconomyBehavior.GetDailyLivestockSlaughter(settlement);
+				if (dailyLivestockSlaughter != 0)
+				{
+					list.Add((_slaughterText, dailyLivestockSlaughter));
+				}
+			}
+			int dailyStashClaimed = TownFoodEconomyBehavior.GetDailyStashClaimed(settlement);
+			if (dailyStashClaimed != 0)
+			{
+				list.Add((_storedFoodText, dailyStashClaimed));
+			}
+			int dailyResupplyTotal = LordCastleResupplyBehavior.GetDailyResupplyTotal(settlement);
+			if (dailyResupplyTotal != 0)
+			{
+				list.Add((_lordResupplyText, -dailyResupplyTotal));
+			}
+			if (town.IsCastle)
+			{
+				int dailySupplyTotal = CastleSupplyBehavior.GetDailySupplyTotal(settlement);
+				if (dailySupplyTotal != 0)
+				{
+					list.Add((_villageSupplyText, dailySupplyTotal));
+				}
+			}
+			if (town.IsCastle)
+			{
+				int dailyForagerSupplyTotal = CastleForagerBehavior.GetDailyForagerSupplyTotal(settlement);
+				if (dailyForagerSupplyTotal != 0)
+				{
+					list.Add((_garrisonSupplyText, dailyForagerSupplyTotal));
+				}
+			}
+			int dailyPatrolSupplyTotal = PatrolSupplyBehavior.GetDailyPatrolSupplyTotal(settlement);
+			if (dailyPatrolSupplyTotal != 0)
+			{
+				list.Add((_patrolSupplyText, dailyPatrolSupplyTotal));
+			}
+			if (town.IsTown)
+			{
+				int num = TownSupplyLineBehavior.GetDailySupplyLineTotal(settlement) + TownSupplyLineBehavior.GetDailyReturnTotal(settlement);
+				if (num != 0)
+				{
+					list.Add((_supplyLineText, num));
+				}
+				int dailyDispatchTotal = TownSupplyLineBehavior.GetDailyDispatchTotal(settlement);
+				if (dailyDispatchTotal != 0)
+				{
+					list.Add((_supplyLineText, -dailyDispatchTotal));
+				}
+			}
+			int dailyRebellionFood = RebellionFoodPatch.GetDailyRebellionFood(settlement);
+			if (dailyRebellionFood != 0)
+			{
+				list.Add((_rebellionText, dailyRebellionFood));
+			}
+			int dailySackFood = TownSackBehavior.GetDailySackFood(settlement);
+			if (dailySackFood != 0)
+			{
+				list.Add((_sackText, -dailySackFood));
+			}
+			if (list.Count > 0)
+			{
+				__result.Add(new TooltipProperty("", string.Empty, 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.DefaultSeperator));
+				__result.Add(new TooltipProperty(string.Empty, _sectionTitle.ToString(), 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.Title));
+				foreach (var item2 in list)
+				{
+					List<TooltipProperty> obj = __result;
+					string definition = item2.Item1.ToString();
+					int item = item2.Item2;
+					obj.Add(new TooltipProperty(definition, item.ToString("+0;-0;0"), 0));
+				}
+			}
+			if (town.IsTown)
+			{
+				CountMarketInventory(town, out var foodCount, out var livestockCount, out var packAnimalCount, out var mountCount);
+				if (foodCount > 0 || livestockCount > 0 || packAnimalCount > 0 || mountCount > 0)
+				{
+					__result.Add(new TooltipProperty("", string.Empty, 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.DefaultSeperator));
+					__result.Add(new TooltipProperty(string.Empty, _marketSectionTitle.ToString(), 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.Title));
+					if (foodCount > 0)
+					{
+						__result.Add(new TooltipProperty(_marketFoodText.ToString(), foodCount.ToString(), 0));
+					}
+					if (livestockCount > 0)
+					{
+						__result.Add(new TooltipProperty(_marketLivestockText.ToString(), livestockCount.ToString(), 0));
+					}
+					if (packAnimalCount > 0)
+					{
+						__result.Add(new TooltipProperty(_marketPackAnimalsText.ToString(), packAnimalCount.ToString(), 0));
+					}
+					if (mountCount > 0)
+					{
+						__result.Add(new TooltipProperty(_marketMountsText.ToString(), mountCount.ToString(), 0));
+					}
+				}
+			}
+			if (FoodSystemConstants.IsEmergencyMode(town))
+			{
+				__result.Add(new TooltipProperty(string.Empty, string.Empty, 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.DefaultSeperator));
+				__result.Add(new TooltipProperty(" ", _emergencyModeText.ToString(), 1, UIColors.NegativeIndicator));
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in FoodTooltipSplitPatch.Postfix: " + ex.Message);
+		}
+	}
+
+	private static void CountMarketInventory(Town town, out int foodCount, out int livestockCount, out int packAnimalCount, out int mountCount)
+	{
+		foodCount = 0;
+		livestockCount = 0;
+		packAnimalCount = 0;
+		mountCount = 0;
+		if (town?.Settlement == null)
+		{
+			return;
+		}
+		ItemRoster itemRoster = town.Settlement.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item == null || elementCopyAtIndex.Amount <= 0)
+			{
+				continue;
+			}
+			string stringId = item.StringId;
+			switch (stringId)
+			{
+			default:
+				if (!(stringId == "hare"))
+				{
+					if (item.HasHorseComponent && item.ItemCategory != null)
+					{
+						string stringId2 = item.ItemCategory.StringId;
+						switch (stringId2)
+						{
+						case "sumpter_horse":
+							packAnimalCount += elementCopyAtIndex.Amount;
+							goto end_IL_0088;
+						default:
+							if (!(stringId2 == "workshop_war_horse"))
+							{
+								goto end_IL_0088;
+							}
+							break;
+						case "horse":
+						case "war_horse":
+						case "noble_horse":
+						case "workshop_horse":
+							break;
+						}
+						mountCount += elementCopyAtIndex.Amount;
+					}
+					else if (item.IsFood || stringId.StartsWith("meat_"))
+					{
+						foodCount += elementCopyAtIndex.Amount;
+					}
+					else if (item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores)
+					{
+						foodCount += elementCopyAtIndex.Amount;
+					}
+					break;
+				}
+				goto case "cow";
+			case "cow":
+			case "sheep":
+			case "hog":
+			case "chicken_product":
+			case "goose_product":
+				{
+					livestockCount += elementCopyAtIndex.Amount;
+					break;
+				}
+				end_IL_0088:
+				break;
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\ForagerFleeTooltipPatch.cs =====
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(MobileParty), "GetBehaviorText")]
+public class ForagerFleeTooltipPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(MobileParty __instance, ref TextObject __result)
+	{
+		if (CastleForagerPartyComponent.IsForagerParty(__instance))
+		{
+			CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(__instance);
+			if (foragerComponent != null && foragerComponent.ThreatParty != null && foragerComponent.ThreatParty.IsActive)
+			{
+				__result = new TextObject("{=AcMayd1p}Running from {TARGET_PARTY}.");
+				__result.SetTextVariable("TARGET_PARTY", foragerComponent.ThreatParty.Name);
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\ForagerTroopNotificationPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using SandBox.ViewModelCollection.Nameplate.NameplateNotifications;
+using SandBox.ViewModelCollection.Nameplate.NameplateNotifications.SettlementNotificationTypes;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Roster;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(TroopGivenToSettlementNotificationItemVM))]
+[HarmonyPatch(MethodType.Constructor)]
+[HarmonyPatch(new Type[]
+{
+	typeof(Action<SettlementNotificationItemBaseVM>),
+	typeof(Hero),
+	typeof(TroopRoster),
+	typeof(int)
+})]
+public static class ForagerTroopNotificationPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(TroopGivenToSettlementNotificationItemVM __instance, Hero giverHero)
+	{
+		try
+		{
+			if (giverHero != null && CastleForagerBehavior.PendingForagerTroopNotifications.TryGetValue(giverHero, out var value))
+			{
+				__instance.CharacterName = value;
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\GarrisonAutoRecruitmentPatch.cs =====
+using System;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Settlements;
+
+namespace HarvestAndProduction.Patches;
+
+public static class GarrisonAutoRecruitmentPatch
+{
+	private static bool _patchApplied;
+
+	public static void Apply(Harmony harmony)
+	{
+		if (_patchApplied)
+		{
+			return;
+		}
+		try
+		{
+			MethodInfo methodInfo = AccessTools.Method(typeof(GarrisonRecruitmentCampaignBehavior), "CanSettlementAutoRecruit");
+			if (methodInfo == null)
+			{
+				Main.Log("GarrisonAutoRecruitmentPatch: Could not find CanSettlementAutoRecruit");
+				return;
+			}
+			harmony.Patch(methodInfo, new HarmonyMethod(typeof(GarrisonAutoRecruitmentPatch), "Prefix"));
+			_patchApplied = true;
+			Main.Log("GarrisonAutoRecruitmentPatch: Patched successfully");
+		}
+		catch (Exception ex)
+		{
+			Main.Log("GarrisonAutoRecruitmentPatch ERROR: " + ex.Message);
+		}
+	}
+
+	private static bool Prefix(Settlement settlement, ref bool __result)
+	{
+		Town town = settlement.Town;
+		if (!town.GarrisonAutoRecruitmentIsEnabled)
+		{
+			__result = false;
+			return false;
+		}
+		if (settlement.Party.MapEvent != null || settlement.Party.SiegeEvent != null)
+		{
+			__result = false;
+			return false;
+		}
+		__result = !FoodSystemConstants.IsEmergencyMode(town);
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\GarrisonFoodAwareDonationPatch.cs =====
+using System;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+public static class GarrisonFoodAwareDonationPatch
+{
+	private const float DAYS_FULL = 14f;
+
+	private const float DAYS_STOP = 7f;
+
+	private const float WITHDRAW_DAYS_START = 10f;
+
+	private const float WITHDRAW_DAYS_MAX_BOOST = 3f;
+
+	private const float WITHDRAW_MAX_FRACTION = 0.5f;
+
+	private const bool DEBUG_FOOD_DONATION = false;
+
+	private static bool _patchApplied;
+
+	public static void ApplyPatch(Harmony harmony)
+	{
+		if (_patchApplied)
+		{
+			return;
+		}
+		try
+		{
+			MethodInfo methodInfo = AccessTools.Method(typeof(DefaultSettlementGarrisonModel), "FindNumberOfTroopsToLeaveToGarrison", new Type[2]
+			{
+				typeof(MobileParty),
+				typeof(Settlement)
+			});
+			MethodInfo methodInfo2 = AccessTools.Method(typeof(GarrisonFoodAwareDonationPatch), "Postfix_FindNumberOfTroopsToLeaveToGarrison");
+			if (methodInfo != null && methodInfo2 != null)
+			{
+				harmony.Patch(methodInfo, null, new HarmonyMethod(methodInfo2));
+				Main.Log("GarrisonFoodAwareDonationPatch: Piece 1 (donation gate) applied");
+			}
+			else
+			{
+				Main.Log("GarrisonFoodAwareDonationPatch: Piece 1 FAILED - method not found (original=" + (methodInfo != null) + ", postfix=" + (methodInfo2 != null) + ")");
+			}
+			MethodInfo methodInfo3 = AccessTools.Method(typeof(DefaultSettlementGarrisonModel), "FindNumberOfTroopsToTakeFromGarrison", new Type[3]
+			{
+				typeof(MobileParty),
+				typeof(Settlement),
+				typeof(float)
+			});
+			MethodInfo methodInfo4 = AccessTools.Method(typeof(GarrisonFoodAwareDonationPatch), "Postfix_FindNumberOfTroopsToTakeFromGarrison");
+			if (methodInfo3 != null && methodInfo4 != null)
+			{
+				harmony.Patch(methodInfo3, null, new HarmonyMethod(methodInfo4));
+				Main.Log("GarrisonFoodAwareDonationPatch: Piece 2 (withdrawal boost) applied");
+			}
+			else
+			{
+				Main.Log("GarrisonFoodAwareDonationPatch: Piece 2 FAILED - method not found (original=" + (methodInfo3 != null) + ", postfix=" + (methodInfo4 != null) + ")");
+			}
+			_patchApplied = true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("GarrisonFoodAwareDonationPatch ERROR: " + ex.Message);
+		}
+	}
+
+	public static void Postfix_FindNumberOfTroopsToLeaveToGarrison(ref int __result, MobileParty mobileParty, Settlement settlement)
+	{
+		try
+		{
+			if (__result <= 0)
+			{
+				return;
+			}
+			Town town = settlement?.Town;
+			if (town == null)
+			{
+				return;
+			}
+			if (FoodSystemConstants.IsEmergencyMode(town))
+			{
+				bool flag = false;
+				__result = 0;
+				return;
+			}
+			float num = EstimateDaysOfFood(town);
+			if (num >= 14f)
+			{
+				bool flag2 = false;
+				return;
+			}
+			if (num <= 7f)
+			{
+				bool flag3 = false;
+				__result = 0;
+				return;
+			}
+			float num2 = (num - 7f) / 7f;
+			int num3 = __result;
+			__result = MBRandom.RoundRandomized((float)num3 * num2);
+			bool flag4 = false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("GarrisonFoodAwareDonationPatch Piece1 ERROR: " + ex.Message);
+		}
+	}
+
+	public static void Postfix_FindNumberOfTroopsToTakeFromGarrison(ref int __result, MobileParty mobileParty, Settlement settlement)
+	{
+		try
+		{
+			if (__result <= 0)
+			{
+				return;
+			}
+			Town town = settlement?.Town;
+			if (town == null)
+			{
+				return;
+			}
+			float num = EstimateDaysOfFood(town);
+			if (!(num >= 10f))
+			{
+				float num2 = 1f - MathF.Clamp((num - 3f) / 7f, 0f, 1f);
+				float num3 = num2 * 0.5f;
+				int num4 = MBRandom.RoundRandomized((float)__result * num3);
+				if (num4 > 0)
+				{
+					int num5 = __result;
+					__result += num4;
+					bool flag = false;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("GarrisonFoodAwareDonationPatch Piece2 ERROR: " + ex.Message);
+		}
+	}
+
+	private static float EstimateDaysOfFood(Town town)
+	{
+		float foodStocks = town.FoodStocks;
+		if (foodStocks <= 0f)
+		{
+			return 0f;
+		}
+		float resultNumber = Campaign.Current.Models.SettlementFoodModel.CalculateTownFoodStocksChange(town, includeMarketStocks: false).ResultNumber;
+		if (resultNumber >= 0f)
+		{
+			return float.MaxValue;
+		}
+		return foodStocks / (0f - resultNumber);
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\GarrisonFoodStocksFloorPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorl

@@ -1,0 +1,609 @@
+﻿PART 56/75
+ DefaultBuildingTypes.CastleGuardHouse && town.Settlement.PatrolParty != null)
+			{
+				town.Settlement.PatrolParty.MobileParty.Party.MemberRoster.UpdateVersion();
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in CastlePatrolBuildingPatch: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\CastlePatrolSizePatch.cs =====
+using System;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements.Buildings;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultPartySizeLimitModel), "CalculatePatrolPartySizeLimit")]
+public static class CastlePatrolSizePatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(MobileParty mobileParty, bool includeDescriptions, ref ExplainedNumber __result)
+	{
+		try
+		{
+			if (__result.ResultNumber > 0f || mobileParty.HomeSettlement == null || !mobileParty.HomeSettlement.IsCastle || mobileParty.HomeSettlement.Town == null)
+			{
+				return;
+			}
+			foreach (Building building in mobileParty.HomeSettlement.Town.Buildings)
+			{
+				if (building.BuildingType == DefaultBuildingTypes.CastleGuardHouse && building.CurrentLevel > 0)
+				{
+					int num = 10 + 5 * building.CurrentLevel;
+					__result = new ExplainedNumber(num, includeDescriptions);
+					break;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in CastlePatrolSizePatch: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\CastlePatrolUIPatch.cs =====
+using System;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.CampaignSystem.ViewModelCollection.ClanManagement;
+using TaleWorlds.Core;
+using TaleWorlds.Core.ViewModelCollection.Information;
+
+namespace HarvestAndProduction.Patches;
+
+public static class CastlePatrolUIPatch
+{
+	private static bool _patchApplied;
+
+	public static void ApplyPatch(Harmony harmony)
+	{
+		if (_patchApplied)
+		{
+			return;
+		}
+		_patchApplied = true;
+		try
+		{
+			MethodInfo method = typeof(ClanSettlementItemVM).GetMethod("UpdateProperties", BindingFlags.Instance | BindingFlags.NonPublic);
+			if (method == null)
+			{
+				Main.Log("WARNING: CastlePatrolUIPatch - could not find UpdateProperties");
+				return;
+			}
+			MethodInfo method2 = typeof(CastlePatrolUIPatch).GetMethod("UpdateProperties_Postfix", BindingFlags.Static | BindingFlags.Public);
+			harmony.Patch(method, null, new HarmonyMethod(method2));
+			Main.Log("CastlePatrolUIPatch applied.");
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR applying CastlePatrolUIPatch: " + ex.Message);
+		}
+	}
+
+	public static void UpdateProperties_Postfix(ClanSettlementItemVM __instance)
+	{
+		try
+		{
+			if (!__instance.Settlement.IsCastle || __instance.Settlement.Town == null)
+			{
+				return;
+			}
+			IPatrolPartiesCampaignBehavior campaignBehavior = Campaign.Current.GetCampaignBehavior<IPatrolPartiesCampaignBehavior>();
+			if (campaignBehavior != null)
+			{
+				BasicTooltipViewModel hint = new BasicTooltipViewModel(() => CampaignUIHelper.GetTownPatrolTooltip(__instance.Settlement.Town));
+				__instance.ItemProperties.Add(new SelectableFiefItemPropertyVM(GameTexts.FindText("str_patrol").ToString(), campaignBehavior.GetSettlementPatrolStatus(__instance.Settlement).ToString(), 0, SelectableItemPropertyVM.PropertyType.Patrol, hint));
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in CastlePatrolUIPatch: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\CastleRebellionPatch.cs =====
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Siege;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+public static class CastleRebellionPatch
+{
+	[HarmonyPatch(typeof(RebellionsCampaignBehavior), "DailyTickSettlement")]
+	public static class DailyTickSettlement_Patch
+	{
+		private static void Postfix(RebellionsCampaignBehavior __instance, Settlement settlement)
+		{
+			if (__instance == null || settlement == null || !settlement.IsCastle)
+			{
+				return;
+			}
+			if (settlement.OwnerClan.IsRebelClan)
+			{
+				Dictionary<Clan, int> dictionary = (Dictionary<Clan, int>)_rebelClansField.GetValue(__instance);
+				if (dictionary != null && dictionary.TryGetValue(settlement.OwnerClan, out var value))
+				{
+					float num = MBMath.Map(value - 1, 0f, 30f, Campaign.Current.Models.SettlementLoyaltyModel.LoyaltyBoostAfterRebellionStartValue, 0f);
+					settlement.Town.Loyalty += num;
+				}
+			}
+			else if (GlobalSettings<HAPSettings>.Instance == null || !GlobalSettings<HAPSettings>.Instance.CastleRebellionsEnabled)
+			{
+				if (settlement.Town.InRebelliousState)
+				{
+					settlement.Town.InRebelliousState = false;
+					CampaignEventDispatcher.Instance.TownRebelliousStateChanged(settlement.Town, rebelliousState: false);
+				}
+			}
+			else if ((bool)_rebellionEnabledField.GetValue(__instance) && settlement.Party.MapEvent == null && settlement.Party.SiegeEvent == null && !settlement.OwnerClan.IsRebelClan && Settlement.CurrentSettlement != settlement)
+			{
+				_checkAndSetRebelliousState.Invoke(__instance, new object[1] { settlement });
+				if (MBRandom.RandomFloat < 0.05f && (bool)_checkRebellionEvent.Invoke(null, new object[1] { settlement }) && settlement.Town.GarrisonParty != null)
+				{
+					__instance.StartRebellionEvent(settlement);
+				}
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(RebellionsCampaignBehavior), "OnSiegeStarted")]
+	public static class OnSiegeStarted_Patch
+	{
+		private static void Postfix(RebellionsCampaignBehavior __instance, SiegeEvent siegeEvent)
+		{
+			if (__instance != null && siegeEvent?.BesiegedSettlement != null && siegeEvent.BesiegedSettlement.IsCastle && GlobalSettings<HAPSettings>.Instance != null && GlobalSettings<HAPSettings>.Instance.CastleRebellionsEnabled)
+			{
+				_checkAndSetRebelliousState.Invoke(__instance, new object[1] { siegeEvent.BesiegedSettlement });
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(RebellionsCampaignBehavior), "CheckRebellionEvent")]
+	public static class CheckRebellionEvent_Patch
+	{
+		private static void Postfix(ref bool __result, Settlement settlement)
+		{
+			if (__result && settlement.IsTown && MBRandom.RandomFloat >= 0.4f)
+			{
+				__result = false;
+			}
+		}
+	}
+
+	private static readonly FieldInfo _rebellionEnabledField = AccessTools.Field(typeof(RebellionsCampaignBehavior), "_rebellionEnabled");
+
+	private static readonly FieldInfo _rebelClansField = AccessTools.Field(typeof(RebellionsCampaignBehavior), "_rebelClansAndDaysPassedAfterCreation");
+
+	private static readonly MethodInfo _checkAndSetRebelliousState = AccessTools.Method(typeof(RebellionsCampaignBehavior), "CheckAndSetTownRebelliousState");
+
+	private static readonly MethodInfo _checkRebellionEvent = AccessTools.Method(typeof(RebellionsCampaignBehavior), "CheckRebellionEvent");
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\CastleSupplyNotificationPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using SandBox.ViewModelCollection.Nameplate.NameplateNotifications;
+using SandBox.ViewModelCollection.Nameplate.NameplateNotifications.SettlementNotificationTypes;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(CaravanTransactionNotificationItemVM))]
+public static class CastleSupplyNotificationPatch
+{
+	private static readonly TextObject _suppliedStr = new TextObject("{=HAP_Supplied}Supplied{ITEMS}");
+
+	private static readonly TextObject _itemTransactionStr = new TextObject("{=CqAhj27p} {ITEM_NAME} x{ITEM_NUMBER}");
+
+	[HarmonyPatch(MethodType.Constructor, new Type[]
+	{
+		typeof(Action<SettlementNotificationItemBaseVM>),
+		typeof(MobileParty),
+		typeof(List<ValueTuple<EquipmentElement, int>>),
+		typeof(int)
+	})]
+	[HarmonyPostfix]
+	public static void ConstructorPostfix(CaravanTransactionNotificationItemVM __instance, MobileParty caravanParty, List<(EquipmentElement, int)> items)
+	{
+		try
+		{
+			if (IsSupplyParty(caravanParty) && items.Count > 0 && items[0].Item2 > 0)
+			{
+				string text = GenerateSuppliedText(items);
+				if (!string.IsNullOrEmpty(text))
+				{
+					__instance.Text = text;
+				}
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	[HarmonyPatch("AddNewItems")]
+	[HarmonyPostfix]
+	public static void AddNewItemsPostfix(CaravanTransactionNotificationItemVM __instance)
+	{
+		try
+		{
+			if (!IsSupplyParty(__instance.CaravanParty))
+			{
+				return;
+			}
+			FieldInfo fieldInfo = AccessTools.Field(typeof(CaravanTransactionNotificationItemVM), "_items");
+			if (!(fieldInfo == null) && fieldInfo.GetValue(__instance) is List<(EquipmentElement, int)> { Count: not 0 } list && list[0].Item2 > 0)
+			{
+				string text = GenerateSuppliedText(list);
+				if (!string.IsNullOrEmpty(text))
+				{
+					__instance.Text = text;
+				}
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	private static bool IsSupplyParty(MobileParty party)
+	{
+		if (party == null)
+		{
+			return false;
+		}
+		if (party.IsVillager)
+		{
+			return party.CurrentSettlement?.IsCastle ?? false;
+		}
+		if (CastleForagerPartyComponent.IsForagerParty(party))
+		{
+			return party.CurrentSettlement?.IsCastle ?? false;
+		}
+		if (IsFishingParty(party))
+		{
+			return true;
+		}
+		if (party.IsPatrolParty)
+		{
+			Settlement currentSettlement = party.CurrentSettlement;
+			return currentSettlement != null && currentSettlement == party.HomeSettlement;
+		}
+		if (TownSupplyLinePartyComponent.IsSupplyLineParty(party))
+		{
+			return party.CurrentSettlement?.IsTown ?? false;
+		}
+		if (NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(party))
+		{
+			return party.CurrentSettlement?.IsTown ?? false;
+		}
+		return false;
+	}
+
+	private static bool IsFishingParty(MobileParty party)
+	{
+		if (party == null || party.PartyComponent == null)
+		{
+			return false;
+		}
+		string name = party.PartyComponent.GetType().Name;
+		return name == "FishingPartyComponent";
+	}
+
+	private static string GenerateSuppliedText(List<(EquipmentElement, int)> items)
+	{
+		List<IGrouping<ItemCategory, (EquipmentElement, int)>> list = (from i in items
+			where i.Item1.Item != null && i.Item1.Item.ItemCategory != null
+			group i by i.Item1.Item.ItemCategory into g
+			orderby g.Sum(((EquipmentElement, int) e) => e.Item2 * e.Item1.Item.Value)
+			select g).ToList();
+		if (list.Count == 0)
+		{
+			return null;
+		}
+		List<(string, int)> list2 = NotificationTextHelpers.BuildDisplayEntries(list);
+		MBStringBuilder mBStringBuilder = default(MBStringBuilder);
+		mBStringBuilder.Initialize(16, "GenerateSuppliedText");
+		int num = MathF.Min(12, list2.Count);
+		for (int num2 = 0; num2 < num; num2++)
+		{
+			_itemTransactionStr.SetTextVariable("ITEM_NAME", list2[num2].Item1);
+			_itemTransactionStr.SetTextVariable("ITEM_NUMBER", list2[num2].Item2);
+			mBStringBuilder.Append(_itemTransactionStr.ToString());
+		}
+		_suppliedStr.SetTextVariable("ITEMS", mBStringBuilder.ToStringAndRelease());
+		return _suppliedStr.ToString();
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\ClanFinanceModelPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using HarvestAndProduction.PartyComponents;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.Core;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+public static class ClanFinanceModelPatch
+{
+	private static bool _patchApplied;
+
+	private static Harmony _harmony;
+
+	private static string _townTaxStr;
+
+	private static string _tariffTaxStr;
+
+	private static TextObject _projectsIncomeText;
+
+	private static TextObject _settlementIncomeText;
+
+	private static bool _textFieldsCached;
+
+	public static void Initialize(Harmony harmony)
+	{
+		_harmony = harmony;
+	}
+
+	public static void ApplyPatch()
+	{
+		if (_patchApplied || _harmony == null)
+		{
+			return;
+		}
+		try
+		{
+			Type type = null;
+			Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+			foreach (Assembly assembly in assemblies)
+			{
+				if (assembly.FullName.Contains("NavalDLC"))
+				{
+					type = assembly.GetType("NavalDLC.GameComponents.NavalDLCClanFinanceModel");
+					if (type != null)
+					{
+						Main.Log("ClanFinanceModelPatch: Found NavalDLCClanFinanceModel");
+						break;
+					}
+				}
+			}
+			if (type != null)
+			{
+				PatchGoldChange(type, "NavalDLC");
+				PatchExpenses(typeof(DefaultClanFinanceModel), "Default");
+			}
+			else
+			{
+				PatchGoldChange(typeof(DefaultClanFinanceModel), "Default");
+				PatchExpenses(typeof(DefaultClanFinanceModel), "Default");
+			}
+			PatchAddSettlementIncome(typeof(DefaultClanFinanceModel), "Default");
+			PatchAddRulingClanIncome(typeof(DefaultClanFinanceModel), "Default");
+			_patchApplied = true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ClanFinanceModelPatch ERROR: " + ex.Message);
+		}
+	}
+
+	private static void PatchGoldChange(Type modelType, string name)
+	{
+		MethodInfo method = modelType.GetMethod("CalculateClanGoldChange", BindingFlags.Instance | BindingFlags.Public, null, new Type[4]
+		{
+			typeof(Clan),
+			typeof(bool),
+			typeof(bool),
+			typeof(bool)
+		}, null);
+		if (method != null)
+		{
+			MethodInfo method2 = typeof(ClanFinanceModelPatch).GetMethod("CalculateClanGoldChange_Postfix", BindingFlags.Static | BindingFlags.NonPublic);
+			_harmony.Patch(method, null, new HarmonyMethod(method2));
+			Main.Log("ClanFinanceModelPatch: Patched " + name + ".CalculateClanGoldChange");
+		}
+		else
+		{
+			Main.Log("ClanFinanceModelPatch: " + name + ".CalculateClanGoldChange not found");
+		}
+	}
+
+	private static void PatchExpenses(Type modelType, string name)
+	{
+		MethodInfo method = modelType.GetMethod("CalculateClanExpenses", BindingFlags.Instance | BindingFlags.Public, null, new Type[4]
+		{
+			typeof(Clan),
+			typeof(bool),
+			typeof(bool),
+			typeof(bool)
+		}, null);
+		if (method != null)
+		{
+			MethodInfo method2 = typeof(ClanFinanceModelPatch).GetMethod("CalculateClanExpenses_Postfix", BindingFlags.Static | BindingFlags.NonPublic);
+			_harmony.Patch(method, null, new HarmonyMethod(method2));
+			Main.Log("ClanFinanceModelPatch: Patched " + name + ".CalculateClanExpenses");
+		}
+		else
+		{
+			Main.Log("ClanFinanceModelPatch: " + name + ".CalculateClanExpenses not found");
+		}
+	}
+
+	private static void PatchAddRulingClanIncome(Type modelType, string name)
+	{
+		MethodInfo method = modelType.GetMethod("AddRulingClanIncome", BindingFlags.Instance | BindingFlags.NonPublic, null, new Type[4]
+		{
+			typeof(Clan),
+			typeof(ExplainedNumber).MakeByRefType(),
+			typeof(bool),
+			typeof(bool)
+		}, null);
+		if (method != null)
+		{
+			MethodInfo method2 = typeof(ClanFinanceModelPatch).GetMethod("AddRulingClanIncome_Postfix", BindingFlags.Static | BindingFlags.NonPublic);
+			_harmony.Patch(method, null, new HarmonyMethod(method2));
+			Main.Log("ClanFinanceModelPatch: Patched " + name + ".AddRulingClanIncome (postfix)");
+		}
+		else
+		{
+			Main.Log("ClanFinanceModelPatch: " + name + ".AddRulingClanIncome not found");
+		}
+	}
+
+	private static void AddRulingClanIncome_Postfix(Clan clan, ref ExplainedNumber goldChange)
+	{
+		try
+		{
+			Kingdom kingdom = clan.Kingdom;
+			if (kingdom != null && kingdom.ActivePolicies.Contains(DefaultPolicies.DebasementOfTheCurrency))
+			{
+				int num = kingdom.Fiefs.Count * 100;
+				goldChange.Add(0f - (float)num, DefaultPolicies.DebasementOfTheCurrency.Name);
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("AddRulingClanIncome_Postfix ERROR: " + ex.Message);
+		}
+	}
+
+	private static void PatchAddSettlementIncome(Type modelType, string name)
+	{
+		MethodInfo method = modelType.GetMethod("AddSettlementIncome", BindingFlags.Instance | BindingFlags.NonPublic, null, new Type[4]
+		{
+			typeof(Clan),
+			typeof(ExplainedNumber).MakeByRefType(),
+			typeof(bool),
+			typeof(bool)
+		}, null);
+		if (method != null)
+		{
+			MethodInfo method2 = typeof(ClanFinanceModelPatch).GetMethod("AddSettlementIncome_Prefix", BindingFlags.Static | BindingFlags.NonPublic);
+			_harmony.Patch(method, new HarmonyMethod(method2));
+			Main.Log("ClanFinanceModelPatch: Patched " + name + ".AddSettlementIncome (prefix)");
+		}
+		else
+		{
+			Main.Log("ClanFinanceModelPatch: " + name + ".AddSettlementIncome not found");
+		}
+	}
+
+	private static void CacheTextFields()
+	{
+		if (_textFieldsCached)
+		{
+			return;
+		}
+		try
+		{
+			Type typeFromHandle = typeof(DefaultClanFinanceModel);
+			_townTaxStr = AccessTools.StaticFieldRefAccess<string>(typeFromHandle, "_townTaxStr");
+			_tariffTaxStr = AccessTools.StaticFieldRefAccess<string>(typeFromHandle, "_tariffTaxStr");
+			_projectsIncomeText = AccessTools.StaticFieldRefAccess<TextObject>(typeFromHandle, "_projectsIncomeText");
+			_settlementIncomeText = AccessTools.StaticFieldRefAccess<TextObject>(typeFromHandle, "_settlementIncome");
+			_textFieldsCached = true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ClanFinanceModelPatch: Failed to cache text fields: " + ex.Message);
+		}
+	}
+
+	public static float CalculateTaxInefficiencyRate(Clan clan)
+	{
+		HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+		if (instance != null && !instance.TaxInefficiencyEnabled)
+		{
+			return 0f;
+		}
+		int num = 0;
+		foreach (Town fief in clan.Fiefs)
+		{
+			num += ((!fief.IsTown) ? 1 : 2);
+		}
+		int num2 = num - 4;
+		if (num2 <= 0)
+		{
+			return 0f;
+		}
+		return Math.Min(0.5f, (float)num2 * 0.04f);
+	}
+
+	private static bool AddSettlementIncome_Prefix(Clan clan, ref ExplainedNumber goldChange, bool applyWithdrawals, bool includeDetails)
+	{
+		try
+		{
+			CacheTextFields();
+			ExplainedNumber explainedNumber = new ExplainedNumber(0f, goldChange.IncludeDescriptions);
+			float num = CalculateTaxInefficiencyRate(clan);
+			foreach (Town fief in clan.Fiefs)
+			{
+				ExplainedNumber explainedNumber2 = Campaign.Current.Models.SettlementTaxModel.CalculateTownTax(fief);
+				ExplainedNumber explainedNumber3 = Campaign.Current.Models.ClanFinanceModel.CalculateTownIncomeFromTariffs(clan, fief, applyWithdrawals);
+				int num2 = Campaign.Current.Models.ClanFinanceModel.CalculateTownIncomeFromProjects(fief);
+				int num3 = 0;
+				if (fief.IsTown)
+				{
+					float num4 = GlobalSettings<HAPSettings>.Instance?.WorkshopTaxRate ?? 0.2f;
+					if (num4 > 0f)
+					{
+						Workshop[] workshops = fief.Workshops;
+						foreach (Workshop workshop in workshops)
+						{
+							if (workshop.WorkshopType == null || workshop.WorkshopType.IsHidden)
+							{
+								continue;
+							}
+							int workshopTaxAmount = WorkshopTaxPatch.GetWorkshopTaxAmount(workshop);
+							if (workshopTaxAmount > 0)
+							{
+								num3 += workshopTaxAmount;

@@ -1,0 +1,670 @@
+﻿PART 36/75
+?.ItemCategory == DefaultItemCategories.PackAnimal)
+				{
+					int elementNumber = conversationParty.ItemRoster.GetElementNumber(num2);
+					int num3 = MathF.Min(elementNumber, transportPackAnimalCount - num);
+					_stashedPackAnimals.AddToCounts(elementCopyAtIndex.EquipmentElement, num3);
+					conversationParty.ItemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, -num3);
+					num += num3;
+				}
+				num2--;
+			}
+		}
+		InventoryScreenHelper.OpenTradeWithCaravanOrAlleyParty(conversationParty);
+		return true;
+	}
+
+	private bool villager_restore_pack_animals_condition()
+	{
+		if (_stashedPackAnimals != null && _stashedPackAnimals.Count > 0)
+		{
+			MobileParty conversationParty = MobileParty.ConversationParty;
+			if (conversationParty != null)
+			{
+				for (int i = 0; i < _stashedPackAnimals.Count; i++)
+				{
+					ItemRosterElement elementCopyAtIndex = _stashedPackAnimals.GetElementCopyAtIndex(i);
+					conversationParty.ItemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, elementCopyAtIndex.Amount);
+				}
+			}
+			_stashedPackAnimals = null;
+		}
+		return true;
+	}
+
+	private bool villager_demand_has_goods_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null)
+		{
+			return false;
+		}
+		if (encounteredParty.MapFaction == Hero.MainHero.MapFaction)
+		{
+			return false;
+		}
+		return HasValuableGoods(encounteredParty);
+	}
+
+	private bool villager_demand_no_goods_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null)
+		{
+			return false;
+		}
+		if (encounteredParty.MapFaction == Hero.MainHero.MapFaction)
+		{
+			return false;
+		}
+		return !HasValuableGoods(encounteredParty);
+	}
+
+	private bool villager_bribe_feasible_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null || !encounteredParty.IsMobile)
+		{
+			return false;
+		}
+		CalculateVillagerBribeAmount(encounteredParty, out var gold, out var items);
+		if (gold <= 0 && items.IsEmpty())
+		{
+			return false;
+		}
+		int totalManCount = encounteredParty.MobileParty.MemberRoster.TotalManCount;
+		int totalManCount2 = MobileParty.MainParty.MemberRoster.TotalManCount;
+		if (totalManCount > 0 && (float)totalManCount2 / (float)totalManCount < 1f)
+		{
+			return false;
+		}
+		_cachedBribeGold = gold;
+		_cachedBribeItems = items;
+		bool flag = gold > 0;
+		bool flag2 = !items.IsEmpty();
+		if (flag & flag2)
+		{
+			MBTextManager.SetTextVariable("BRIBE_OFFER", new TextObject("{=HAP_VillagerBribeGoldAndItems}{BRIBE_GOLD}{GOLD_ICON} and {BRIBE_ITEMS}"));
+		}
+		else if (flag)
+		{
+			MBTextManager.SetTextVariable("BRIBE_OFFER", new TextObject("{=HAP_VillagerBribeGoldOnly}{BRIBE_GOLD}{GOLD_ICON}"));
+		}
+		else
+		{
+			MBTextManager.SetTextVariable("BRIBE_OFFER", new TextObject("{=HAP_VillagerBribeItemsOnly}{BRIBE_ITEMS}"));
+		}
+		MBTextManager.SetTextVariable("BRIBE_GOLD", gold);
+		if (flag2)
+		{
+			bool flag3 = true;
+			for (int i = 0; i < items.Count; i++)
+			{
+				ItemRosterElement elementCopyAtIndex = items.GetElementCopyAtIndex(i);
+				if (elementCopyAtIndex.Amount > 0)
+				{
+					TextObject textObject = new TextObject("{=HAP_VillagerBribeItemEntry}{AMOUNT} {ITEM_NAME}");
+					textObject.SetTextVariable("AMOUNT", elementCopyAtIndex.Amount);
+					textObject.SetTextVariable("ITEM_NAME", elementCopyAtIndex.EquipmentElement.Item.Name);
+					if (flag3)
+					{
+						MBTextManager.SetTextVariable("LEFT", textObject);
+						flag3 = false;
+					}
+					else
+					{
+						MBTextManager.SetTextVariable("RIGHT", textObject);
+						MBTextManager.SetTextVariable("LEFT", GameTexts.FindText("str_LEFT_comma_RIGHT").ToString());
+					}
+				}
+			}
+			MBTextManager.SetTextVariable("BRIBE_ITEMS", GameTexts.FindText("str_LEFT_ONLY").ToString());
+		}
+		return true;
+	}
+
+	private bool villager_will_fight_condition()
+	{
+		return !VillagerWillSurrender();
+	}
+
+	private bool villager_will_surrender_condition()
+	{
+		return VillagerWillSurrender();
+	}
+
+	private bool villager_set_faction_name_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty?.MapFaction != null)
+		{
+			MBTextManager.SetTextVariable("FACTION_NAME", encounteredParty.MapFaction.Name);
+		}
+		return true;
+	}
+
+	private bool villager_crime_warning_clickable(out TextObject explanation)
+	{
+		explanation = new TextObject("{=HAP_VillagerCrimeWarning}This will be considered a crime.");
+		return true;
+	}
+
+	private bool villager_war_warning_clickable(out TextObject explanation)
+	{
+		explanation = new TextObject("{=1LlH1Jof}This action will start a war.");
+		return true;
+	}
+
+	private void villager_accept_bribe_on_consequence()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null)
+		{
+			return;
+		}
+		int cachedBribeGold = _cachedBribeGold;
+		ItemRoster itemRoster = _cachedBribeItems ?? new ItemRoster();
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.Amount > 0)
+			{
+				PartyBase.MainParty.ItemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, elementCopyAtIndex.Amount);
+				encounteredParty.ItemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, -elementCopyAtIndex.Amount);
+			}
+		}
+		if (cachedBribeGold > 0)
+		{
+			GiveGoldAction.ApplyForPartyToCharacter(encounteredParty, Hero.MainHero, cachedBribeGold);
+		}
+		BeHostileAction.ApplyMinorCoercionHostileAction(PartyBase.MainParty, encounteredParty);
+		Hero hero = encounteredParty.MobileParty?.HomeSettlement?.Village?.Bound?.Owner;
+		if (hero != null && hero.Clan != Clan.PlayerClan)
+		{
+			ChangeRelationAction.ApplyPlayerRelation(hero, -3);
+		}
+		SkillLevelingManager.OnLoot(MobileParty.MainParty, encounteredParty.MobileParty, itemRoster, attacked: false);
+		_cachedBribeGold = 0;
+		_cachedBribeItems = null;
+		SetVillagerInteraction(encounteredParty.MobileParty, 2);
+		PlayerEncounter.LeaveEncounter = true;
+	}
+
+	private void villager_take_goods_on_consequence()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty != null)
+		{
+			ItemRoster itemRoster = new ItemRoster(encounteredParty.ItemRoster);
+			int partyTradeGold = encounteredParty.MobileParty.PartyTradeGold;
+			if (partyTradeGold > 0)
+			{
+				GiveGoldAction.ApplyForPartyToCharacter(encounteredParty, Hero.MainHero, partyTradeGold);
+			}
+			if (!FactionManager.IsAtWarAgainstFaction(encounteredParty.MapFaction, Hero.MainHero.MapFaction))
+			{
+				BeHostileAction.ApplyMajorCoercionHostileAction(PartyBase.MainParty, encounteredParty);
+			}
+			Hero hero = encounteredParty.MobileParty?.HomeSettlement?.Village?.Bound?.Owner;
+			if (hero != null && hero.Clan != Clan.PlayerClan)
+			{
+				ChangeRelationAction.ApplyPlayerRelation(hero, -5);
+			}
+			SkillLevelingManager.OnLoot(MobileParty.MainParty, encounteredParty.MobileParty, itemRoster, attacked: false);
+			SetVillagerInteraction(encounteredParty.MobileParty, 2);
+			encounteredParty.ItemRoster.Clear();
+			if (itemRoster.Count > 0)
+			{
+				InventoryScreenHelper.OpenScreenAsLoot(new Dictionary<PartyBase, ItemRoster> { 
+				{
+					PartyBase.MainParty,
+					itemRoster
+				} });
+			}
+			else
+			{
+				PlayerEncounter.LeaveEncounter = true;
+			}
+		}
+	}
+
+	private void villager_take_prisoners_on_consequence()
+	{
+		try
+		{
+			PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+			if (encounteredParty == null)
+			{
+				PlayerEncounter.LeaveEncounter = true;
+				return;
+			}
+			BeHostileAction.ApplyEncounterHostileAction(PartyBase.MainParty, encounteredParty);
+			if (PlayerEncounter.Battle == null)
+			{
+				PlayerEncounter.StartBattle();
+			}
+			PlayerEncounter.Battle.SetOverrideWinner(PlayerEncounter.Battle.PlayerSide);
+			PlayerEncounter.EnemySurrender = true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in villager_take_prisoners_on_consequence: " + ex.Message);
+			PlayerEncounter.LeaveEncounter = true;
+		}
+	}
+
+	private void villager_fight_on_consequence()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty != null)
+		{
+			SetVillagerInteraction(encounteredParty.MobileParty, 2);
+			BeHostileAction.ApplyEncounterHostileAction(PartyBase.MainParty, encounteredParty);
+		}
+	}
+
+	private void villager_leave_on_consequence()
+	{
+		PlayerEncounter.LeaveEncounter = true;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\VillageSecondaryProductionBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using HarvestAndProduction.Models;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class VillageSecondaryProductionBehavior : CampaignBehaviorBase
+{
+	private Dictionary<string, int> _villageSecondaryTypes = new Dictionary<string, int>();
+
+	private static Dictionary<Village, SecondaryProductionType> _secondaryTypeCache = new Dictionary<Village, SecondaryProductionType>();
+
+	private bool _hasInitializedForThisSave = false;
+
+	private static bool _isSystemReady = false;
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+		CampaignEvents.OnNewGameCreatedEvent.AddNonSerializedListener(this, OnNewGameCreated);
+		CampaignEvents.OnGameLoadedEvent.AddNonSerializedListener(this, OnGameLoaded);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		try
+		{
+			dataStore.SyncData("HarvestAndProduction_VillageSecondaryTypes", ref _villageSecondaryTypes);
+			if (dataStore.IsSaving)
+			{
+				Main.Log($"VillageSecondaryProductionBehavior: Saved {_villageSecondaryTypes.Count} secondary types");
+			}
+			else
+			{
+				Main.Log($"VillageSecondaryProductionBehavior: Loaded {_villageSecondaryTypes.Count} secondary types");
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in VillageSecondaryProductionBehavior.SyncData: " + ex.Message);
+		}
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		try
+		{
+			Main.Log("VillageSecondaryProductionBehavior: Session launched");
+			RebuildCache();
+			_isSystemReady = true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in OnSessionLaunched: " + ex.Message);
+		}
+	}
+
+	private void OnNewGameCreated(CampaignGameStarter starter)
+	{
+		try
+		{
+			Main.Log("VillageSecondaryProductionBehavior: New game created - assigning secondary types");
+			_hasInitializedForThisSave = false;
+			_isSystemReady = false;
+			AssignAllSecondaryTypes();
+			_isSystemReady = true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in OnNewGameCreated: " + ex.Message);
+		}
+	}
+
+	private void OnGameLoaded(CampaignGameStarter starter)
+	{
+		try
+		{
+			Main.Log("VillageSecondaryProductionBehavior: Game loaded");
+			_isSystemReady = false;
+			RebuildCache();
+			if (_villageSecondaryTypes.Count == 0 && !_hasInitializedForThisSave)
+			{
+				Main.Log("VillageSecondaryProductionBehavior: Old save detected - assigning for compatibility");
+				AssignAllSecondaryTypes();
+			}
+			else
+			{
+				Main.Log($"VillageSecondaryProductionBehavior: Using existing {_villageSecondaryTypes.Count} secondary types");
+				AssignNewVillages();
+				_hasInitializedForThisSave = true;
+			}
+			_isSystemReady = true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in OnGameLoaded: " + ex.Message);
+			_isSystemReady = true;
+		}
+	}
+
+	private void AssignAllSecondaryTypes()
+	{
+		try
+		{
+			_villageSecondaryTypes.Clear();
+			_secondaryTypeCache.Clear();
+			int num = 0;
+			int num2 = 0;
+			foreach (Settlement item in Settlement.All)
+			{
+				if (item.IsVillage && item.Village != null)
+				{
+					Village village = item.Village;
+					SecondaryProductionType secondaryProductionType = DetermineSecondaryType(village);
+					_villageSecondaryTypes[village.Settlement.StringId] = (int)secondaryProductionType;
+					_secondaryTypeCache[village] = secondaryProductionType;
+					if (secondaryProductionType != SecondaryProductionType.None)
+					{
+						num++;
+					}
+					else
+					{
+						num2++;
+					}
+					string text = VillageProductionModel.GetClimateZoneForVillage(village).ToString();
+					string text2 = secondaryProductionType.ToString();
+					Main.LogVerbose($"  {village.Settlement.Name} ({village.VillageType.StringId}, {text}): {text2}");
+				}
+			}
+			_hasInitializedForThisSave = true;
+			Main.Log($"Secondary type assignment complete: {num} with production, {num2} skipped.");
+		}
+		catch (Exception arg)
+		{
+			Main.Log($"ERROR in AssignAllSecondaryTypes: {arg}");
+		}
+	}
+
+	private void RebuildCache()
+	{
+		try
+		{
+			_secondaryTypeCache.Clear();
+			foreach (Settlement item in Settlement.All)
+			{
+				if (item.IsVillage && item.Village != null)
+				{
+					Village village = item.Village;
+					string stringId = village.Settlement.StringId;
+					if (_villageSecondaryTypes.TryGetValue(stringId, out var value))
+					{
+						SecondaryProductionType value2 = (SecondaryProductionType)value;
+						_secondaryTypeCache[village] = value2;
+					}
+				}
+			}
+			Main.Log($"Secondary type cache rebuilt: {_secondaryTypeCache.Count} villages cached");
+		}
+		catch (Exception arg)
+		{
+			Main.Log($"ERROR in RebuildCache: {arg}");
+		}
+	}
+
+	private void AssignNewVillages()
+	{
+		int num = 0;
+		foreach (Settlement item in Settlement.All)
+		{
+			if (item.IsVillage && item.Village != null)
+			{
+				string stringId = item.StringId;
+				if (!_villageSecondaryTypes.ContainsKey(stringId))
+				{
+					Village village = item.Village;
+					SecondaryProductionType value = DetermineSecondaryType(village);
+					_villageSecondaryTypes[stringId] = (int)value;
+					_secondaryTypeCache[village] = value;
+					string text = VillageProductionModel.GetClimateZoneForVillage(village).ToString();
+					string text2 = value.ToString();
+					Main.Log($"New village detected: {item.Name} ({village.VillageType.StringId}, {text}): assigned {text2}");
+					num++;
+				}
+			}
+		}
+		if (num > 0)
+		{
+			Main.Log($"Assigned secondary types to {num} new village(s)");
+		}
+	}
+
+	private SecondaryProductionType DetermineSecondaryType(Village village)
+	{
+		try
+		{
+			if (!VillageProductionModel.ValidateVillageForProduction(village, out var errorMessage))
+			{
+				Main.Log("WARNING: Cannot determine secondary type - " + errorMessage);
+				return SecondaryProductionType.None;
+			}
+			string stringId = village.VillageType.StringId;
+			VillageProductionModel.ClimateZone climateZoneForVillage = VillageProductionModel.GetClimateZoneForVillage(village);
+			List<SecondaryProductionType> validSecondaryTypes = GetValidSecondaryTypes(stringId, climateZoneForVillage);
+			if (validSecondaryTypes.Count == 0)
+			{
+				return SecondaryProductionType.None;
+			}
+			return SelectWeightedRandomType(validSecondaryTypes, climateZoneForVillage);
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR determining secondary type for village: " + ex.Message);
+			return SecondaryProductionType.None;
+		}
+	}
+
+	private List<SecondaryProductionType> GetValidSecondaryTypes(string primaryType, VillageProductionModel.ClimateZone climate)
+	{
+		List<SecondaryProductionType> list = new List<SecondaryProductionType>();
+		bool flag = primaryType == "cattle_farm" || primaryType == "sheep_farm" || primaryType == "swine_farm";
+		int num;
+		switch (primaryType)
+		{
+		default:
+			num = ((primaryType == "desert_horse_ranch") ? 1 : 0);
+			break;
+		case "europe_horse_ranch":
+		case "vlandian_horse_ranch":
+		case "battanian_horse_ranch":
+		case "sturgian_horse_ranch":
+		case "steppe_horse_ranch":
+			num = 1;
+			break;
+		}
+		bool flag2 = (byte)num != 0;
+		bool flag3 = primaryType == "wheat_farm";
+		bool flag4 = climate != VillageProductionModel.ClimateZone.Tropical && climate != VillageProductionModel.ClimateZone.Desert;
+		list.Add(SecondaryProductionType.Orchard);
+		list.Add(SecondaryProductionType.Garden);
+		list.Add(SecondaryProductionType.Poultry);
+		if (!flag3)
+		{
+			list.Add(SecondaryProductionType.Farmland);
+		}
+		if (!flag)
+		{
+			list.Add(SecondaryProductionType.Livestock);
+		}
+		if (primaryType == "trapper" || primaryType == "lumberjack")
+		{
+			list.Add(SecondaryProductionType.Forester);
+		}
+		switch (primaryType)
+		{
+		default:
+			if (!(primaryType == "olive_trees"))
+			{
+				break;
+			}
+			goto case "wheat_farm";
+		case "wheat_farm":
+		case "vineyard":
+		case "date_farm":
+		case "flax_plant":
+			list.Add(SecondaryProductionType.Apiary);
+			break;
+		}
+		if (IsFoodProducingPrimary(primaryType))
+		{
+			list.Add(SecondaryProductionType.Herbalist);
+		}
+		switch (primaryType)
+		{
+		default:
+			if (!(primaryType == "clay_mine"))
+			{
+				break;
+			}
+			goto case "silver_mine";
+		case "silver_mine":
+		case "iron_mine":
+		case "salt_mine":
+			list.Add(SecondaryProductionType.Quarry);
+			break;
+		}
+		if (primaryType == "lumberjack")
+		{
+			list.Add(SecondaryProductionType.CharcoalBurner);
+		}
+		if (!flag2 && !flag && IsFoodProducingPrimary(primaryType))
+		{
+			list.Add(SecondaryProductionType.Paddock);
+		}
+		return list;
+	}
+
+	private static bool IsFoodProducingPrimary(string primaryType)
+	{
+		switch (primaryType)
+		{
+		case "wheat_farm":
+		case "cattle_farm":
+		case "sheep_farm":
+		case "swine_farm":
+		case "vineyard":
+		case "olive_trees":
+		case "date_farm":
+		case "fisherman":
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	private SecondaryProductionType SelectWeightedRandomType(List<SecondaryProductionType> validTypes, VillageProductionModel.ClimateZone climate)
+	{
+		int index = MBRandom.RandomInt(0, validTypes.Count);
+		return validTypes[index];
+	}
+
+	public static SecondaryProductionType GetSecondaryType(Village village)
+	{
+		if (village == null)
+		{
+			Main.Log("WARNING: GetSecondaryType called with null village");
+			return SecondaryProductionType.None;
+		}
+		if (village.VillageType == null)
+		{
+			Main.Log($"WARNING: Village {village.Name} has null VillageType in GetSecondaryType");
+			return SecondaryProductionType.None;
+		}
+		if (!_isSystemReady)
+		{
+			Main.Log($"WARNING: Secondary production system not ready for {village.Name}");
+			return SecondaryProductionType.None;
+		}
+		if (_secondaryTypeCache.TryGetValue(village, out var value))
+		{
+			return value;
+		}
+		Main.Log($"INFO: Village {village.Name} not found in secondary type cache");
+		return SecondaryProductionType.None;
+	}
+
+	public static bool IsSystemReady()
+	{
+		return _isSystemReady;
+	}
+
+	public static void ClearCaches()
+	{
+		_secondaryTypeCache.Clear();
+		_isSystemReady = false;
+		Main.Log("Secondary production caches cleared");
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\BuildingInitializer.cs =====
+using System;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Buildings;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction;
+
+public static class BuildingInitializer
+{
+	private static bool _initialized;
+
+	public static void InitializeBuildings()
+	{
+		if (_initialized)
+		{
+			return;
+		}
+		try
+		{
+			ReinitializeRoadsAndPaths();
+			ReinitializeLandholdings();
+			ReinitializeCastleGuardHouse();
+			ReinitializeCastellansOffice();
+			ReinitializeTownBarracks();
+			ReinitializeCastleBarracks();
+			InjectLandholdingsIntoTowns();
+			_initialized = true;
+			Main.Log("BuildingInitializer: All building overrides applied.");
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in Building

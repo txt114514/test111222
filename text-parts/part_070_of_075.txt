@@ -1,0 +1,643 @@
+﻿PART 70/75
+Parties.Count; i++)
+				{
+					MobileParty mobileParty = settlement.Parties[i];
+					if (IsDefender(__instance, mobileParty, null, battleType))
+					{
+						list.Add(mobileParty.Party);
+					}
+				}
+				return false;
+			}
+			for (int j = 0; j < settlement.Parties.Count; j++)
+			{
+				MobileParty mobileParty2 = settlement.Parties[j];
+				if (IsDefender(__instance, mobileParty2, besiegerFactionSafe, battleType))
+				{
+					list.Add(mobileParty2.Party);
+				}
+			}
+			return false;
+		}
+	}
+
+	[HarmonyPatch(typeof(Town), "GetNextDefenderParty")]
+	public static class GetNextDefenderPartyPatch
+	{
+		[HarmonyPrefix]
+		public static bool Prefix(Town __instance, ref int partyIndex, MapEvent.BattleTypes battleType, ref PartyBase __result)
+		{
+			__result = null;
+			Settlement settlement = __instance?.Settlement;
+			if (settlement == null)
+			{
+				partyIndex++;
+				return false;
+			}
+			partyIndex++;
+			if (partyIndex == 0)
+			{
+				__result = settlement.Party;
+				return false;
+			}
+			IFaction besiegerFactionSafe = GetBesiegerFactionSafe(settlement);
+			if (besiegerFactionSafe == null && settlement.SiegeEvent != null)
+			{
+				return false;
+			}
+			for (int i = partyIndex - 1; i < settlement.Parties.Count; i++)
+			{
+				MobileParty mobileParty = settlement.Parties[i];
+				if (IsDefender(__instance, mobileParty, besiegerFactionSafe, battleType))
+				{
+					partyIndex = i + 1;
+					__result = mobileParty.Party;
+					return false;
+				}
+			}
+			return false;
+		}
+	}
+
+	private const bool DEBUG_DEFENDERS = false;
+
+	private static readonly HashSet<string> _reported = new HashSet<string>();
+
+	public static void ClearCache()
+	{
+		_reported.Clear();
+	}
+
+	private static IFaction GetBesiegerFactionSafe(Settlement settlement)
+	{
+		try
+		{
+			if (settlement == null || settlement.SiegeEvent == null)
+			{
+				return null;
+			}
+			if (settlement.SiegeEvent.BesiegerCamp == null)
+			{
+				return null;
+			}
+			return settlement.SiegeEvent.BesiegerCamp.MapFaction;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[DefenderGuard] BesiegerCamp.MapFaction threw for " + ((settlement != null) ? settlement.Name.ToString() : "null") + ": " + ex.Message);
+			return null;
+		}
+	}
+
+	private static bool IsDefender(Town town, MobileParty mobileParty, IFaction besiegerFaction, MapEvent.BattleTypes battleType)
+	{
+		if (mobileParty == null)
+		{
+			return false;
+		}
+		IFaction mapFaction;
+		try
+		{
+			mapFaction = mobileParty.MapFaction;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[DefenderGuard] MapFaction threw for party " + mobileParty.StringId + ": " + ex.Message);
+			return false;
+		}
+		if (mapFaction == null)
+		{
+			if (_reported.Add(mobileParty.StringId))
+			{
+				Main.Log("[DefenderGuard] Party with NULL MapFaction inside " + town.Name?.ToString() + ": id=" + mobileParty.StringId + " component=" + ((mobileParty.PartyComponent != null) ? mobileParty.PartyComponent.GetType().Name : "none") + " clan=" + ((mobileParty.ActualClan != null) ? mobileParty.ActualClan.StringId : "null") + " home=" + ((mobileParty.HomeSettlement != null) ? mobileParty.HomeSettlement.StringId : "null"));
+			}
+			return false;
+		}
+		if (besiegerFaction != null && !mapFaction.IsAtWarWith(besiegerFaction))
+		{
+			return false;
+		}
+		if (!mobileParty.IsActive || mobileParty.IsVillager || mobileParty.IsCaravan)
+		{
+			return false;
+		}
+		if (mobileParty.IsMilitia && (town.InRebelliousState || battleType == MapEvent.BattleTypes.SallyOut))
+		{
+			return false;
+		}
+		if (battleType == MapEvent.BattleTypes.SallyOut && (mobileParty.PartyComponent is TownSupplyLinePartyComponent || mobileParty.PartyComponent is NavalSupplyConvoyPartyComponent || mobileParty.PartyComponent is CastleForagerPartyComponent))
+		{
+			return false;
+		}
+		return true;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\TownProsperityCapPatch.cs =====
+using HarmonyLib;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem.Settlements;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(Town), "DailyTick")]
+public static class TownProsperityCapPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(Town __instance)
+	{
+		int num = ((!__instance.IsCastle) ? (GlobalSettings<HAPSettings>.Instance?.TownProsperityCap ?? 10000) : (GlobalSettings<HAPSettings>.Instance?.CastleProsperityCap ?? 5000));
+		if (num > 0 && __instance.Prosperity > (float)num)
+		{
+			__instance.Prosperity = num;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\TradeNotificationPatches.cs =====
+using System;
+using System.Collections.Generic;
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+public static class TradeNotificationPatches
+{
+	[HarmonyPatch(typeof(PartiesBuyFoodCampaignBehavior), "BuyFoodInternal")]
+	public static class LordBuyFoodNotificationPatch
+	{
+		[HarmonyPrefix]
+		public static bool Prefix(MobileParty mobileParty, Settlement settlement, int numberOfFoodItemsNeededToBuy)
+		{
+			if (mobileParty == null || mobileParty.IsMainParty)
+			{
+				return true;
+			}
+			float foodChange = mobileParty.FoodChange;
+			if (foodChange < 0f)
+			{
+				float num = (settlement.IsVillage ? Campaign.Current.Models.PartyFoodBuyingModel.MinimumDaysFoodToLastWhileBuyingFoodFromVillage : Campaign.Current.Models.PartyFoodBuyingModel.MinimumDaysFoodToLastWhileBuyingFoodFromTown);
+				float num2 = (float)mobileParty.TotalFoodAtInventory / (0f - foodChange);
+				if (num2 >= num)
+				{
+					return false;
+				}
+			}
+			List<(EquipmentElement, int)> list = new List<(EquipmentElement, int)>();
+			for (int i = 0; i < numberOfFoodItemsNeededToBuy; i++)
+			{
+				Campaign.Current.Models.PartyFoodBuyingModel.FindItemToBuy(mobileParty, settlement, out var itemRosterElement, out var itemElementsPrice);
+				if (itemRosterElement.EquipmentElement.Item == null)
+				{
+					break;
+				}
+				if (itemElementsPrice <= (float)mobileParty.PartyTradeGold)
+				{
+					if (mobileParty.TotalWeightCarried >= (float)mobileParty.InventoryCapacity)
+					{
+						break;
+					}
+					int itemNumber = mobileParty.ItemRoster.GetItemNumber(itemRosterElement.EquipmentElement.Item);
+					SellItemsAction.Apply(settlement.Party, mobileParty.Party, itemRosterElement, 1);
+					int itemNumber2 = mobileParty.ItemRoster.GetItemNumber(itemRosterElement.EquipmentElement.Item);
+					if (itemNumber2 > itemNumber && itemRosterElement.EquipmentElement.Item.IsFood)
+					{
+						AddOrUpdatePurchase(list, itemRosterElement.EquipmentElement, itemNumber2 - itemNumber);
+					}
+					if (!itemRosterElement.EquipmentElement.Item.IsFood && itemRosterElement.EquipmentElement.Item.HasHorseComponent && itemRosterElement.EquipmentElement.Item.HorseComponent.IsLiveStock && itemNumber2 > itemNumber)
+					{
+						AddOrUpdatePurchase(list, itemRosterElement.EquipmentElement, itemNumber2 - itemNumber);
+					}
+				}
+				if (itemRosterElement.EquipmentElement.Item.HasHorseComponent && itemRosterElement.EquipmentElement.Item.HorseComponent.IsLiveStock)
+				{
+					i += itemRosterElement.EquipmentElement.Item.HorseComponent.MeatCount - 1;
+				}
+			}
+			if (list.Count > 0)
+			{
+				FireNotificationEvent(mobileParty, settlement, list);
+			}
+			return false;
+		}
+
+		private static void AddOrUpdatePurchase(List<(EquipmentElement, int)> purchases, EquipmentElement equipment, int amount)
+		{
+			for (int i = 0; i < purchases.Count; i++)
+			{
+				if (purchases[i].Item1.Item?.StringId == equipment.Item?.StringId && purchases[i].Item1.ItemModifier == equipment.ItemModifier)
+				{
+					purchases[i] = (purchases[i].Item1, purchases[i].Item2 + amount);
+					return;
+				}
+			}
+			purchases.Add((equipment, amount));
+		}
+
+		private static void FireNotificationEvent(MobileParty mobileParty, Settlement settlement, List<(EquipmentElement, int)> purchasedItems)
+		{
+			if (settlement.IsVillage)
+			{
+				foreach (var purchasedItem in purchasedItems)
+				{
+					ItemRosterElement itemRosterElement = new ItemRosterElement(purchasedItem.Item1, purchasedItem.Item2);
+					CampaignEventDispatcher.Instance.OnItemSold(settlement.Party, mobileParty.Party, itemRosterElement, purchasedItem.Item2, settlement);
+				}
+				return;
+			}
+			if (!settlement.IsTown)
+			{
+				return;
+			}
+			List<(EquipmentElement, int)> list = new List<(EquipmentElement, int)>();
+			foreach (var purchasedItem2 in purchasedItems)
+			{
+				list.Add((purchasedItem2.Item1, -purchasedItem2.Item2));
+			}
+			CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(mobileParty, settlement.Town, list);
+		}
+	}
+
+	[HarmonyPatch(typeof(SellItemsAction), "Apply")]
+	public static class LordSellItemsBlockPatch
+	{
+		private const float MIN_FOOD_DAYS_RESERVE = 7f;
+
+		[HarmonyPrefix]
+		public static bool Prefix(PartyBase receiverParty, PartyBase payerParty, ItemRosterElement subject, int number)
+		{
+			if (receiverParty == null || !receiverParty.IsMobile)
+			{
+				return true;
+			}
+			MobileParty mobileParty = receiverParty.MobileParty;
+			if (!mobileParty.IsLordParty || mobileParty.IsMainParty)
+			{
+				return true;
+			}
+			if (payerParty == null || !payerParty.IsSettlement)
+			{
+				return true;
+			}
+			if (LordHerdManagementBehavior.SuppressTradeNotification)
+			{
+				return true;
+			}
+			ItemObject item = subject.EquipmentElement.Item;
+			if (item == null)
+			{
+				return true;
+			}
+			if (item.HasHorseComponent && item.HorseComponent.IsMount)
+			{
+				if (item.ItemCategory?.StringId == "noble_horse")
+				{
+					return true;
+				}
+				if (IsCamelItem(item) && !IsCamelFriendlyLocation(mobileParty))
+				{
+					return true;
+				}
+				return false;
+			}
+			if (item.HasHorseComponent && item.HorseComponent.IsPackAnimal)
+			{
+				if (IsCamelItem(item) && !IsCamelFriendlyLocation(mobileParty))
+				{
+					return true;
+				}
+				return false;
+			}
+			if (item.HasHorseComponent && item.HorseComponent.IsLiveStock)
+			{
+				return false;
+			}
+			if (item.Type == ItemObject.ItemTypeEnum.Animal)
+			{
+				return false;
+			}
+			if (item.IsFood)
+			{
+				return WouldRetainEnoughFood(mobileParty, number);
+			}
+			return true;
+		}
+
+		private static bool WouldRetainEnoughFood(MobileParty lordParty, int foodLost)
+		{
+			int totalFood = lordParty.ItemRoster.TotalFood;
+			float num = Math.Max(0.1f, Math.Abs(lordParty.FoodChange));
+			float num2 = (float)(totalFood - foodLost) / num;
+			return num2 >= 7f;
+		}
+
+		private static bool IsCamelItem(ItemObject item)
+		{
+			if (item == null || item.StringId == null)
+			{
+				return false;
+			}
+			return item.StringId.IndexOf("camel", StringComparison.OrdinalIgnoreCase) >= 0;
+		}
+
+		private static bool IsCamelFriendlyLocation(MobileParty party)
+		{
+			try
+			{
+				if (party == null || Campaign.Current?.MapSceneWrapper == null)
+				{
+					return false;
+				}
+				Vec2 getPosition2D = party.GetPosition2D;
+				PathFaceRecord faceIndex = Campaign.Current.MapSceneWrapper.GetFaceIndex(new CampaignVec2(getPosition2D, isOnLand: true));
+				TerrainType faceTerrainType = Campaign.Current.MapSceneWrapper.GetFaceTerrainType(faceIndex);
+				if (faceTerrainType == TerrainType.Desert || faceTerrainType == TerrainType.Dune)
+				{
+					return true;
+				}
+				float num = Campaign.Current.MapSceneWrapper.GetTerrainSize().Y;
+				if (num <= 0f)
+				{
+					num = 1f;
+				}
+				float num2 = getPosition2D.Y / num;
+				if (num2 < 0.32f)
+				{
+					return true;
+				}
+				return false;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(SellItemsAction), "Apply")]
+	public static class LordSellItemsNotificationPatch
+	{
+		[HarmonyPostfix]
+		public static void Postfix(bool __runOriginal, PartyBase receiverParty, PartyBase payerParty, ItemRosterElement subject, int number, Settlement currentSettlement)
+		{
+			try
+			{
+				if (!__runOriginal || LordHerdManagementBehavior.SuppressTradeNotification || number <= 0 || subject.EquipmentElement.Item == null || receiverParty == null || !receiverParty.IsMobile)
+				{
+					return;
+				}
+				MobileParty mobileParty = receiverParty.MobileParty;
+				if (!mobileParty.IsLordParty || mobileParty.IsMainParty || payerParty == null || !payerParty.IsSettlement)
+				{
+					return;
+				}
+				Settlement settlement = currentSettlement ?? payerParty.Settlement;
+				if (settlement != null && settlement.IsTown)
+				{
+					ItemObject item = subject.EquipmentElement.Item;
+					if (item.IsFood || item.Type == ItemObject.ItemTypeEnum.Animal || (item.HasHorseComponent && item.HorseComponent.IsLiveStock) || (item.HasHorseComponent && item.HorseComponent.IsMount) || (item.HasHorseComponent && item.HorseComponent.IsPackAnimal))
+					{
+						List<(EquipmentElement, int)> itemRosterElements = new List<(EquipmentElement, int)> { (subject.EquipmentElement, number) };
+						CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(mobileParty, settlement.Town, itemRosterElements);
+					}
+				}
+			}
+			catch (Exception)
+			{
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\TroopUpgradeItemPatch.cs =====
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+public static class TroopUpgradeItemPatch
+{
+	public static bool CategoriesMatch(ItemCategory itemCategory, ItemCategory requiredCategory)
+	{
+		if (itemCategory == null || requiredCategory == null)
+		{
+			return false;
+		}
+		if (itemCategory == requiredCategory)
+		{
+			return true;
+		}
+		string stringId = itemCategory.StringId;
+		string stringId2 = requiredCategory.StringId;
+		if (stringId2 == "horse" && stringId == "workshop_horse")
+		{
+			return true;
+		}
+		if (stringId2 == "war_horse" && stringId == "workshop_war_horse")
+		{
+			return true;
+		}
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\ValidateCommandPatch.cs =====
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(PartyScreenLogic), "ValidateCommand")]
+public static class ValidateCommandPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(PartyScreenLogic __instance, PartyScreenLogic.PartyCommand command, ref bool __result)
+	{
+		if (command.Code != PartyScreenLogic.PartyCommandCode.UpgradeTroop)
+		{
+			return true;
+		}
+		CharacterObject character = command.Character;
+		if (character == null || character.UpgradeTargets == null || character.UpgradeTargets.Length == 0)
+		{
+			return true;
+		}
+		if (command.UpgradeTarget < 0 || command.UpgradeTarget >= character.UpgradeTargets.Length)
+		{
+			__result = false;
+			return false;
+		}
+		CharacterObject characterObject = character.UpgradeTargets[command.UpgradeTarget];
+		TroopRoster troopRoster = __instance.MemberRosters[(uint)command.RosterSide];
+		int num = troopRoster.FindIndexOfTroop(character);
+		if (num == -1 || troopRoster.GetElementNumber(num) < command.TotalNumber)
+		{
+			__result = false;
+			return false;
+		}
+		int upgradeXpCost = character.GetUpgradeXpCost(PartyBase.MainParty, command.UpgradeTarget);
+		if (troopRoster.GetElementXp(num) < upgradeXpCost * command.TotalNumber)
+		{
+			__result = false;
+			return false;
+		}
+		int upgradeGoldCost = character.GetUpgradeGoldCost(PartyBase.MainParty, command.UpgradeTarget);
+		int num2 = (((command.RosterSide == PartyScreenLogic.PartyRosterSide.Left) ? __instance.LeftPartyLeader : __instance.RightPartyLeader)?.HeroObject?.Gold).GetValueOrDefault() + __instance.CurrentData.PartyGoldChangeAmount;
+		if (num2 < upgradeGoldCost * command.TotalNumber)
+		{
+			__result = false;
+			return false;
+		}
+		ItemCategory itemCategory = characterObject?.UpgradeRequiresItemFromCategory;
+		if (itemCategory != null)
+		{
+			PartyBase rightOwnerParty = __instance.RightOwnerParty;
+			if (rightOwnerParty?.ItemRoster == null)
+			{
+				__result = false;
+				return false;
+			}
+			int num3 = 0;
+			for (int i = 0; i < rightOwnerParty.ItemRoster.Count; i++)
+			{
+				ItemRosterElement itemRosterElement = rightOwnerParty.ItemRoster[i];
+				ItemCategory itemCategory2 = itemRosterElement.EquipmentElement.Item?.ItemCategory;
+				if (TroopUpgradeItemPatch.CategoriesMatch(itemCategory2, itemCategory))
+				{
+					num3 += itemRosterElement.Amount;
+				}
+			}
+			if (num3 < command.TotalNumber)
+			{
+				__result = false;
+				return false;
+			}
+		}
+		__result = true;
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VanillaFoodConsumptionPatch.cs =====
+using HarmonyLib;
+using HarvestAndProduction.Models;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(FoodConsumptionBehavior), "PartyConsumeFood")]
+public static class VanillaFoodConsumptionPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(MobileParty mobileParty)
+	{
+		if (FoodConsumptionModel.IsPartyProcessedToday(mobileParty))
+		{
+			return false;
+		}
+		if (CastleForagerPartyComponent.IsForagerParty(mobileParty))
+		{
+			return false;
+		}
+		if (TownSupplyLinePartyComponent.IsSupplyLineParty(mobileParty))
+		{
+			return false;
+		}
+		if (NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(mobileParty))
+		{
+			return false;
+		}
+		return true;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VanillaGarrisonDesertionPatch.cs =====
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultPartyDesertionModel), "GetTroopsToDesert")]
+public static class VanillaGarrisonDesertionPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(MobileParty mobileParty, ref TroopRoster __result)
+	{
+		if (!mobileParty.IsGarrison)
+		{
+			return true;
+		}
+		if (mobileParty.CurrentSettlement == null)
+		{
+			return true;
+		}
+		if (mobileParty.CurrentSettlement.IsUnderSiege)
+		{
+			__result = TroopRoster.CreateDummyTroopRoster();
+			return false;
+		}
+		float starvationDays = StarvationDesertionBehavior.GetStarvationDays(mobileParty.CurrentSettlement);
+		if (starvationDays >= 7f)
+		{
+			__result = TroopRoster.CreateDummyTroopRoster();
+			return false;
+		}
+		return true;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VanillaLootedVillageSecurityPatch.cs =====
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.GameComponents;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultSettlementSecurityModel), "CalculateRaidedVillageEffectsOnSecurity")]
+public static class VanillaLootedVillageSecurityPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix()
+	{
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VanillaPolicyLoyaltyPatch.cs =====
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.GameComponents;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultSettlementLoyaltyModel), "GetSettlementLoyaltyChangeDueToPolicies")]
+public static class VanillaPol

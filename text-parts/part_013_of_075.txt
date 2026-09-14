@@ -1,0 +1,416 @@
+﻿PART 13/75
+69842u)));
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\FishingPartyDialogueBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.Encounters;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class FishingPartyDialogueBehavior : CampaignBehaviorBase
+{
+	private int _cachedBribeGold = 0;
+
+	private ItemRoster _cachedBribeItems = null;
+
+	private const int INTERACTION_NONE = 0;
+
+	private const int INTERACTION_FRIENDLY = 1;
+
+	private const int INTERACTION_HOSTILE = 2;
+
+	private Dictionary<MobileParty, int> _interactedFishers = new Dictionary<MobileParty, int>();
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+		CampaignEvents.MobilePartyDestroyed.AddNonSerializedListener(this, OnMobilePartyDestroyed);
+	}
+
+	private void OnMobilePartyDestroyed(MobileParty party, PartyBase destroyer)
+	{
+		_interactedFishers.Remove(party);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		_interactedFishers.Clear();
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		AddDialogues(starter);
+	}
+
+	private void AddDialogues(CampaignGameStarter starter)
+	{
+		starter.AddDialogLine("fisher_friendly_start_criminal", "start", "fisher_friendly_talk", "{=FisherGreetCriminal}You... we've heard about you. Please, {PLAYER_ADDRESS}, we're just fishermen from {SETTLEMENT_NAME}. We want no trouble.[rf:idle_angry][ib:nervous]", fisher_criminal_first_encounter_condition, null, 111);
+		starter.AddDialogLine("fisher_friendly_start_no_goods", "start", "fisher_friendly_talk", "{=FisherGreetingNoGoods}Greetings, {PLAYER_ADDRESS}. We're fishermen from {SETTLEMENT_NAME}, just heading out to sea. We haven't caught anything yet.", fisher_friendly_no_goods_condition, null, 110);
+		starter.AddDialogLine("fisher_friendly_start_has_goods", "start", "fisher_friendly_talk", "{=FisherGreetingHasGoods}Hail, {PLAYER_ADDRESS}! We're fishermen from {SETTLEMENT_NAME}, returning to port with a fresh catch. The seas have been kind to us today.", fisher_friendly_has_goods_condition, null, 110);
+		starter.AddDialogLine("fisher_friendly_return", "start", "fisher_friendly_talk", "{=FisherFriendlyReturn}Ah, it's you again, {PLAYER_ADDRESS}. What can we do for you?", fisher_friendly_return_condition, null, 110);
+		starter.AddDialogLine("fisher_hostile_return", "start", "fisher_friendly_talk", "{=FisherHostileReturn}You again? Haven't you taken enough from us?[rf:idle_angry][ib:nervous]", fisher_hostile_return_condition, null, 110);
+		starter.AddDialogLine("fisher_friendly_pretalk", "fisher_friendly_pretalk", "fisher_friendly_talk", "{=FisherPretalk}Aye, what else can we do for you?", null, null);
+		starter.AddPlayerLine("fisher_friendly_buy", "fisher_friendly_talk", "fisher_player_trade", "{=FisherBuyOption}That's a fine catch. I'd be interested in buying some of that fish.", fisher_has_goods_condition, null);
+		starter.AddPlayerLine("fisher_friendly_demand_has_goods", "fisher_friendly_talk", "fisher_friendly_demand_response", "{=FisherDemandGoods}Hand over your catch and any valuables. Now.", fisher_demand_has_goods_condition, null, 91);
+		starter.AddPlayerLine("fisher_friendly_demand_no_goods", "fisher_friendly_talk", "fisher_friendly_demand_response", "{=FisherDemandNoGoods}Hand over your gold and anything of value. Now.", fisher_demand_no_goods_condition, null, 90);
+		starter.AddPlayerLine("fisher_friendly_leave", "fisher_friendly_talk", "close_window", "{=FisherLeave}Safe travels and good fishing.", null, fisher_leave_on_consequence, 80);
+		starter.AddDialogLine("fisher_player_trade_screen", "fisher_player_trade", "fisher_friendly_pretalk", "{=FisherTradeScreen}Aye, have a look at what we've got. Take what you like![rf:convo_relaxed_happy][ib:demure]", fisher_open_trade_screen_condition, null);
+		starter.AddDialogLine("fisher_friendly_demand_bribe", "fisher_friendly_demand_response", "fisher_friendly_bribe_options", "{=FisherBribeResponse}Wait, wait! We're just fishermen! Here, take {BRIBE_OFFER} and let us go. Please![rf:idle_angry][ib:nervous]", fisher_bribe_feasible_condition, null, 110);
+		starter.AddDialogLine("fisher_friendly_demand_fight", "fisher_friendly_demand_response", "fisher_friendly_fight_options", "{=FisherFightResponse}We may be simple fishermen, but we've weathered worse storms than you! You'll not take our catch without a fight![rf:idle_angry][ib:aggressive]", fisher_will_fight_condition, null);
+		starter.AddDialogLine("fisher_friendly_demand_surrender", "fisher_friendly_demand_response", "fisher_friendly_surrender_options", "{=FisherSurrenderResponse}Please, we're just fishermen! Take what you want, but spare our lives![rf:idle_angry][ib:nervous]", fisher_will_surrender_condition, null);
+		starter.AddPlayerLine("fisher_friendly_fight_attack", "fisher_friendly_fight_options", "close_window", "{=FisherAttack}So be it. Attack!", null, fisher_fight_on_consequence, 100, fisher_war_warning_clickable);
+		starter.AddPlayerLine("fisher_friendly_fight_backdown", "fisher_friendly_fight_options", "fisher_friendly_pretalk", "{=FisherBackDown}Perhaps I was too hasty. Forget I said anything.", null, null, 80);
+		starter.AddPlayerLine("fisher_friendly_surrender_take_goods", "fisher_friendly_surrender_options", "fisher_friendly_goods_taken", "{=FisherTakeGoods}Just the fish. Get out of here.", fisher_has_goods_condition, fisher_take_goods_on_consequence, 100, fisher_crime_warning_clickable);
+		starter.AddPlayerLine("fisher_friendly_surrender_prisoners", "fisher_friendly_surrender_options", "fisher_friendly_prisoner_warning", "{=FisherTakePrisoners}You're my prisoners now.", null, null, 90, fisher_war_warning_clickable);
+		starter.AddPlayerLine("fisher_friendly_surrender_attack", "fisher_friendly_surrender_options", "close_window", "{=FisherAttackSurrendered}Don't bother pleading. At them, lads!", null, fisher_fight_on_consequence, 85, fisher_war_warning_clickable);
+		starter.AddPlayerLine("fisher_friendly_surrender_let_go", "fisher_friendly_surrender_options", "close_window", "{=FisherLetGo}Fine. Get out of my sight.", null, fisher_leave_on_consequence, 80);
+		starter.AddPlayerLine("fisher_friendly_bribe_accept", "fisher_friendly_bribe_options", "fisher_friendly_bribe_taken", "{=FisherBribeAccept}All right. Hand it over and get out of here.", null, fisher_accept_bribe_on_consequence, 100, fisher_crime_warning_clickable);
+		starter.AddPlayerLine("fisher_friendly_bribe_want_all", "fisher_friendly_bribe_options", "fisher_friendly_demand_escalate", "{=FisherBribeWantAll}That's not enough. I want everything.", null, null, 90);
+		starter.AddPlayerLine("fisher_friendly_bribe_nevermind", "fisher_friendly_bribe_options", "fisher_friendly_pretalk", "{=FisherBribeNevermind}Fine. Keep your scraps.", null, null, 80);
+		starter.AddDialogLine("fisher_friendly_escalate_fight", "fisher_friendly_demand_escalate", "fisher_friendly_fight_options", "{=FisherEscalateFight}Everything? You'll have to fight us for it![rf:idle_angry][ib:aggressive]", fisher_will_fight_condition, null);
+		starter.AddDialogLine("fisher_friendly_escalate_surrender", "fisher_friendly_demand_escalate", "fisher_friendly_surrender_options", "{=FisherEscalateSurrender}Please... take it all then. Just don't hurt us![rf:idle_angry][ib:nervous]", fisher_will_surrender_condition, null);
+		starter.AddDialogLine("fisher_friendly_bribe_taken_response", "fisher_friendly_bribe_taken", "close_window", "{=FisherBribeTakenResponse}Thank you... we'll be on our way.", null, fisher_leave_on_consequence);
+		starter.AddDialogLine("fisher_friendly_goods_taken_response", "fisher_friendly_goods_taken", "close_window", "{=FisherGoodsTakenResponse}Thank you for sparing us... We'll remember this.", null, fisher_leave_on_consequence);
+		starter.AddDialogLine("fisher_friendly_prisoner_warning_response", "fisher_friendly_prisoner_warning", "fisher_friendly_prisoner_confirm", "{=FisherPrisonerWarning}The {FACTION_NAME} won't stand for this! You're making a grave mistake![rf:idle_angry][ib:nervous]", fisher_set_faction_name_condition, null);
+		starter.AddPlayerLine("fisher_friendly_prisoner_confirm_yes", "fisher_friendly_prisoner_confirm", "close_window", "{=FisherPrisonerConfirm}Enough talking. Now march.", null, fisher_take_prisoners_on_consequence);
+		starter.AddPlayerLine("fisher_friendly_prisoner_confirm_no", "fisher_friendly_prisoner_confirm", "close_window", "{=FisherPrisonerCancel}Never mind. Go on your way.", null, fisher_leave_on_consequence, 80);
+		starter.AddDialogLine("fisher_enemy_start", "start", "fisher_enemy_talk", "{=FisherEnemyGreeting}What do you want? We're just fishermen from {SETTLEMENT_NAME}. We want no part of your war.[rf:idle_angry][ib:nervous]", fisher_enemy_condition, null, 110);
+		starter.AddPlayerLine("fisher_enemy_attack", "fisher_enemy_talk", "close_window", "{=FisherEnemyAttack}Your people chose war. Now face the consequences!", null, fisher_fight_on_consequence);
+		starter.AddPlayerLine("fisher_enemy_demand", "fisher_enemy_talk", "fisher_enemy_demand_response", "{=FisherEnemyDemand}Surrender your goods and yourselves. Resist and you die.", null, null, 90);
+		starter.AddPlayerLine("fisher_enemy_leave", "fisher_enemy_talk", "close_window", "{=FisherEnemyLeave}I have bigger fish to fry. Be gone.", null, fisher_leave_on_consequence, 80);
+		starter.AddDialogLine("fisher_enemy_demand_fight", "fisher_enemy_demand_response", "fisher_enemy_fight_options", "{=FisherEnemyFight}We're not warriors, but we won't go down without a fight![rf:idle_angry][ib:aggressive]", fisher_will_fight_condition, null);
+		starter.AddDialogLine("fisher_enemy_demand_surrender", "fisher_enemy_demand_response", "fisher_enemy_surrender_options", "{=FisherEnemySurrender}We can't fight you. We surrender. Please, have mercy![rf:idle_angry][ib:nervous]", fisher_will_surrender_condition, null);
+		starter.AddPlayerLine("fisher_enemy_fight_attack", "fisher_enemy_fight_options", "close_window", "{=FisherAttack}So be it. Attack!", null, fisher_fight_on_consequence);
+		starter.AddPlayerLine("fisher_enemy_fight_leave", "fisher_enemy_fight_options", "close_window", "{=FisherEnemyFightLeave}You're not worth my time. Be gone.", null, fisher_leave_on_consequence, 80);
+		starter.AddPlayerLine("fisher_enemy_surrender_take_goods", "fisher_enemy_surrender_options", "fisher_enemy_goods_taken", "{=FisherTakeGoods}Just the fish. Get out of here.", fisher_has_goods_condition, fisher_take_goods_on_consequence);
+		starter.AddPlayerLine("fisher_enemy_surrender_prisoners", "fisher_enemy_surrender_options", "close_window", "{=FisherEnemyTakePrisoners}You're prisoners of war now. March.", null, fisher_take_prisoners_on_consequence, 90);
+		starter.AddPlayerLine("fisher_enemy_surrender_attack", "fisher_enemy_surrender_options", "close_window", "{=FisherAttackSurrendered}Don't bother pleading. At them, lads!", null, fisher_fight_on_consequence, 85);
+		starter.AddPlayerLine("fisher_enemy_surrender_let_go", "fisher_enemy_surrender_options", "close_window", "{=FisherEnemyLetGo}Get out of here before I change my mind.", null, fisher_leave_on_consequence, 80);
+		starter.AddDialogLine("fisher_enemy_goods_taken_response", "fisher_enemy_goods_taken", "close_window", "{=FisherEnemyGoodsTaken}Thank you for your mercy...", null, fisher_leave_on_consequence);
+	}
+
+	private bool IsFishingPartyEncounter(out bool hasGoods, out bool isEnemy)
+	{
+		hasGoods = false;
+		isEnemy = false;
+		if (PlayerEncounter.Current == null)
+		{
+			return false;
+		}
+		if (Campaign.Current.CurrentConversationContext != ConversationContext.PartyEncounter)
+		{
+			return false;
+		}
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null || !encounteredParty.IsMobile)
+		{
+			return false;
+		}
+		MobileParty mobileParty = encounteredParty.MobileParty;
+		if (!mobileParty.IsVillager || !IsFishingParty(mobileParty))
+		{
+			return false;
+		}
+		Settlement homeSettlement = mobileParty.HomeSettlement;
+		hasGoods = HasValuableGoods(encounteredParty);
+		isEnemy = FactionManager.IsAtWarAgainstFaction(encounteredParty.MapFaction, Hero.MainHero.MapFaction);
+		if (homeSettlement != null)
+		{
+			MBTextManager.SetTextVariable("SETTLEMENT_NAME", homeSettlement.EncyclopediaLinkWithName);
+		}
+		if (Hero.MainHero.Clan?.Kingdom != null)
+		{
+			MBTextManager.SetTextVariable("PLAYER_ADDRESS", new TextObject("{=HAP_VillagerAddressLord}my {?PLAYER.GENDER}lady{?}lord{\\?}"));
+		}
+		else
+		{
+			MBTextManager.SetTextVariable("PLAYER_ADDRESS", new TextObject("{=HAP_VillagerAddressCommoner}traveler"));
+		}
+		return true;
+	}
+
+	private bool IsFishingParty(MobileParty party)
+	{
+		if (party == null || party.PartyComponent == null)
+		{
+			return false;
+		}
+		string name = party.PartyComponent.GetType().Name;
+		return name == "FishingPartyComponent";
+	}
+
+	private int GetFisherInteraction(MobileParty party)
+	{
+		if (_interactedFishers.TryGetValue(party, out var value))
+		{
+			return value;
+		}
+		return 0;
+	}
+
+	private void SetFisherInteraction(MobileParty party, int interaction)
+	{
+		if (_interactedFishers.ContainsKey(party))
+		{
+			_interactedFishers[party] = interaction;
+		}
+		else
+		{
+			_interactedFishers.Add(party, interaction);
+		}
+	}
+
+	private bool HasValuableGoods(PartyBase party)
+	{
+		if (party?.ItemRoster == null || party.ItemRoster.IsEmpty())
+		{
+			return false;
+		}
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			if (party.ItemRoster.GetElementCopyAtIndex(i).EquipmentElement.Item != null && party.ItemRoster.GetElementNumber(i) > 0)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private bool fisher_criminal_first_encounter_condition()
+	{
+		if (!IsFishingPartyEncounter(out var _, out var isEnemy))
+		{
+			return false;
+		}
+		if (isEnemy)
+		{
+			return false;
+		}
+		MobileParty mobileParty = PlayerEncounter.EncounteredParty.MobileParty;
+		if (GetFisherInteraction(mobileParty) != 0)
+		{
+			return false;
+		}
+		IFaction mapFaction = PlayerEncounter.EncounteredParty.MapFaction;
+		if (mapFaction == null || mapFaction.MainHeroCrimeRating < 3f)
+		{
+			return false;
+		}
+		SetFisherInteraction(mobileParty, 1);
+		return true;
+	}
+
+	private bool fisher_friendly_no_goods_condition()
+	{
+		if (!IsFishingPartyEncounter(out var hasGoods, out var isEnemy))
+		{
+			return false;
+		}
+		if (isEnemy | hasGoods)
+		{
+			return false;
+		}
+		MobileParty mobileParty = PlayerEncounter.EncounteredParty.MobileParty;
+		if (GetFisherInteraction(mobileParty) != 0)
+		{
+			return false;
+		}
+		SetFisherInteraction(mobileParty, 1);
+		return true;
+	}
+
+	private bool fisher_friendly_has_goods_condition()
+	{
+		if (!IsFishingPartyEncounter(out var hasGoods, out var isEnemy))
+		{
+			return false;
+		}
+		if (isEnemy || !hasGoods)
+		{
+			return false;
+		}
+		MobileParty mobileParty = PlayerEncounter.EncounteredParty.MobileParty;
+		if (GetFisherInteraction(mobileParty) != 0)
+		{
+			return false;
+		}
+		SetFisherInteraction(mobileParty, 1);
+		return true;
+	}
+
+	private bool fisher_friendly_return_condition()
+	{
+		if (!IsFishingPartyEncounter(out var _, out var isEnemy))
+		{
+			return false;
+		}
+		if (isEnemy)
+		{
+			return false;
+		}
+		return GetFisherInteraction(PlayerEncounter.EncounteredParty.MobileParty) == 1;
+	}
+
+	private bool fisher_hostile_return_condition()
+	{
+		if (!IsFishingPartyEncounter(out var _, out var isEnemy))
+		{
+			return false;
+		}
+		if (isEnemy)
+		{
+			return false;
+		}
+		return GetFisherInteraction(PlayerEncounter.EncounteredParty.MobileParty) == 2;
+	}
+
+	private bool fisher_enemy_condition()
+	{
+		if (!IsFishingPartyEncounter(out var _, out var isEnemy))
+		{
+			return false;
+		}
+		return isEnemy;
+	}
+
+	private bool fisher_has_goods_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		return encounteredParty != null && HasValuableGoods(encounteredParty);
+	}
+
+	private bool fisher_open_trade_screen_condition()
+	{
+		MobileParty conversationParty = MobileParty.ConversationParty;
+		if (conversationParty == null)
+		{
+			return false;
+		}
+		InventoryScreenHelper.OpenTradeWithCaravanOrAlleyParty(conversationParty);
+		return true;
+	}
+
+	private bool fisher_demand_has_goods_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null)
+		{
+			return false;
+		}
+		if (encounteredParty.MapFaction == Hero.MainHero.MapFaction)
+		{
+			return false;
+		}
+		return HasValuableGoods(encounteredParty);
+	}
+
+	private bool fisher_demand_no_goods_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null)
+		{
+			return false;
+		}
+		if (encounteredParty.MapFaction == Hero.MainHero.MapFaction)
+		{
+			return false;
+		}
+		return !HasValuableGoods(encounteredParty);
+	}
+
+	private bool fisher_bribe_feasible_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null || !encounteredParty.IsMobile)
+		{
+			return false;
+		}
+		CalculateFisherBribeAmount(encounteredParty, out var gold, out var items);
+		if (gold <= 0 && items.IsEmpty())
+		{
+			return false;
+		}
+		int totalManCount = encounteredParty.MobileParty.MemberRoster.TotalManCount;
+		int totalManCount2 = MobileParty.MainParty.MemberRoster.TotalManCount;
+		if (totalManCount > 0 && (float)totalManCount2 / (float)totalManCount < 1f)
+		{
+			return false;
+		}
+		_cachedBribeGold = gold;
+		_cachedBribeItems = items;
+		bool flag = gold > 0;
+		bool flag2 = !items.IsEmpty();
+		if (flag & flag2)
+		{
+			MBTextManager.SetTextVariable("BRIBE_OFFER", new TextObject("{=FisherBribeGoldAndItems}{BRIBE_GOLD}{GOLD_ICON} and {BRIBE_ITEMS}"));
+		}
+		else if (flag)
+		{
+			MBTextManager.SetTextVariable("BRIBE_OFFER", new TextObject("{=FisherBribeGoldOnly}{BRIBE_GOLD}{GOLD_ICON}"));
+		}
+		else
+		{
+			MBTextManager.SetTextVariable("BRIBE_OFFER", new TextObject("{=FisherBribeItemsOnly}{BRIBE_ITEMS}"));
+		}
+		MBTextManager.SetTextVariable("BRIBE_GOLD", gold);
+		if (flag2)
+		{
+			bool flag3 = true;
+			for (int i = 0; i < items.Count; i++)
+			{
+				ItemRosterElement elementCopyAtIndex = items.GetElementCopyAtIndex(i);
+				if (elementCopyAtIndex.Amount > 0)
+				{
+					TextObject textObject = new TextObject("{=FisherBribeItemEntry}{AMOUNT} {ITEM_NAME}");
+					textObject.SetTextVariable("AMOUNT", elementCopyAtIndex.Amount);
+					textObject.SetTextVariable("ITEM_NAME", elementCopyAtIndex.EquipmentElement.Item.Name);
+					if (flag3)
+					{
+						MBTextManager.SetTextVariable("LEFT", textObject);
+						flag3 = false;
+					}
+					else
+					{
+						MBTextManager.SetTextVariable("RIGHT", textObject);
+						MBTextManager.SetTextVariable("LEFT", GameTexts.FindText("str_LEFT_comma_RIGHT").ToString());
+					}
+				}
+			}
+			MBTextManager.SetTextVariable("BRIBE_ITEMS", GameTexts.FindText("str_LEFT_ONLY").ToString());
+		}
+		return true;
+	}
+
+	private bool fisher_will_fight_condition()
+	{
+		return !fisher_will_surrender();
+	}
+
+	private bool fisher_will_surrender_condition()
+	{
+		return fisher_will_surrender();
+	}
+
+	private bool fisher_will_surrender()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null || !encounteredParty.IsMobile)
+		{
+			return true;
+		}
+		int totalManCount = encounteredParty

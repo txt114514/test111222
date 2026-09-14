@@ -1,0 +1,766 @@
+﻿PART 51/75
+					AddToProfile(dictionary, DefaultItemCategories.Wool, weight2);
+					}
+				}
+			}
+		}
+		_annualProfileCache[stringId] = dictionary;
+		return dictionary;
+	}
+
+	private static void AddToProfile(Dictionary<ItemCategory, float> profile, ItemCategory category, float weight)
+	{
+		if (profile.ContainsKey(category))
+		{
+			profile[category] += weight;
+		}
+		else
+		{
+			profile[category] = weight;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\PartyComponents\CastleForagerPartyComponent.cs =====
+using System;
+using System.Collections.Generic;
+using Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Party.PartyComponents;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+using TaleWorlds.SaveSystem;
+
+namespace HarvestAndProduction.PartyComponents;
+
+public class CastleForagerPartyComponent : PartyComponent
+{
+	public enum ForagerState
+	{
+		TravelingToTarget,
+		WaitingAtTarget,
+		Returning,
+		WaitingAtCastle,
+		Defending,
+		Fleeing,
+		Idle
+	}
+
+	[CachedData]
+	private TextObject _cachedName;
+
+	[SaveableProperty(1)]
+	public Settlement HomeCastle { get; private set; }
+
+	[SaveableProperty(2)]
+	public Settlement TargetSettlement { get; set; }
+
+	[SaveableProperty(3)]
+	public ForagerState State { get; set; }
+
+	[SaveableProperty(4)]
+	public CampaignTime WaitStartTime { get; set; }
+
+	[SaveableProperty(5)]
+	public int FoodPurchasedThisTrip { get; set; }
+
+	[SaveableProperty(6)]
+	public int PackAnimalGoldSpent { get; set; }
+
+	[SaveableProperty(7)]
+	public int TotalGoldSpent { get; set; }
+
+	[SaveableProperty(8)]
+	public int TripCount { get; set; }
+
+	[SaveableProperty(9)]
+	public Clan OriginalClan { get; private set; }
+
+	[CachedData]
+	public int RedirectCount { get; set; }
+
+	[CachedData]
+	public MobileParty ThreatParty { get; set; }
+
+	public override Hero PartyOwner
+	{
+		get
+		{
+			Clan clan = OriginalClan ?? HomeCastle?.OwnerClan;
+			if (clan == null || clan.IsEliminated)
+			{
+				return null;
+			}
+			return clan.Leader;
+		}
+	}
+
+	public override Settlement HomeSettlement => HomeCastle;
+
+	public override bool CanHaveNavalNavigationCapability => false;
+
+	public override TextObject Name
+	{
+		get
+		{
+			if (_cachedName == null)
+			{
+				_cachedName = new TextObject("{=HAP_ForagerPartyName}Suppliers of {CASTLE_NAME}");
+				_cachedName.SetTextVariable("CASTLE_NAME", HomeCastle?.Name ?? new TextObject("{=!}Unknown"));
+			}
+			return _cachedName;
+		}
+	}
+
+	public override Banner GetDefaultComponentBanner()
+	{
+		if (OriginalClan != null && OriginalClan.Banner != null)
+		{
+			return OriginalClan.Banner;
+		}
+		return HomeCastle?.Banner;
+	}
+
+	public override void GetMountAndHarnessVisualIdsForPartyIcon(PartyBase party, out string mountStringId, out string harnessStringId)
+	{
+		mountStringId = string.Empty;
+		harnessStringId = string.Empty;
+		if (base.MobileParty == null)
+		{
+			return;
+		}
+		bool flag = false;
+		bool flag2 = false;
+		if (base.MobileParty.ItemRoster != null)
+		{
+			foreach (ItemRosterElement item2 in base.MobileParty.ItemRoster)
+			{
+				ItemObject item = item2.EquipmentElement.Item;
+				if (item?.HorseComponent != null && item.HorseComponent.IsPackAnimal)
+				{
+					flag = true;
+					if (item.StringId.Contains("camel"))
+					{
+						flag2 = true;
+					}
+				}
+			}
+		}
+		if (flag)
+		{
+			bool flag3 = false;
+			if (HomeCastle != null && Campaign.Current?.MapSceneWrapper != null)
+			{
+				Vec2 getPosition2D = HomeCastle.GetPosition2D;
+				PathFaceRecord faceIndex = Campaign.Current.MapSceneWrapper.GetFaceIndex(new CampaignVec2(getPosition2D, isOnLand: true));
+				TerrainType faceTerrainType = Campaign.Current.MapSceneWrapper.GetFaceTerrainType(faceIndex);
+				flag3 = faceTerrainType == TerrainType.Desert || faceTerrainType == TerrainType.Dune;
+			}
+			if (flag3 & flag2)
+			{
+				mountStringId = "pack_camel";
+				string[] array = new string[2] { "camel_saddle_a", "camel_saddle_b" };
+				harnessStringId = array[MBRandom.RandomInt(array.Length)];
+			}
+			else
+			{
+				mountStringId = "mule";
+				string[] array2 = new string[3] { "mule_load_a", "mule_load_b", "mule_load_c" };
+				harnessStringId = array2[MBRandom.RandomInt(array2.Length)];
+			}
+		}
+		else
+		{
+			mountStringId = string.Empty;
+			harnessStringId = string.Empty;
+		}
+	}
+
+	public override void ClearCachedName()
+	{
+		_cachedName = null;
+	}
+
+	protected CastleForagerPartyComponent()
+	{
+	}
+
+	protected CastleForagerPartyComponent(Settlement castle)
+	{
+		HomeCastle = castle;
+		OriginalClan = castle?.OwnerClan;
+		State = ForagerState.Idle;
+		WaitStartTime = CampaignTime.Never;
+		FoodPurchasedThisTrip = 0;
+		PackAnimalGoldSpent = 0;
+	}
+
+	public static MobileParty CreateForagerParty(string stringId, Settlement castle)
+	{
+		return MobileParty.CreateParty(stringId, new CastleForagerPartyComponent(castle));
+	}
+
+	protected override void OnMobilePartySetOnCreation()
+	{
+		base.MobileParty.Aggressiveness = 0f;
+		base.MobileParty.ActualClan = OriginalClan;
+		base.MobileParty.InitializePartyTrade(0);
+		base.MobileParty.DesiredAiNavigationType = MobileParty.NavigationType.Default;
+		base.MobileParty.Ai.SetDoNotMakeNewDecisions(doNotMakeNewDecisions: true);
+		base.MobileParty.SetPartyUsedByQuest(isActivelyUsed: true);
+		base.MobileParty.Party.SetVisualAsDirty();
+		if (HomeCastle != null)
+		{
+			base.MobileParty.InitializeMobilePartyAtPosition(HomeCastle.GatePosition);
+		}
+	}
+
+	protected override void OnInitialize()
+	{
+	}
+
+	protected override void OnFinalize()
+	{
+	}
+
+	public int GetPackAnimalCount()
+	{
+		if (base.MobileParty?.ItemRoster == null)
+		{
+			return 0;
+		}
+		int num = 0;
+		ItemRoster itemRoster = base.MobileParty.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemObject itemAtIndex = itemRoster.GetItemAtIndex(i);
+			if (itemAtIndex != null && IsPackAnimal(itemAtIndex))
+			{
+				num += itemRoster.GetElementNumber(i);
+			}
+		}
+		return num;
+	}
+
+	public static bool IsPackAnimal(ItemObject item)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		if (item.ItemCategory == DefaultItemCategories.PackAnimal)
+		{
+			return true;
+		}
+		if (item.HasHorseComponent && item.HorseComponent.IsPackAnimal)
+		{
+			return true;
+		}
+		return false;
+	}
+
+	public int GetCarryingCapacity()
+	{
+		if (base.MobileParty == null)
+		{
+			return 0;
+		}
+		return base.MobileParty.InventoryCapacity;
+	}
+
+	public int GetFoodCarryingCapacity()
+	{
+		int carryingCapacity = GetCarryingCapacity();
+		int num = 10;
+		return Math.Max(0, carryingCapacity - num);
+	}
+
+	public bool HasPrisoners()
+	{
+		return base.MobileParty?.PrisonRoster != null && base.MobileParty.PrisonRoster.TotalManCount > 0;
+	}
+
+	public int GetPrisonerCount()
+	{
+		return (base.MobileParty?.PrisonRoster?.TotalManCount).GetValueOrDefault();
+	}
+
+	public int DepositPrisonersToCastle()
+	{
+		if (!HasPrisoners())
+		{
+			return 0;
+		}
+		if (HomeCastle?.Town == null)
+		{
+			return 0;
+		}
+		Town town = HomeCastle.Town;
+		TroopRoster prisonRoster = base.MobileParty.PrisonRoster;
+		int num = 0;
+		List<CharacterObject> list = new List<CharacterObject>();
+		foreach (TroopRosterElement item in prisonRoster.GetTroopRoster())
+		{
+			if (item.Character?.HeroObject != null)
+			{
+				list.Add(item.Character);
+			}
+		}
+		foreach (CharacterObject item2 in list)
+		{
+			TransferPrisonerAction.Apply(item2, base.MobileParty.Party, town.Settlement.Party);
+			num++;
+		}
+		int totalManCount = town.Settlement.Party.PrisonRoster.TotalManCount;
+		int prisonerSizeLimit = town.Settlement.Party.PrisonerSizeLimit;
+		int num2 = prisonerSizeLimit - totalManCount;
+		if (num2 > 0)
+		{
+			List<TroopRosterElement> list2 = new List<TroopRosterElement>();
+			TroopRoster troopRoster = TroopRoster.CreateDummyTroopRoster();
+			int num3 = 0;
+			for (int i = 0; i < prisonRoster.Count; i++)
+			{
+				if (num3 >= num2)
+				{
+					break;
+				}
+				TroopRosterElement elementCopyAtIndex = prisonRoster.GetElementCopyAtIndex(i);
+				if (elementCopyAtIndex.Character != null && elementCopyAtIndex.Number > 0 && elementCopyAtIndex.Character.HeroObject == null)
+				{
+					int num4 = Math.Min(elementCopyAtIndex.Number, num2 - num3);
+					if (num4 > 0)
+					{
+						town.Settlement.Party.PrisonRoster.AddToCounts(elementCopyAtIndex.Character, num4);
+						troopRoster.AddToCounts(elementCopyAtIndex.Character, num4);
+						list2.Add(new TroopRosterElement(elementCopyAtIndex.Character)
+						{
+							Number = num4
+						});
+						num3 += num4;
+					}
+				}
+			}
+			foreach (TroopRosterElement item3 in list2)
+			{
+				prisonRoster.AddToCounts(item3.Character, -item3.Number);
+			}
+			num += num3;
+			if (num3 > 0)
+			{
+				CampaignEventDispatcher.Instance.OnPrisonerSold(base.MobileParty.Party, town.Settlement.Party, troopRoster);
+			}
+		}
+		return num;
+	}
+
+	public int SellPrisonersAtSettlement(Settlement settlement)
+	{
+		if (!HasPrisoners())
+		{
+			return 0;
+		}
+		if (settlement?.Party == null)
+		{
+			return 0;
+		}
+		List<CharacterObject> list = new List<CharacterObject>();
+		foreach (TroopRosterElement item in base.MobileParty.PrisonRoster.GetTroopRoster())
+		{
+			if (item.Character?.HeroObject != null)
+			{
+				list.Add(item.Character);
+			}
+		}
+		foreach (CharacterObject item2 in list)
+		{
+			TransferPrisonerAction.Apply(item2, base.MobileParty.Party, settlement.Party);
+		}
+		int prisonerCount = GetPrisonerCount();
+		try
+		{
+			if (prisonerCount > 0)
+			{
+				SellPrisonersAction.ApplyForAllPrisoners(base.MobileParty.Party, settlement.Party);
+			}
+		}
+		catch (Exception)
+		{
+			base.MobileParty.PrisonRoster.Clear();
+			return 0;
+		}
+		if (base.MobileParty.PartyTradeGold > 0 && PartyOwner != null)
+		{
+			int partyTradeGold = base.MobileParty.PartyTradeGold;
+			GiveGoldAction.ApplyBetweenCharacters(null, PartyOwner, partyTradeGold, disableNotification: true);
+			base.MobileParty.PartyTradeGold = 0;
+			return partyTradeGold;
+		}
+		return 0;
+	}
+
+	public int HandleAllPrisoners()
+	{
+		if (!HasPrisoners())
+		{
+			return 0;
+		}
+		int num = DepositPrisonersToCastle();
+		if (HasPrisoners())
+		{
+			ReleaseAllPrisoners();
+		}
+		return 0;
+	}
+
+	public void ReleaseAllPrisoners()
+	{
+		if (base.MobileParty?.PrisonRoster == null)
+		{
+			return;
+		}
+		List<Hero> list = new List<Hero>();
+		foreach (TroopRosterElement item in base.MobileParty.PrisonRoster.GetTroopRoster())
+		{
+			if (item.Character?.HeroObject != null)
+			{
+				list.Add(item.Character.HeroObject);
+			}
+		}
+		foreach (Hero item2 in list)
+		{
+			EndCaptivityAction.ApplyByEscape(item2);
+		}
+		if (base.MobileParty.PrisonRoster.TotalManCount > 0)
+		{
+			base.MobileParty.PrisonRoster.Clear();
+		}
+	}
+
+	public void SetDestination(Settlement destination)
+	{
+		if (base.MobileParty != null && destination != null)
+		{
+			AiHelper.GetBestNavigationTypeAndAdjustedDistanceOfSettlementForMobileParty(base.MobileParty, destination, isTargetingPort: false, out var bestNavigationType, out var _, out var isFromPort);
+			if ((bestNavigationType & MobileParty.NavigationType.Naval) != MobileParty.NavigationType.None)
+			{
+				bestNavigationType = MobileParty.NavigationType.Default;
+				isFromPort = false;
+			}
+			SetPartyAiAction.GetActionForVisitingSettlement(base.MobileParty, destination, bestNavigationType, isFromPort, isTargetingPort: false);
+			TargetSettlement = destination;
+		}
+	}
+
+	public void SetDefendCastle()
+	{
+		if (base.MobileParty != null && HomeCastle != null)
+		{
+			base.MobileParty.SetMovePatrolAroundSettlement(HomeCastle, MobileParty.NavigationType.Default, isTargetingPort: false);
+		}
+	}
+
+	public bool CanReachByLand(Settlement destination)
+	{
+		if (base.MobileParty == null || destination == null)
+		{
+			return false;
+		}
+		AiHelper.GetBestNavigationTypeAndAdjustedDistanceOfSettlementForMobileParty(base.MobileParty, destination, isTargetingPort: false, out var bestNavigationType, out var _, out var _);
+		return bestNavigationType != MobileParty.NavigationType.None && (bestNavigationType & MobileParty.NavigationType.Naval) == 0;
+	}
+
+	internal static void AutoGeneratedStaticCollectObjectsCastleForagerPartyComponent(object o, List<object> collectedObjects)
+	{
+		((CastleForagerPartyComponent)o).AutoGeneratedInstanceCollectObjects(collectedObjects);
+	}
+
+	protected override void AutoGeneratedInstanceCollectObjects(List<object> collectedObjects)
+	{
+		base.AutoGeneratedInstanceCollectObjects(collectedObjects);
+		collectedObjects.Add(HomeCastle);
+		collectedObjects.Add(TargetSettlement);
+	}
+
+	internal static object AutoGeneratedGetMemberValueHomeCastle(object o)
+	{
+		return ((CastleForagerPartyComponent)o).HomeCastle;
+	}
+
+	internal static object AutoGeneratedGetMemberValueTargetSettlement(object o)
+	{
+		return ((CastleForagerPartyComponent)o).TargetSettlement;
+	}
+
+	internal static object AutoGeneratedGetMemberValueState(object o)
+	{
+		return ((CastleForagerPartyComponent)o).State;
+	}
+
+	internal static object AutoGeneratedGetMemberValueWaitStartTime(object o)
+	{
+		return ((CastleForagerPartyComponent)o).WaitStartTime;
+	}
+
+	internal static object AutoGeneratedGetMemberValueFoodPurchasedThisTrip(object o)
+	{
+		return ((CastleForagerPartyComponent)o).FoodPurchasedThisTrip;
+	}
+
+	internal static object AutoGeneratedGetMemberValuePackAnimalGoldSpent(object o)
+	{
+		return ((CastleForagerPartyComponent)o).PackAnimalGoldSpent;
+	}
+
+	internal static object AutoGeneratedGetMemberValueTotalGoldSpent(object o)
+	{
+		return ((CastleForagerPartyComponent)o).TotalGoldSpent;
+	}
+
+	public static bool IsForagerParty(MobileParty party)
+	{
+		return party?.PartyComponent is CastleForagerPartyComponent;
+	}
+
+	public static CastleForagerPartyComponent GetForagerComponent(MobileParty party)
+	{
+		return party?.PartyComponent as CastleForagerPartyComponent;
+	}
+
+	public void ResetTripTracking()
+	{
+		FoodPurchasedThisTrip = 0;
+		PackAnimalGoldSpent = 0;
+		RedirectCount = 0;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\PartyComponents\HerderPartyComponent.cs =====
+using System.Collections.Generic;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Party.PartyComponents;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+using TaleWorlds.ObjectSystem;
+using TaleWorlds.SaveSystem;
+
+namespace HarvestAndProduction.PartyComponents;
+
+public class HerderPartyComponent : VillagerPartyComponent
+{
+	public enum HerdType
+	{
+		Cow,
+		Sheep,
+		Hog
+	}
+
+	public enum HerderState
+	{
+		Roaming,
+		Herding,
+		ReturningToVillage
+	}
+
+	public const float MIN_HEARTH = 300f;
+
+	public const float MIN_SECURITY = 60f;
+
+	public const int MIN_ANIMALS = 20;
+
+	public const int MAX_ANIMALS = 120;
+
+	public const int MIN_PARTY_SIZE = 18;
+
+	public const int MAX_PARTY_SIZE = 35;
+
+	public const float PARTY_SIZE_HEARTH_DIVISOR = 40f;
+
+	public const int PARTY_SIZE_BASE = 12;
+
+	[CachedData]
+	private new TextObject _cachedName;
+
+	private static readonly Dictionary<Village, HerderPartyComponent> _activeHerders = new Dictionary<Village, HerderPartyComponent>();
+
+	[SaveableProperty(1)]
+	public HerdType AnimalType { get; private set; }
+
+	[SaveableProperty(2)]
+	public HerderState State { get; set; }
+
+	[SaveableProperty(3)]
+	public CampaignTime RoamingStartTime { get; set; }
+
+	[SaveableProperty(4)]
+	public CampaignTime HerdingStartTime { get; set; }
+
+	[SaveableProperty(5)]
+	public int AnimalCount { get; set; }
+
+	[SaveableProperty(6)]
+	public Clan OriginalClan { get; private set; }
+
+	[CachedData]
+	public MobileParty ThreatParty { get; set; }
+
+	public override Hero PartyOwner
+	{
+		get
+		{
+			Clan clan = OriginalClan ?? base.Village?.Settlement?.OwnerClan;
+			if (clan == null || clan.IsEliminated)
+			{
+				return null;
+			}
+			return clan.Leader;
+		}
+	}
+
+	public override bool CanHaveNavalNavigationCapability => false;
+
+	public override TextObject Name
+	{
+		get
+		{
+			if (_cachedName == null)
+			{
+				_cachedName = new TextObject("{=HAP_HerderPartyName}Herders of {VILLAGE_NAME}");
+				_cachedName.SetTextVariable("VILLAGE_NAME", base.Village?.Name ?? new TextObject("{=!}Unknown"));
+			}
+			return _cachedName;
+		}
+	}
+
+	public static HerderPartyComponent GetHerderForVillage(Village village)
+	{
+		if (village == null)
+		{
+			return null;
+		}
+		_activeHerders.TryGetValue(village, out var value);
+		return value;
+	}
+
+	public static bool HasActiveHerder(Village village)
+	{
+		if (village == null)
+		{
+			return false;
+		}
+		if (_activeHerders.TryGetValue(village, out var value))
+		{
+			if (value.MobileParty == null || !value.MobileParty.IsActive)
+			{
+				_activeHerders.Remove(village);
+				return false;
+			}
+			return true;
+		}
+		return false;
+	}
+
+	public static bool IsHerderParty(MobileParty party)
+	{
+		return party?.PartyComponent is HerderPartyComponent;
+	}
+
+	public static HerderPartyComponent GetComponent(MobileParty party)
+	{
+		return party?.PartyComponent as HerderPartyComponent;
+	}
+
+	public static void ClearAllCaches()
+	{
+		_activeHerders.Clear();
+	}
+
+	public override Banner GetDefaultComponentBanner()
+	{
+		Banner banner = base.Village?.Settlement?.Banner;
+		if (banner != null)
+		{
+			return banner;
+		}
+		return OriginalClan?.Banner;
+	}
+
+	public override void GetMountAndHarnessVisualIdsForPartyIcon(PartyBase party, out string mountStringId, out string harnessStringId)
+	{
+		mountStringId = string.Empty;
+		harnessStringId = string.Empty;
+		string text = ((AnimalType == HerdType.Cow) ? "cow" : ((AnimalType == HerdType.Sheep) ? "sheep" : ((AnimalType == HerdType.Hog) ? "hog" : null)));
+		if (text != null)
+		{
+			string text2 = (MBObjectManager.Instance?.GetObject<ItemObject>(text))?.HorseComponent?.Monster?.StringId;
+			if (!string.IsNullOrEmpty(text2))
+			{
+				mountStringId = text2;
+			}
+		}
+	}
+
+	public override void ClearCachedName()
+	{
+		_cachedName = null;
+	}
+
+	protected HerderPartyComponent()
+		: base(null, null)
+	{
+	}
+
+	protected HerderPartyComponent(Village village, HerdType animalType, int animalCount)
+		: base(village, null)
+	{
+		OriginalClan = village?.Settlement?.OwnerClan;
+		AnimalType = animalType;
+		AnimalCount = animalCount;
+		State = HerderState.Roaming;
+		RoamingStartTime = CampaignTime.Now;
+		HerdingStartTime = CampaignTime.Never;
+	}
+
+	public static MobileParty CreateHerderParty(string stringId, Village village, HerdType animalType, int animalCount)
+	{
+		return MobileParty.CreateParty(stringId, new HerderPartyComponent(village, animalType, animalCount));
+	}
+
+	protected override void OnMobilePartySetOnCreation()
+	{
+		base.MobileParty.Aggressiveness = 0f;
+		base.MobileParty.InitializePartyTrade(0);
+		Settlement settlement = base.Village?.Settlement;
+		PartyTemplateObject partyTemplateObject = settlement?.Culture?.VillagerPartyTemplate;
+		if (partyTemplateObject != null && settlement != null)
+		{
+			base.MobileParty.InitializeMobilePartyAroundPosition(partyTemplateObject, settlement.GatePosition, 1f);
+		}
+		base.Party.SetVisualAsDirty();
+	}
+
+	protected override void OnInitialize()
+	{
+		Village village = base.Village;
+		if (village != null)
+		{
+			_activeHerders[village] = this;
+		}
+	}
+
+	protected override void OnFinalize()
+	{
+		Village village = base.Village;
+		if (village != null && _activeHerders.TryGe

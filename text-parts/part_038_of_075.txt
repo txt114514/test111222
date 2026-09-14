@@ -1,0 +1,289 @@
+﻿PART 38/75
+ter.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && ((item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores) || item.IsFood))
+			{
+				num += (float)elementCopyAtIndex.Amount;
+			}
+		}
+		return num;
+	}
+
+	public static int GetFoodQualityTier(ItemObject item)
+	{
+		if (item == null)
+		{
+			return 1;
+		}
+		try
+		{
+			if (item.ItemComponent is TradeItemComponent { MoraleBonus: >0, MoraleBonus: var moraleBonus })
+			{
+				return moraleBonus;
+			}
+		}
+		catch
+		{
+		}
+		return GetFallbackFoodQualityTier(item.StringId);
+	}
+
+	public static float GetFoodQualityMorale(int tier)
+	{
+		return tier switch
+		{
+			2 => 0.3f, 
+			3 => 0.5f, 
+			4 => 0.8f, 
+			5 => 1f, 
+			_ => 0f, 
+		};
+	}
+
+	private static int GetFallbackFoodQualityTier(string stringId)
+	{
+		switch (stringId)
+		{
+		case "wine":
+		case "mead":
+			return 5;
+		case "beer":
+		case "cider":
+		case "meat_sausage":
+		case "meat_ham":
+		case "meat_poultry_cooked":
+		case "meat_mutton_cooked":
+		case "meat_pork_cooked":
+		case "lobster_cooked":
+			return 4;
+		case "ale":
+		case "pie":
+		case "stew":
+		case "meat_beef":
+		case "lobster":
+			return 3;
+		case "butter":
+		case "cheese":
+		case "heavy_cream":
+		case "honey":
+		case "nuts":
+		case "date_fruit":
+		case "olives":
+		case "crab":
+		case "meat_poultry":
+		case "meat_mutton":
+		case "meat_pork":
+		case "meat_hare":
+		case "orange_fruit":
+		case "melon_fruit":
+		case "mushroom_vegetable":
+		case "bread":
+		case "grape":
+			return 2;
+		default:
+			return 1;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\HAPPolicies.cs =====
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.Core;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction;
+
+public class HAPPolicies
+{
+	private static HAPPolicies _instance;
+
+	private PolicyObject _policyGranaryWardens;
+
+	private PolicyObject _policyProvisionerCorps;
+
+	private PolicyObject _policySaltTax;
+
+	private PolicyObject _policyHarvestLevy;
+
+	private PolicyObject _policyRationingDecree;
+
+	private PolicyObject _policyRightOfBilleting;
+
+	private PolicyObject _policyFaminePreventionAct;
+
+	private PolicyObject _policySumptuaryLaws;
+
+	public static HAPPolicies Instance => _instance;
+
+	public static PolicyObject GranaryWardens => _instance?._policyGranaryWardens;
+
+	public static PolicyObject ProvisionerCorps => _instance?._policyProvisionerCorps;
+
+	public static PolicyObject SaltTax => _instance?._policySaltTax;
+
+	public static PolicyObject HarvestLevy => _instance?._policyHarvestLevy;
+
+	public static PolicyObject RationingDecree => _instance?._policyRationingDecree;
+
+	public static PolicyObject RightOfBilleting => _instance?._policyRightOfBilleting;
+
+	public static PolicyObject FaminePreventionAct => _instance?._policyFaminePreventionAct;
+
+	public static PolicyObject SumptuaryLaws => _instance?._policySumptuaryLaws;
+
+	public HAPPolicies()
+	{
+		_instance = this;
+		RegisterAll();
+		InitializeAll();
+	}
+
+	private void RegisterAll()
+	{
+		_policyGranaryWardens = Create("policy_hap_granary_wardens");
+		_policyProvisionerCorps = Create("policy_hap_provisioner_corps");
+		_policySaltTax = Create("policy_hap_salt_tax");
+		_policyHarvestLevy = Create("policy_hap_harvest_levy");
+		_policyRationingDecree = Create("policy_hap_rationing_decree");
+		_policyRightOfBilleting = Create("policy_hap_right_of_billeting");
+		_policyFaminePreventionAct = Create("policy_hap_famine_prevention_act");
+		_policySumptuaryLaws = Create("policy_hap_sumptuary_laws");
+	}
+
+	private static PolicyObject Create(string stringId)
+	{
+		return Game.Current.ObjectManager.RegisterPresumedObject(new PolicyObject(stringId));
+	}
+
+	private void InitializeAll()
+	{
+		_policyGranaryWardens.Initialize(new TextObject("{=HAP_Policy_GranaryWardens}Granary Wardens"), new TextObject("{=HAP_Policy_GranaryWardens_Desc}The crown appoints official granary wardens to oversee food storage in all settlements, ensuring proper rotation and preservation of stocks."), new TextObject("{=HAP_Policy_GranaryWardens_Proposal}appointing official wardens to oversee settlement granaries"), new TextObject("{=HAP_Policy_GranaryWardens_Effects}Settlement food spoilage is reduced by 10%{newline}Settlement tax income is reduced by 3%"), -0.1f, 0.4f, 0.2f);
+		_policyProvisionerCorps.Initialize(new TextObject("{=HAP_Policy_ProvisionerCorps}Provisioner Corps"), new TextObject("{=HAP_Policy_ProvisionerCorps_Desc}A permanent corps of provisioners is established to coordinate food supply across the realm's castles and towns, though the diversion of labor slows economic growth."), new TextObject("{=HAP_Policy_ProvisionerCorps_Proposal}establishing a permanent corps to coordinate food supply"), new TextObject("{=HAP_Policy_ProvisionerCorps_Effects}Castle and town supply party wages are reduced by 20%{newline}Settlement prosperity is decreased by 0.3 per day"), 0.1f, 0.5f, -0.3f);
+		_policySaltTax.Initialize(new TextObject("{=HAP_Policy_SaltTax}Salt Tax"), new TextObject("{=HAP_Policy_SaltTax_Desc}A royal tax on salt and preservatives raises revenue for settlement owners, but makes food preservation more costly for everyone."), new TextObject("{=HAP_Policy_SaltTax_Proposal}imposing a tax on salt and preservatives"), new TextObject("{=HAP_Policy_SaltTax_Effects}Tariff income is increased by 5%{newline}Party and settlement food spoilage is increased by 5%"), 0.3f, 0.4f, -0.5f);
+		_policyHarvestLevy.Initialize(new TextObject("{=HAP_Policy_HarvestLevy}Harvest Levy"), new TextObject("{=HAP_Policy_HarvestLevy_Desc}The crown demands increased harvests from villages, pushing peasants to work harder at the cost of village growth."), new TextObject("{=HAP_Policy_HarvestLevy_Proposal}demanding increased harvests from villages"), new TextObject("{=HAP_Policy_HarvestLevy_Effects}Village production is increased by 10%{newline}Village hearth growth is decreased by 0.5 per day"), 0.3f, 0.3f, -0.4f);
+		_policyRationingDecree.Initialize(new TextObject("{=HAP_Policy_RationingDecree}Rationing Decree"), new TextObject("{=HAP_Policy_RationingDecree_Desc}Strict rationing is imposed on all settlements, preserving food stores but angering the populace."), new TextObject("{=HAP_Policy_RationingDecree_Proposal}imposing strict food rationing on settlements"), new TextObject("{=HAP_Policy_RationingDecree_Effects}Settlement food consumption is reduced by 10%{newline}Settlement loyalty is decreased by 0.5 per day"), 0.4f, 0.2f, -0.5f);
+		_policyRightOfBilleting.Initialize(new TextObject("{=HAP_Policy_RightOfBilleting}Right of Billeting"), new TextObject("{=HAP_Policy_RightOfBilleting_Desc}All castles in the realm are ordered to provision any lord's party passing through, not just those of the castle's own clan."), new TextObject("{=HAP_Policy_RightOfBilleting_Proposal}ordering all castles to provision any lord of the realm"), new TextObject("{=HAP_Policy_RightOfBilleting_Effects}Lords can resupply at any friendly castle in their kingdom{newline}Clans lose 0.2 influence per day for each castle they own"), -0.3f, -0.4f, 0.5f);
+		_policyFaminePreventionAct.Initialize(new TextObject("{=HAP_Policy_FaminePreventionAct}Famine Prevention Act"), new TextObject("{=HAP_Policy_FaminePreventionAct_Desc}The crown orders that settlement emergency food measures be enacted sooner, preventing stocks from reaching dangerously low levels. Workshops may lose access to raw materials earlier as settlements prioritize food security."), new TextObject("{=HAP_Policy_FaminePreventionAct_Proposal}ordering settlements to enact emergency food measures sooner"), new TextObject("{=HAP_Policy_FaminePreventionAct_Effects}Settlement emergency food measures activate at 30% granary capacity instead of 20%"), -0.2f, -0.3f, 0.5f);
+		_policySumptuaryLaws.Initialize(new TextObject("{=HAP_Policy_SumptuaryLaws}Sumptuary Laws"), new TextObject("{=HAP_Policy_SumptuaryLaws_Desc}Lords impose restrictions on the consumption habits of the common folk, reducing the food demands of prosperous towns. The populace resents the imposed frugality."), new TextObject("{=HAP_Policy_SumptuaryLaws_Proposal}imposing restrictions on the consumption habits of town folk"), new TextObject("{=HAP_Policy_SumptuaryLaws_Effects}Prosperity-based food consumption in towns is reduced by 15%{newline}Town loyalty is decreased by 0.5 per day"), -0.2f, 0.5f, -0.4f);
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\HAPSettings.cs =====
+using MCM.Abstractions.Attributes;
+using MCM.Abstractions.Attributes.v2;
+using MCM.Abstractions.Base.Global;
+using MCM.Common;
+
+namespace HarvestAndProduction;
+
+public class HAPSettings : AttributeGlobalSettings<HAPSettings>
+{
+	public override string Id => "HarvestAndProduction_Settings";
+
+	public override string DisplayName => "Harvest and Production";
+
+	public override string FolderName => "HarvestAndProduction";
+
+	public override string FormatType => "json";
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_GlobalProdMult}Global Production Multiplier", 0.25f, 3f, "0.00", RequireRestart = false, HintText = "{=HAP_MCM_GlobalProdMult_Hint}Multiplier for all village production. 1 = default.")]
+	[SettingPropertyGroup("{=HAP_MCM_Production}Production", GroupOrder = 1)]
+	public float GlobalProductionMultiplier { get; set; } = 1f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_TroopFoodMult}Troop Food Multiplier", 0.25f, 3f, "0.00", RequireRestart = false, HintText = "{=HAP_MCM_TroopFoodMult_Hint}Multiplier for food consumption of troops and prisoners. 1 = default.")]
+	[SettingPropertyGroup("{=HAP_MCM_GrpFoodCons}Food Consumption/{=HAP_MCM_GrpTroops}Troops", GroupOrder = 2)]
+	public float TroopFoodMultiplier { get; set; } = 1f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_MountFoodMult}Mount Food Multiplier", 0f, 3f, "0.00", RequireRestart = false, HintText = "{=HAP_MCM_MountFoodMult_Hint}Multiplier for food consumption of all mounts. 0 = no consumption, 1 = default.")]
+	[SettingPropertyGroup("{=HAP_MCM_GrpFoodCons}Food Consumption/{=HAP_MCM_GrpMounts}Mounts", GroupOrder = 3)]
+	public float MountFoodMultiplier { get; set; } = 1f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_LivestockFoodMult}Livestock Food Multiplier", 0f, 3f, "0.00", RequireRestart = false, HintText = "{=HAP_MCM_LivestockFoodMult_Hint}Multiplier for food consumption of livestock. 0 = no consumption, 1 = default.")]
+	[SettingPropertyGroup("{=HAP_MCM_GrpFoodCons}Food Consumption/{=HAP_MCM_GrpMounts}Mounts", GroupOrder = 3)]
+	public float LivestockFoodMultiplier { get; set; } = 1f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_SpoilageMult}Spoilage Rate Multiplier", 0f, 5f, "0.00", RequireRestart = false, HintText = "{=HAP_MCM_SpoilageMult_Hint}Multiplier for food spoilage rate. 0 = no spoilage, 1 = default.")]
+	[SettingPropertyGroup("{=HAP_MCM_GrpFoodCons}Food Consumption/{=HAP_MCM_GrpSpoilage}Spoilage", GroupOrder = 4)]
+	public float SpoilageMultiplier { get; set; } = 1f;
+
+	[SettingPropertyInteger("{=HAP_MCM_HearthCap}Village Hearth Cap", 1000, 12000, "0", RequireRestart = false, HintText = "{=HAP_MCM_HearthCap_Hint}Maximum village hearth. Higher hearth increases militia growth, force volunteers, and settlement value. Production caps at 1000 hearth regardless. Default: 1000.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public int VillageHearthCap { get; set; } = 1000;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_SettleFoodCons}Settlement Food Consumption", 0f, 3f, "0.00", RequireRestart = false, HintText = "{=HAP_MCM_SettleFoodCons_Hint}Multiplier for settlement food consumption (prosperity + garrison). 0 = no consumption, 1 = default.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public float SettlementFoodConsumptionMultiplier { get; set; } = 1f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_SettleSpoilage}Settlement Spoilage", 0f, 3f, "0.00", RequireRestart = false, HintText = "{=HAP_MCM_SettleSpoilage_Hint}Multiplier for settlement food spoilage. 0 = no spoilage, 1 = default.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public float SettlementSpoilageMultiplier { get; set; } = 1f;
+
+	[SettingPropertyBool("{=HAP_MCM_ArtificialFood}Artificial Food Bonus", RequireRestart = false, HintText = "{=HAP_MCM_ArtificialFood_Hint}Enable vanilla abstract food bonuses: 'Lands around settlement' (+15/+10) and village hearth bonuses. Disabled by default for realistic economy.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public bool EnableArtificialFoodBonus { get; set; } = false;
+
+	[SettingPropertyBool("{=HAP_MCM_CastleForagers}Castle Supply Parties", RequireRestart = false, HintText = "{=HAP_MCM_CastleForagers_Hint}When enabled, castles with low food stocks (<20%) will send garrison troops to nearby settlements to purchase food. Disabling mid-game allows active foragers to complete their trip.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public bool EnableCastleForagers { get; set; } = true;
+
+	[SettingPropertyInteger("{=HAP_MCM_ForagerBudget}Castle Supply Budget", 0, 5000, "0", RequireRestart = false, HintText = "{=HAP_MCM_ForagerBudget_Hint}Maximum gold your castle supply parties can spend across all trips. 0 = parties only collect tribute from bound villages (no purchases). Only for the player.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public int PlayerForagerBudget { get; set; } = 3000;
+
+	[SettingPropertyBool("{=HAP_MCM_SupplyLines}Town Supply Lines", RequireRestart = false, HintText = "{=HAP_MCM_SupplyLines_Hint}When enabled, towns suffering prolonged food shortage (7+ cumulative starvation days) receive a supply caravan from a same-faction town with surplus stocks. One inbound party per recipient; one-week cooldown per donor.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public bool EnableSupplyLines { get; set; } = true;
+
+	[SettingPropertyBool("{=HAP_MCM_HerderParties}Village Herder Parties", RequireRestart = false, HintText = "{=HAP_MCM_HerderParties_Hint}When enabled, cattle and sheep farm villages with sufficient hearth (300+), security (60+), and animal stock (20+) spawn a herder party during spring/summer/autumn if no snow is present. Herders patrol near the village producing milk and wool. Disabling mid-game lets active herders finish their trip and disband normally.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public bool EnableHerderParties { get; set; } = true;
+
+	[SettingPropertyBool("{=HAP_MCM_CastleRebellions}Castle Rebellions", RequireRestart = false, HintText = "{=HAP_MCM_CastleRebellions_Hint}Allow castles with very low loyalty to rebel, just like towns. Requires low loyalty and militia strength exceeding garrison. Disabling mid-game clears rebellious state but lets existing rebel clans finish naturally.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public bool CastleRebellionsEnabled { get; set; } = true;
+
+	[SettingPropertyDropdown("{=HAP_MCM_StarvationFx}Starvation Effects", RequireRestart = false, HintText = "{=HAP_MCM_StarvationFx_Hint}Disabled: No effects (also disables ration cuts). Desertion Only: Ration cuts, garrison/militia penalties, troops vanish. Full: All effects + deserter parties spawn nearby.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public Dropdown<string> StarvationEffects { get; set; } = new Dropdown<string>(new string[3] { "{=HAP_MCM_StarvDisabled}Disabled", "{=HAP_MCM_StarvDesertion}Desertion Only", "{=HAP_MCM_StarvFull}Full (Desertion + Bandits)" }, 2);
+
+	[SettingPropertyBool("{=HAP_MCM_SecurityLooters}Security Affects Looter Spawns", RequireRestart = false, HintText = "{=HAP_MCM_SecurityLooters_Hint}Low security settlements attract more looter parties to spawn nearby. Villages use their bound settlement's (castle or town) security.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public bool SecurityAffectsBanditSpawns { get; set; } = true;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_TownGoldPerPros}Town Gold per Prosperity", 5f, 50f, "0", RequireRestart = false, HintText = "{=HAP_MCM_TownGoldPerPros_Hint}Gold target per prosperity point. Towns adjust to Prosperity × this value daily. Vanilla: ~12 (with 10k base).")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public float TownGoldPerProsperity { get; set; } = 12f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_WorkshopThreshold}Workshop Profit Threshold", 20f, 200f, "0", RequireRestart = false, HintText = "{=HAP_MCM_WorkshopThreshold_Hint}Overhead penalty for workshop production: outputIncome must exceed inputCost + (this / speed). Lower = workshops profit more easily. Vanilla: 200.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public float WorkshopProfitThreshold { get; set; } = 50f;
+
+	[SettingPropertyInteger("{=HAP_MCM_TownProsperityCap}Town Prosperity Cap", 3000, 20000, "0", RequireRestart = false, HintText = "{=HAP_MCM_TownProsperityCap_Hint}Maximum town prosperity. Prosperity affects food consumption, tax income, and settlement gold. Default: 10000.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public int TownProsperityCap { get; set; } = 10000;
+
+	[SettingPropertyInteger("{=HAP_MCM_CastleProsperityCap}Castle Prosperity Cap", 3000, 20000, "0", RequireRestart = false, HintText = "{=HAP_MCM_CastleProsperityCap_Hint}Maximum castle prosperity. Prosperity affects food consumption, garrison wages, and settlement gold. Default: 5000.")]
+	[SettingPropertyGroup("{=HAP_MCM_Settlements}Settlements", GroupOrder = 5)]
+	public int CastleProsperityCap { get; set; } = 5000;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_FoodPriceCap}Food Price Factor Cap", 1f, 10f, "0.0", RequireRestart = false, HintText = "{=HAP_MCM_FoodPriceCap_Hint}Maximum price multiplier for food and livestock. Lower values reduce profit from selling food. Default: 5.")]
+	[SettingPropertyGroup("{=HAP_MCM_Economy}Economy", GroupOrder = 6)]
+	public float FoodPriceFactorCap { get; set; } = 5f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_TradeGoodPriceCap}Trade Good Price Factor Cap", 1f, 10f, "0.0", RequireRestart = false, HintText = "{=HAP_MCM_TradeGoodPriceCap_Hint}Maximum price multiplier for non-food trade goods. Default: 10.")]
+	[SettingPropertyGroup("{=HAP_MCM_Economy}Economy", GroupOrder = 6)]
+	public float TradeGoodPriceFactorCap { get; set; } = 10f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_EquipBudgetMult}Equipment Consumption Rate", 1f, 10f, "0.0", RequireRestart = false, HintText = "{=HAP_MCM_EquipBudgetMult_Hint}How fast towns consume equipment (armor, weapons, shields, projectiles). Higher values prevent long-campaign overstock. 1 = vanilla. Default: 3.")]
+	[SettingPropertyGroup("{=HAP_MCM_Economy}Economy", GroupOrder = 6)]
+	public float EquipmentBudgetMultiplier { get; set; } = 3f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_AnimalBudgetMult}Animal Consumption Rate", 1f, 10f, "0.0", RequireRestart = false, HintText = "{=HAP_MCM_AnimalBudgetMult_Hint}How fast towns consume animals (horses, livestock). Higher values prevent long-campaign overstock. 1 = vanilla. Default: 2.")]
+	[SettingPropertyGroup("{=HAP_MCM_Economy}Economy", GroupOrder = 6)]
+	public float AnimalBudgetMultiplier { get; set; } = 2f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_TownTariffRate}Town Tariff Rate", 0.05f, 1f, "0%", RequireRestart = false, HintText = "{=HAP_MCM_TownTariffRate_Hint}Frac

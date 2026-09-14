@@ -1,0 +1,709 @@
+﻿PART 64/75
+nce))?.InitializeObject(isTradeGood: true, 36, 27, ItemCategory.Property.BonusToProsperity);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\NativeFeltItemPatch.cs =====
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultItems), "InitializeAll")]
+public class NativeFeltItemPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(DefaultItems __instance)
+	{
+		FieldInfo field = typeof(DefaultItems).GetField("_itemFelt", BindingFlags.Instance | BindingFlags.NonPublic);
+		if (field != null)
+		{
+			ItemObject itemObject = (ItemObject)field.GetValue(__instance);
+			if (itemObject != null)
+			{
+				typeof(ItemObject).GetProperty("Value")?.SetValue(itemObject, 120);
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\NativeIronCategoryPatch.cs =====
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultItemCategories), "InitializeAll")]
+public class NativeIronCategoryPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(DefaultItemCategories __instance)
+	{
+		FieldInfo field = typeof(DefaultItemCategories).GetField("_itemCategoryIron", BindingFlags.Instance | BindingFlags.NonPublic);
+		if (field != null)
+		{
+			((ItemCategory)field.GetValue(__instance))?.InitializeObject(isTradeGood: true, 15, 30);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\NativeIronItemsPatch.cs =====
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultItems), "InitializeAll")]
+public class NativeIronItemsPatch
+{
+	private static readonly (string fieldName, int newValue)[] IronItemChanges = new(string, int)[7]
+	{
+		("_itemIronOre", 80),
+		("_itemIronIngot1", 35),
+		("_itemIronIngot2", 55),
+		("_itemIronIngot3", 110),
+		("_itemIronIngot4", 180),
+		("_itemIronIngot5", 290),
+		("_itemIronIngot6", 470)
+	};
+
+	[HarmonyPostfix]
+	public static void Postfix(DefaultItems __instance)
+	{
+		PropertyInfo property = typeof(ItemObject).GetProperty("Value");
+		if (property == null)
+		{
+			return;
+		}
+		(string, int)[] ironItemChanges = IronItemChanges;
+		for (int i = 0; i < ironItemChanges.Length; i++)
+		{
+			(string, int) tuple = ironItemChanges[i];
+			string item = tuple.Item1;
+			int item2 = tuple.Item2;
+			FieldInfo field = typeof(DefaultItems).GetField(item, BindingFlags.Instance | BindingFlags.NonPublic);
+			if (!(field == null))
+			{
+				ItemObject itemObject = (ItemObject)field.GetValue(__instance);
+				if (itemObject != null)
+				{
+					property.SetValue(itemObject, item2);
+				}
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\NativeMeatCategoryPatch.cs =====
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultItemCategories), "InitializeAll")]
+public class NativeMeatCategoryPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(DefaultItemCategories __instance)
+	{
+		FieldInfo field = typeof(DefaultItemCategories).GetField("_itemCategoryMeat", BindingFlags.Instance | BindingFlags.NonPublic);
+		if (field != null)
+		{
+			ItemCategory itemCategory = (ItemCategory)field.GetValue(__instance);
+			if (itemCategory != null)
+			{
+				FieldInfo field2 = typeof(DefaultItemCategories).GetField("_itemCategoryFish", BindingFlags.Instance | BindingFlags.NonPublic);
+				ItemCategory canSubstitute = ((field2 != null) ? ((ItemCategory)field2.GetValue(__instance)) : null);
+				itemCategory.InitializeObject(isTradeGood: true, 10, 6, ItemCategory.Property.BonusToFoodStores, canSubstitute, 0.1f);
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\NativeMeatItemPatch.cs =====
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.Core;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultItems), "InitializeAll")]
+public class NativeMeatItemPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(DefaultItems __instance)
+	{
+		FieldInfo field = typeof(DefaultItems).GetField("_itemMeat", BindingFlags.Instance | BindingFlags.NonPublic);
+		if (!(field != null))
+		{
+			return;
+		}
+		ItemObject itemObject = (ItemObject)field.GetValue(__instance);
+		if (itemObject != null)
+		{
+			PropertyInfo property = typeof(ItemObject).GetProperty("Name");
+			if (property != null)
+			{
+				TextObject value = new TextObject("{=HAP_GenericMeat}Beast Meat{@Plural}loads of beast meat{\\@}");
+				property.SetValue(itemObject, value);
+			}
+			PropertyInfo property2 = typeof(ItemObject).GetProperty("MultiMeshName");
+			if (property2 != null)
+			{
+				property2.SetValue(itemObject, "merchandise_meat");
+			}
+			PropertyInfo property3 = typeof(ItemObject).GetProperty("Value");
+			if (property3 != null)
+			{
+				property3.SetValue(itemObject, 15);
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\NavalRaidCompletedFix.cs =====
+using System;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+public static class NavalRaidCompletedFix
+{
+	private static bool _applied;
+
+	private static PolicyObject _raidersSpoils;
+
+	private static bool _policyResolved;
+
+	public static void Apply(Harmony harmony)
+	{
+		if (_applied)
+		{
+			return;
+		}
+		try
+		{
+			Type type = AccessTools.TypeByName("NavalDLC.CampaignBehaviors.NavalKingdomPolicyCampaignBehaviour");
+			if (type == null)
+			{
+				Main.Log("NavalRaidCompletedFix: War Sails DLC not found, skipping");
+				return;
+			}
+			MethodInfo methodInfo = AccessTools.Method(type, "OnRaidCompleted");
+			if (methodInfo == null)
+			{
+				Main.Log("NavalRaidCompletedFix: OnRaidCompleted method not found");
+				return;
+			}
+			MethodInfo method = typeof(NavalRaidCompletedFix).GetMethod("Prefix", BindingFlags.Static | BindingFlags.NonPublic);
+			harmony.Patch(methodInfo, new HarmonyMethod(method));
+			_applied = true;
+			Main.Log("NavalRaidCompletedFix: Patched OnRaidCompleted (null LeaderHero guard)");
+		}
+		catch (Exception ex)
+		{
+			Main.Log("NavalRaidCompletedFix ERROR: " + ex.Message);
+		}
+	}
+
+	private static PolicyObject ResolvePolicyLazy()
+	{
+		if (_policyResolved)
+		{
+			return _raidersSpoils;
+		}
+		_policyResolved = true;
+		try
+		{
+			Type type = AccessTools.TypeByName("NavalDLC.CampaignBehaviors.NavalPolicies");
+			if (type == null)
+			{
+				return null;
+			}
+			_raidersSpoils = (AccessTools.Property(type, "RaidersSpoils")?.GetValue(null) as PolicyObject) ?? (AccessTools.Field(type, "RaidersSpoils")?.GetValue(null) as PolicyObject);
+		}
+		catch (Exception ex)
+		{
+			Main.Log("NavalRaidCompletedFix: Failed to resolve RaidersSpoils policy: " + ex.Message);
+		}
+		return _raidersSpoils;
+	}
+
+	private static bool Prefix(BattleSideEnum winnerSide, RaidEventComponent raidEvent)
+	{
+		if (winnerSide != BattleSideEnum.Attacker)
+		{
+			return false;
+		}
+		try
+		{
+			Kingdom kingdom = (raidEvent.AttackerSide.LeaderParty.Owner?.Clan)?.Kingdom;
+			if (kingdom == null)
+			{
+				return false;
+			}
+			PolicyObject policyObject = ResolvePolicyLazy();
+			if (policyObject == null || !kingdom.HasPolicy(policyObject))
+			{
+				return false;
+			}
+			foreach (MapEventParty party in raidEvent.AttackerSide.Parties)
+			{
+				if (party.Party.LeaderHero != null)
+				{
+					GainKingdomInfluenceAction.ApplyForDefault(party.Party.LeaderHero, 5f);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("NavalRaidCompletedFix ERROR: " + ex.Message);
+		}
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\NotificationTextHelpers.cs =====
+using System.Collections.Generic;
+using System.Linq;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+public static class NotificationTextHelpers
+{
+	public const int FOOD_CATEGORY_COLLAPSE_THRESHOLD = 12;
+
+	private static readonly TextObject _foodLabelStr = new TextObject("{=HAP_NotifFood}Food");
+
+	public static List<(string name, int count)> BuildDisplayEntries(List<IGrouping<ItemCategory, (EquipmentElement, int)>> sortedGroups)
+	{
+		List<(string, int)> list = new List<(string, int)>();
+		if (sortedGroups == null || sortedGroups.Count == 0)
+		{
+			return list;
+		}
+		int num = 0;
+		int num2 = 0;
+		foreach (IGrouping<ItemCategory, (EquipmentElement, int)> sortedGroup in sortedGroups)
+		{
+			if (IsFoodGroup(sortedGroup))
+			{
+				num++;
+				num2 += MathF.Abs(sortedGroup.Sum(((EquipmentElement, int) e) => e.Item2));
+			}
+		}
+		bool flag = num > 12;
+		if (flag)
+		{
+			list.Add((_foodLabelStr.ToString(), num2));
+		}
+		foreach (IGrouping<ItemCategory, (EquipmentElement, int)> sortedGroup2 in sortedGroups)
+		{
+			if (!flag || !IsFoodGroup(sortedGroup2))
+			{
+				int item = MathF.Abs(sortedGroup2.Sum(((EquipmentElement, int) e) => e.Item2));
+				list.Add((sortedGroup2.Key.GetName().ToString(), item));
+			}
+		}
+		return list;
+	}
+
+	private static bool IsFoodGroup(IGrouping<ItemCategory, (EquipmentElement, int)> group)
+	{
+		foreach (var item in group)
+		{
+			EquipmentElement equipmentElement;
+			(equipmentElement, _) = item;
+			if (equipmentElement.Item != null)
+			{
+				(equipmentElement, _) = item;
+				if (equipmentElement.Item.IsFood)
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\PartyMoralePatch.cs =====
+using System;
+using System.Collections.Generic;
+using HarmonyLib;
+using HarvestAndProduction.Models;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Localization;
+using TaleWorlds.ObjectSystem;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultPartyMoraleModel), "CalculateFoodVarietyMoraleBonus")]
+public static class PartyMoralePatch
+{
+	private static readonly TextObject FoodBonusMoraleText = GameTexts.FindText("str_food_bonus_morale");
+
+	private static readonly TextObject FoodQualityMoraleText = new TextObject("{=HAP_FoodQualityMorale}Food Quality");
+
+	private const float FOOD_QUALITY_CAP = 20f;
+
+	[ThreadStatic]
+	private static HashSet<ItemObject> _seenItemsBuffer;
+
+	private const float NIGHT_MARCH_PENALTY = -10f;
+
+	private const float COLD_PENALTY_CAP = -10f;
+
+	private const float HEAT_PENALTY_CAP = -10f;
+
+	private const float HUMIDITY_PENALTY_CAP = -10f;
+
+	private const float SEA_VOYAGE_PENALTY = -10f;
+
+	private const float SHELTERED_BONUS = 5f;
+
+	private static readonly TextObject NightMarchMoraleText = new TextObject("{=HAP_NightMarchMorale}Night");
+
+	private static readonly TextObject FreezingColdMoraleText = new TextObject("{=HAP_FreezingColdMorale}Freezing Cold");
+
+	private static readonly TextObject ExtremeHeatMoraleText = new TextObject("{=HAP_ExtremeHeatMorale}Extreme Heat");
+
+	private static readonly TextObject OppressiveHumidityMoraleText = new TextObject("{=HAP_OppressiveHumidityMorale}Oppressive Humidity");
+
+	private static readonly TextObject SeaVoyageMoraleText = new TextObject("{=HAP_SeaVoyageMorale}At Sea");
+
+	private static readonly TextObject ShelteredMoraleText = new TextObject("{=HAP_ShelteredMorale}Sheltered");
+
+	private static readonly TextObject MilitiaLoyaltyMoraleText = new TextObject("{=HAP_MilitiaLoyaltyMorale}Settlement Loyalty");
+
+	private static TraitObject _navalSoldierTrait = null;
+
+	private static bool _navalSoldierTraitSearched = false;
+
+	[HarmonyPrefix]
+	public static bool Prefix(MobileParty party, ref ExplainedNumber result)
+	{
+		bool flag = Campaign.Current.Models.MobilePartyFoodConsumptionModel.DoesPartyConsumeFood(party);
+		if (party.IsMilitia)
+		{
+			Town town = party.HomeSettlement?.Town ?? party.HomeSettlement?.Village?.Bound?.Town;
+			if (town != null)
+			{
+				float value = (float)Math.Round((town.Loyalty - 50f) * 0.6f);
+				result.Add(value, MilitiaLoyaltyMoraleText);
+			}
+		}
+		if (flag && !party.Party.IsStarving)
+		{
+			float num;
+			switch (ReservedItemService.GetEffectiveFoodVariety(party))
+			{
+			case 0:
+			case 1:
+				num = -6f;
+				break;
+			case 2:
+				num = -4f;
+				break;
+			case 3:
+				num = -2f;
+				break;
+			case 4:
+				num = 0f;
+				break;
+			case 5:
+				num = 1f;
+				break;
+			case 6:
+				num = 2f;
+				break;
+			case 7:
+				num = 3f;
+				break;
+			case 8:
+			case 9:
+				num = 4f;
+				break;
+			case 10:
+			case 11:
+				num = 5f;
+				break;
+			default:
+				num = 6f;
+				break;
+			}
+			if (num < 0f && party.LeaderHero != null && !party.IsCurrentlyAtSea && party.LeaderHero.GetPerkValue(DefaultPerks.Steward.WarriorsDiet))
+			{
+				num = 0f;
+			}
+			if (num != 0f)
+			{
+				result.Add(num, FoodBonusMoraleText);
+				if (num > 0f && party.HasPerk(DefaultPerks.Steward.Gourmet))
+				{
+					float num2 = num;
+					if (party.IsCurrentlyAtSea)
+					{
+						num2 *= 0.5f;
+					}
+					result.Add(num2, DefaultPerks.Steward.Gourmet.Name);
+				}
+			}
+		}
+		if (flag && !party.Party.IsStarving)
+		{
+			float num3 = 0f;
+			ItemRoster itemRoster = party.ItemRoster;
+			if (_seenItemsBuffer == null)
+			{
+				_seenItemsBuffer = new HashSet<ItemObject>();
+			}
+			_seenItemsBuffer.Clear();
+			for (int i = 0; i < itemRoster.Count; i++)
+			{
+				ItemObject itemAtIndex = itemRoster.GetItemAtIndex(i);
+				if (itemAtIndex == null || !itemAtIndex.IsFood || itemRoster.GetElementNumber(i) <= 0 || (party == MobileParty.MainParty && ReservedItemService.IsReserved(itemAtIndex)) || !_seenItemsBuffer.Add(itemAtIndex))
+				{
+					continue;
+				}
+				int foodQualityTier = FoodSystemConstants.GetFoodQualityTier(itemAtIndex);
+				if (foodQualityTier >= 2)
+				{
+					num3 += FoodSystemConstants.GetFoodQualityMorale(foodQualityTier);
+					if (num3 >= 20f)
+					{
+						num3 = 20f;
+						break;
+					}
+				}
+			}
+			if (num3 > 0f)
+			{
+				result.Add(num3, FoodQualityMoraleText);
+			}
+		}
+		HAPSettings instance = GlobalSettings<HAPSettings>.Instance;
+		if (instance != null && instance.EnableEnvironmentalMorale)
+		{
+			if (CampaignTime.Now.IsNightTime)
+			{
+				result.Add(-10f, NightMarchMoraleText);
+			}
+			var (num4, num5) = FoodConsumptionModel.GetPartyEnvironment(party);
+			if (CampaignTime.Now.IsNightTime)
+			{
+				float num6;
+				switch (Campaign.Current.MapSceneWrapper.GetFaceTerrainType(party.CurrentNavigationFace))
+				{
+				case TerrainType.Desert:
+				case TerrainType.Dune:
+					num6 = -15f;
+					break;
+				case TerrainType.Forest:
+					num6 = -5f;
+					break;
+				case TerrainType.River:
+				case TerrainType.UnderBridge:
+					num6 = -5f;
+					break;
+				case TerrainType.CoastalSea:
+				case TerrainType.OpenSea:
+					num6 = -4f;
+					break;
+				default:
+					num6 = -8f;
+					break;
+				}
+				if (Campaign.Current.Models.MapWeatherModel.GetWeatherEventInPosition(party.GetPosition2D) != MapWeatherModel.WeatherEvent.Clear)
+				{
+					num6 *= 0.5f;
+				}
+				num4 += num6;
+				num5 = Math.Min(100f, num5 + 15f);
+			}
+			GetCulturalClimateResistance(party, out var coldResist, out var heatResist);
+			if (num4 < 5f)
+			{
+				float num7 = 0f - (5f - num4) / 1.5f;
+				if (num7 < -10f)
+				{
+					num7 = -10f;
+				}
+				num7 *= 1f - coldResist;
+				num7 = (float)Math.Round(num7, 1);
+				if (num7 < -0.1f)
+				{
+					result.Add(num7, FreezingColdMoraleText);
+				}
+			}
+			else if (num4 > 30f)
+			{
+				float num8 = 0f - (num4 - 30f) / 1.5f;
+				if (num8 < -10f)
+				{
+					num8 = -10f;
+				}
+				num8 *= 1f - heatResist;
+				num8 = (float)Math.Round(num8, 1);
+				if (num8 < -0.1f)
+				{
+					result.Add(num8, ExtremeHeatMoraleText);
+				}
+			}
+			if (num4 > 25f && num5 > 70f)
+			{
+				float num9 = 0f - (num5 - 70f) / 30f * 10f;
+				if (num9 < -10f)
+				{
+					num9 = -10f;
+				}
+				num9 *= 1f - heatResist;
+				num9 = (float)Math.Round(num9, 1);
+				if (num9 < -0.1f)
+				{
+					result.Add(num9, OppressiveHumidityMoraleText);
+				}
+			}
+			if (party.CurrentSettlement != null)
+			{
+				result.Add(5f, ShelteredMoraleText);
+			}
+			if (party.IsCurrentlyAtSea && party.CurrentSettlement == null)
+			{
+				float num10 = -10f;
+				TraitObject navalSoldierTrait = GetNavalSoldierTrait();
+				if (navalSoldierTrait != null && party.MemberRoster.TotalManCount > 0)
+				{
+					int numberOfMenWith = party.Party.GetNumberOfMenWith(navalSoldierTrait);
+					float num11 = (float)numberOfMenWith / (float)party.MemberRoster.TotalManCount;
+					num10 *= 1f - num11;
+					num10 = (float)Math.Round(num10, 1);
+				}
+				if (num10 < -0.1f)
+				{
+					result.Add(num10, SeaVoyageMoraleText);
+				}
+			}
+		}
+		return false;
+	}
+
+	private static TraitObject GetNavalSoldierTrait()
+	{
+		if (!_navalSoldierTraitSearched)
+		{
+			_navalSoldierTraitSearched = true;
+			_navalSoldierTrait = MBObjectManager.Instance.GetObject<TraitObject>("NavalSoldier");
+		}
+		return _navalSoldierTrait;
+	}
+
+	private static void GetCulturalClimateResistance(MobileParty party, out float coldResist, out float heatResist)
+	{
+		coldResist = 0f;
+		heatResist = 0f;
+		if (party.LeaderHero?.Culture != null)
+		{
+			string lowerCase = StringCache.GetLowerCase(party.LeaderHero.Culture.StringId);
+			if (lowerCase.Contains("sturgia"))
+			{
+				coldResist = 0.6f;
+			}
+			else if (lowerCase.Contains("nord"))
+			{
+				coldResist = 0.6f;
+			}
+			else if (lowerCase.Contains("aserai"))
+			{
+				heatResist = 0.6f;
+			}
+			else if (lowerCase.Contains("khuzait"))
+			{
+				coldResist = 0.3f;
+				heatResist = 0.3f;
+			}
+			else if (lowerCase.Contains("battania"))
+			{
+				coldResist = 0.3f;
+			}
+			else if (lowerCase.Contains("empire"))
+			{
+				coldResist = 0.15f;
+				heatResist = 0.15f;
+			}
+			else if (lowerCase.Contains("vlandia"))
+			{
+				coldResist = 0.15f;
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\PartyTooltipPatch.cs =====
+using System;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.Core.ViewModelCollection.Information;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(TooltipRefresherCollection), "RefreshMobilePartyTooltip")]
+public class PartyTooltipPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(PropertyBasedTooltipVM propertyBasedTooltipVM, object[] args)
+	{
+		try
+		{
+			if (propertyBasedTooltipVM != null && args != null && args.Length >= 3 && args[0] is MobileParty { Party: not null } mobileParty)
+			{
+				bool flag = (bool)args[1];
+				bool flag2 = (bool)args[2];
+				bool isInspected = mobileParty.IsInspected;
+				bool showDetails = (flag | isInspected) || !flag2;
+				HerdTooltipHelper.HerdCounts simplifiedHerdCounts = HerdTooltipHelper.GetSimplifiedHerdCounts(mobileParty);
+				if (simplifiedHerdCounts.TotalHerd != 0)

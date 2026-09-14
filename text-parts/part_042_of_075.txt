@@ -1,0 +1,627 @@
+﻿PART 42/75
+m;
+		if (kingdom2 != null && HAPPolicies.ProvisionerCorps != null && kingdom2.ActivePolicies.Contains(HAPPolicies.ProvisionerCorps))
+		{
+			explainedNumber.Add(-0.3f, _provisionerCorpsText);
+		}
+		Campaign.Current.Models.IssueModel.GetIssueEffectsOfSettlement(DefaultIssueEffects.SettlementProsperity, fortification.Settlement, ref explainedNumber);
+	}
+
+	private void CalculateFoodEffectsOnProsperity(Town town, ref ExplainedNumber result)
+	{
+		float foodChange = town.FoodChange;
+		float num = CalculateDailyConsumption(town);
+		if (town.Owner.IsStarving)
+		{
+			ExplainedNumber bonuses = new ExplainedNumber((foodChange < 0f) ? ((int)foodChange) : 0);
+			PerkHelper.AddPerkBonusForTown(DefaultPerks.Medicine.HelpingHands, town, ref bonuses);
+			float a = bonuses.ResultNumber * 0.5f;
+			float b = (0f - town.Prosperity) * 0.05f;
+			a = MathF.Max(a, b);
+			result.Add(a, HAPTextObjects.FoodShortage);
+			return;
+		}
+		float num2 = ((num > 0f) ? (town.FoodStocks / num) : 0f);
+		if (num2 < 7f)
+		{
+			float value = MBMath.Map(num2, 0f, 7f, -3f, 0f);
+			result.Add(value, HAPTextObjects.LowFoodStock);
+		}
+		else if (num > 0f)
+		{
+			float num3 = MathF.Sqrt(num) * 0.5f;
+			if (num2 >= 7f)
+			{
+				num3 *= 1.5f;
+				result.Add(num3, _foodSecurityText);
+			}
+			else
+			{
+				result.Add(num3, _fedPopulationText);
+			}
+		}
+	}
+
+	private void CalculateMarketFulfillmentEffect(Town town, ref ExplainedNumber result)
+	{
+		float marketFulfillment = MarketFulfillmentBehavior.GetMarketFulfillment(town);
+		float num;
+		if (marketFulfillment < 0.5f)
+		{
+			num = MBMath.Map(marketFulfillment, 0f, 0.5f, -3f, 0f);
+		}
+		else
+		{
+			num = MBMath.Map(marketFulfillment, 0.5f, 1f, 0f, 3f);
+			num = MathF.Min(num, 3f);
+		}
+		if (num < -0.05f)
+		{
+			result.Add(num, HAPTextObjects.MarketShortage);
+		}
+		else if (num > 0.05f)
+		{
+			result.Add(num, HAPTextObjects.ThrivingMarket);
+		}
+	}
+
+	private float CalculateDailyConsumption(Town town)
+	{
+		float num = town.Prosperity / 80f;
+		int num2 = town.GarrisonParty?.Party.NumberOfAllMembers ?? 0;
+		float num3 = (float)num2 / 40f;
+		return num + num3;
+	}
+
+	private void CalculateWorkshopProsperityEffect(Town town, ref ExplainedNumber result)
+	{
+		float num = 0f;
+		Workshop[] workshops = town.Workshops;
+		foreach (Workshop workshop in workshops)
+		{
+			if (workshop.WorkshopType != null && !workshop.WorkshopType.IsHidden && workshop.InitialCapital > 0)
+			{
+				float value = (float)(workshop.Capital - workshop.InitialCapital) / (float)workshop.InitialCapital;
+				num += MathF.Clamp(value, -1f, 1f);
+			}
+		}
+		if (num > 0.01f || num < -0.01f)
+		{
+			result.Add(num, _workshopProsperityText);
+		}
+	}
+
+	private void CalculateHousingCosts(Town fortification, ref ExplainedNumber explainedNumber)
+	{
+		if (fortification.IsTown)
+		{
+			if (fortification.Prosperity < 250f)
+			{
+				explainedNumber.Add(6f, _housingCostsText);
+			}
+			else if (fortification.Prosperity < 500f)
+			{
+				explainedNumber.Add(5f, _housingCostsText);
+			}
+			else if (fortification.Prosperity < 750f)
+			{
+				explainedNumber.Add(4f, _housingCostsText);
+			}
+			else if (fortification.Prosperity < 1000f)
+			{
+				explainedNumber.Add(3f, _housingCostsText);
+			}
+			else if (fortification.Prosperity < 1250f)
+			{
+				explainedNumber.Add(2f, _housingCostsText);
+			}
+			else if (fortification.Prosperity < 1500f)
+			{
+				explainedNumber.Add(1f, _housingCostsText);
+			}
+			if (fortification.Prosperity > 21000f)
+			{
+				explainedNumber.Add(-6f, _housingCostsText);
+			}
+			else if (fortification.Prosperity > 18000f)
+			{
+				explainedNumber.Add(-5f, _housingCostsText);
+			}
+			else if (fortification.Prosperity > 15000f)
+			{
+				explainedNumber.Add(-4f, _housingCostsText);
+			}
+			else if (fortification.Prosperity > 12000f)
+			{
+				explainedNumber.Add(-3f, _housingCostsText);
+			}
+			else if (fortification.Prosperity > 9000f)
+			{
+				explainedNumber.Add(-2f, _housingCostsText);
+			}
+			else if (fortification.Prosperity > 6000f)
+			{
+				explainedNumber.Add(-1f, _housingCostsText);
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\CustomSettlementSecurityModel.cs =====
+using HarvestAndProduction.Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Buildings;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Models;
+
+public class CustomSettlementSecurityModel : DefaultSettlementSecurityModel
+{
+	private const float FOOD_PENALTY_MAX = -3f;
+
+	private const float FOOD_DAYS_PENALTY_THRESHOLD = 7f;
+
+	private const float TOWN_PROSPERITY_THRESHOLD = 2500f;
+
+	private const float CASTLE_PROSPERITY_THRESHOLD = 1500f;
+
+	private const float TOWN_PROSPERITY_PENALTY_MAX = -2f;
+
+	private const float CASTLE_PROSPERITY_PENALTY_MAX = -1.5f;
+
+	private const float LOYALTY_MIDPOINT = 50f;
+
+	private const float LOYALTY_PENALTY_MAX = -3f;
+
+	private const float LOYALTY_BONUS_MAX = 3f;
+
+	private const float BONUS_NORMAL = 1f;
+
+	private const float SECURITY_CAP_FOR_BONUS = 50f;
+
+	private const float STARVATION_BASE_PENALTY = -3f;
+
+	private const float STARVATION_PENALTY_PER_WEEK = -1f;
+
+	private const float STARVATION_MAX_PENALTY = -6f;
+
+	private const float LOOTED_VILLAGE_PENALTY = -1f;
+
+	private const float LOOTED_VILLAGE_CAP = -4f;
+
+	public override ExplainedNumber CalculateSecurityChange(Town town, bool includeDescriptions = false)
+	{
+		ExplainedNumber result = base.CalculateSecurityChange(town, includeDescriptions);
+		CalculateCastlePatrolPartiesBonuses(town, ref result);
+		CalculateFoodEffectsOnSecurity(town, ref result);
+		CalculateProsperityEffectsOnSecurity(town, ref result);
+		CalculateLoyaltyEffectsOnSecurity(town, ref result);
+		CalculateLootedVillageEffectsOnSecurity(town, ref result);
+		return result;
+	}
+
+	private void CalculateFoodEffectsOnSecurity(Town town, ref ExplainedNumber result)
+	{
+		if (town.Settlement.IsStarving)
+		{
+			float daysStarving = town.Settlement.Party.DaysStarving;
+			float num = daysStarving / 7f;
+			float a = -3f + num * -1f;
+			a = MathF.Max(a, -6f);
+			result.Add(a, HAPTextObjects.FoodShortage);
+			return;
+		}
+		float num2 = town.Prosperity / 80f + ((town.GarrisonParty != null) ? ((float)town.GarrisonParty.Party.NumberOfAllMembers / 40f) : 0f);
+		float num3 = ((num2 > 0f) ? (town.FoodStocks / num2) : 0f);
+		if (num3 < 7f)
+		{
+			float value = MBMath.Map(num3, 0f, 7f, -3f, 0f);
+			result.Add(value, HAPTextObjects.LowFoodStock);
+		}
+		else if (town.Security < 50f)
+		{
+			result.Add(1f, HAPTextObjects.FoodStability);
+		}
+	}
+
+	private void CalculateProsperityEffectsOnSecurity(Town town, ref ExplainedNumber result)
+	{
+		float num = (town.IsCastle ? 1500f : 2500f);
+		float outputMinimum = (town.IsCastle ? (-1.5f) : (-2f));
+		if (!(town.Prosperity >= num))
+		{
+			float value = MBMath.Map(town.Prosperity, 0f, num, outputMinimum, 0f);
+			result.Add(value, HAPTextObjects.LowProsperity);
+		}
+	}
+
+	private void CalculateLoyaltyEffectsOnSecurity(Town town, ref ExplainedNumber result)
+	{
+		float loyalty = town.Loyalty;
+		if (loyalty < 50f)
+		{
+			float value = MBMath.Map(loyalty, 0f, 50f, -3f, 0f);
+			result.Add(value, HAPTextObjects.LowLoyalty);
+			return;
+		}
+		float num = MBMath.Map(loyalty, 50f, 100f, 0f, 3f);
+		if (num > 0.01f)
+		{
+			result.Add(num, HAPTextObjects.HighLoyalty);
+		}
+	}
+
+	private void CalculateLootedVillageEffectsOnSecurity(Town town, ref ExplainedNumber result)
+	{
+		float num = 0f;
+		foreach (Village village in town.Villages)
+		{
+			if (village.VillageState == Village.VillageStates.BeingRaided || village.VillageState == Village.VillageStates.Looted)
+			{
+				num += -1f;
+			}
+		}
+		if (num < -4f)
+		{
+			num = -4f;
+		}
+		if (num < 0f)
+		{
+			result.Add(num, HAPTextObjects.LootedVillages);
+		}
+	}
+
+	private void CalculateCastlePatrolPartiesBonuses(Town town, ref ExplainedNumber result)
+	{
+		if (!town.IsCastle || town.Settlement.PatrolParty == null)
+		{
+			return;
+		}
+		foreach (Building building in town.Buildings)
+		{
+			if (building.BuildingType == DefaultBuildingTypes.CastleGuardHouse && building.CurrentLevel > 0)
+			{
+				result.Add((float)building.CurrentLevel * 0.5f + 0.5f, GameTexts.FindText("str_patrol_parties"));
+				break;
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\CustomSettlementTaxModel.cs =====
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Settlements;
+
+namespace HarvestAndProduction.Models;
+
+public class CustomSettlementTaxModel : DefaultSettlementTaxModel
+{
+	public override float SettlementCommissionRateTown => GlobalSettings<HAPSettings>.Instance?.TownTariffRate ?? 0.3f;
+
+	public override float SettlementCommissionRateVillage => GlobalSettings<HAPSettings>.Instance?.VillageTaxRate ?? 0.5f;
+
+	public override float GetTownTaxRatio(Town town)
+	{
+		float num = base.GetTownTaxRatio(town);
+		Kingdom kingdom = town.Settlement?.OwnerClan?.Kingdom;
+		if (kingdom != null)
+		{
+			if (HAPPolicies.SaltTax != null && kingdom.ActivePolicies.Contains(HAPPolicies.SaltTax))
+			{
+				num *= 1.05f;
+			}
+			if (HAPPolicies.GranaryWardens != null && kingdom.ActivePolicies.Contains(HAPPolicies.GranaryWardens))
+			{
+				num *= 0.97f;
+			}
+			if (kingdom.ActivePolicies.Contains(DefaultPolicies.DebasementOfTheCurrency))
+			{
+				num *= 1.1f;
+			}
+		}
+		return num;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\CustomTradeItemPriceFactorModel.cs =====
+using System.Collections.Generic;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Extensions;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Models;
+
+public class CustomTradeItemPriceFactorModel : DefaultTradeItemPriceFactorModel
+{
+	private const float MIN_PRICE_FACTOR = 0.1f;
+
+	private const float MIN_PRICE_FACTOR_NON_TRADE = 0.8f;
+
+	private const float MAX_PRICE_FACTOR_NON_TRADE = 1.3f;
+
+	private static HashSet<ItemCategory> _foodCategories;
+
+	private static void EnsureFoodCategories()
+	{
+		if (_foodCategories != null)
+		{
+			return;
+		}
+		_foodCategories = new HashSet<ItemCategory>();
+		foreach (ItemObject item in Items.All)
+		{
+			if (item?.GetItemCategory() != null)
+			{
+				if (item.IsFood)
+				{
+					_foodCategories.Add(item.GetItemCategory());
+				}
+				if (item.HasHorseComponent && item.HorseComponent.IsLiveStock)
+				{
+					_foodCategories.Add(item.GetItemCategory());
+				}
+			}
+		}
+		Main.Log($"[TradePrice] Built food category cache: {_foodCategories.Count} categories");
+	}
+
+	public static void ClearCache()
+	{
+		_foodCategories = null;
+	}
+
+	public override float GetBasePriceFactor(ItemCategory itemCategory, float inStoreValue, float supply, float demand, bool isSelling, int transferValue)
+	{
+		if (isSelling)
+		{
+			inStoreValue += (float)transferValue;
+		}
+		float value = MathF.Pow(demand / (0.1f * supply + inStoreValue * 0.04f + 2f), itemCategory.IsAnimal ? 0.3f : 0.6f);
+		if (itemCategory.IsTradeGood || itemCategory.IsAnimal)
+		{
+			EnsureFoodCategories();
+			HAPSettings instance = GlobalSettings<HAPSettings>.Instance;
+			float maxValue = ((!_foodCategories.Contains(itemCategory)) ? (instance?.TradeGoodPriceFactorCap ?? 10f) : (instance?.FoodPriceFactorCap ?? 5f));
+			return MathF.Clamp(value, 0.1f, maxValue);
+		}
+		return MathF.Clamp(value, 0.8f, 1.3f);
+	}
+
+	public override int GetTheoreticalMaxItemMarketValue(ItemObject item)
+	{
+		if (item.IsTradeGood || item.IsAnimal)
+		{
+			EnsureFoodCategories();
+			HAPSettings instance = GlobalSettings<HAPSettings>.Instance;
+			float num = ((!_foodCategories.Contains(item.GetItemCategory())) ? (instance?.TradeGoodPriceFactorCap ?? 10f) : (instance?.FoodPriceFactorCap ?? 5f));
+			return MathF.Round((float)item.Value * num);
+		}
+		return MathF.Round((float)item.Value * 1.3f);
+	}
+
+	public override float GetTradePenalty(ItemObject item, MobileParty clientParty, PartyBase merchant, bool isSelling, float inStore, float supply, float demand)
+	{
+		float num = base.GetTradePenalty(item, clientParty, merchant, isSelling, inStore, supply, demand);
+		Settlement settlement = merchant?.Settlement;
+		if (settlement != null)
+		{
+			Kingdom kingdom = settlement.OwnerClan?.Kingdom;
+			if (kingdom != null && kingdom.ActivePolicies.Contains(DefaultPolicies.DebasementOfTheCurrency))
+			{
+				num += 0.1f;
+			}
+		}
+		return num;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\FoodConsumptionModel.cs =====
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Reflection;
+using HarvestAndProduction.Behaviors;
+using HarvestAndProduction.PartyComponents;
+using Helpers;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Models;
+
+public class FoodConsumptionModel : MobilePartyFoodConsumptionModel
+{
+	private struct CachedConsumption
+	{
+		public float ResultNumber;
+
+		public ExplainedNumber? DetailedResult;
+	}
+
+	public struct HerdCounts
+	{
+		public int TotalHerd;
+
+		public int Mounts;
+
+		public int PackAnimals;
+
+		public int Livestock;
+	}
+
+	private struct EnvironmentalCache
+	{
+		public ConcurrentDictionary<MobileParty, EnvironmentalConditions> Conditions;
+
+		public CampaignTime CacheDay;
+	}
+
+	internal struct EnvironmentalConditions
+	{
+		public float Temperature;
+
+		public float Humidity;
+	}
+
+	private static readonly Dictionary<string, float> _spoilageRateCache = new Dictionary<string, float>();
+
+	private static readonly Dictionary<string, float> _humiditySensitivityCache = new Dictionary<string, float>();
+
+	private static bool _foodCachesInitialized = false;
+
+	private static Dictionary<ItemObject, float> _spoilageByItem = new Dictionary<ItemObject, float>();
+
+	private static Dictionary<ItemObject, float> _humidityByItem = new Dictionary<ItemObject, float>();
+
+	private static readonly TextObject _partySpoilageText = new TextObject("{=HAP_Spoilage}Food Spoilage");
+
+	private const bool ENABLE_DEBUG_LOGGING = false;
+
+	private static int _totalMethodCalls = 0;
+
+	private static CampaignTime _lastLogTime = CampaignTime.Zero;
+
+	private static readonly float LOG_INTERVAL_DAYS = 1f;
+
+	private static int _stackTracePrintCount = 0;
+
+	private static Type _realisticWeatherType = null;
+
+	private static bool _realisticWeatherSearched = false;
+
+	private static object _realisticWeatherManager = null;
+
+	private static bool _realisticWeatherUnavailable = false;
+
+	private static PropertyInfo _weatherEventPositionsProperty = null;
+
+	private static bool _navalDLCSearched = false;
+
+	private static bool _navalDLCAvailable = false;
+
+	private static PerkObject _smoothOperatorPerk = null;
+
+	private static readonly TextObject _seaFoodReductionText = new TextObject("{=Z1af4yEX}Food Consumption Reduction At Sea");
+
+	private static HashSet<MobileParty> _processedToday = new HashSet<MobileParty>();
+
+	private static readonly object _processedLock = new object();
+
+	private static CampaignTime _lastClearTime = CampaignTime.Never;
+
+	private static Dictionary<MobileParty, CachedConsumption> _consumptionCache = new Dictionary<MobileParty, CachedConsumption>();
+
+	private static CampaignTime _cacheTime = CampaignTime.Zero;
+
+	private static float _mainPartySpoilageFraction = 0f;
+
+	private static Dictionary<MobileParty, HerdCounts> _herdCountCache = new Dictionary<MobileParty, HerdCounts>();
+
+	private static EnvironmentalCache _environmentalCache = new EnvironmentalCache
+	{
+		Conditions = new ConcurrentDictionary<MobileParty, EnvironmentalConditions>(),
+		CacheDay = CampaignTime.Zero
+	};
+
+	private static CampaignTime _lastRealisticWeatherCheck = CampaignTime.Never;
+
+	private const float RECHECK_INTERVAL_DAYS = 7f;
+
+	private static readonly TextObject _partyConsumption = new TextObject("{=UrFzdy4z}Daily Consumption");
+
+	public override int NumberOfMenOnMapToEatOneFood => 20;
+
+	private static void InitializeFoodCaches()
+	{
+		if (!_foodCachesInitialized)
+		{
+			_spoilageRateCache["fish"] = 0.9f;
+			_spoilageRateCache["crab"] = 0.9f;
+			_spoilageRateCache["lobster"] = 0.9f;
+			_spoilageRateCache["meat"] = 0.9f;
+			_spoilageRateCache["meat_beef"] = 0.9f;
+			_spoilageRateCache["meat_poultry"] = 0.9f;
+			_spoilageRateCache["meat_mutton"] = 0.9f;
+			_spoilageRateCache["meat_pork"] = 0.9f;
+			_spoilageRateCache["meat_hare"] = 0.9f;
+			_spoilageRateCache["lobster_cooked"] = 0.5f;
+			_spoilageRateCache["meat_sausage"] = 0.5f;
+			_spoilageRateCache["meat_ham"] = 0.5f;
+			_spoilageRateCache["meat_poultry_cooked"] = 0.5f;
+			_spoilageRateCache["meat_mutton_cooked"] = 0.5f;
+			_spoilageRateCache["meat_pork_cooked"] = 0.5f;
+			_spoilageRateCache["milk"] = 0.5f;
+			_spoilageRateCache["heavy_cream"] = 0.5f;
+			_spoilageRateCache["stew"] = 0.5f;
+			_spoilageRateCache["egg"] = 0.5f;
+			_spoilageRateCache["apple_fruit"] = 0.4f;
+			_spoilageRateCache["orange_fruit"] = 0.4f;
+			_spoilageRateCache["melon_fruit"] = 0.4f;
+			_spoilageRateCache["cabbage_vegetable"] = 0.4f;
+			_spoilageRateCache["leek_vegetable"] = 0.4f;
+			_spoilageRateCache["carrot_vegetable"] = 0.4f;
+			_spoilageRateCache["wine"] = 0.4f;
+			_spoilageRateCache["pie"] = 0.4f;
+			_spoilageRateCache["grape"] = 0.4f;
+			_spoilageRateCache["flour"] = 0.4f;
+			_spoilageRateCache["dough"] = 0.4f;
+			_spoilageRateCache["butter"] = 0.25f;
+			_spoilageRateCache["cheese"] = 0.25f;
+			_spoilageRateCache["date_fruit"] = 0.25f;
+			_spoilageRateCache["olives"] = 0.25f;
+			_spoilageRateCache["beer"] = 0.25f;
+			_spoilageRateCache["cider"] = 0.25f;
+			_spoilageRateCache["ale"] = 0.25f;
+			_spoilageRateCache["bread"] = 0.25f;
+			_spoilageRateCache["honey"] = 0.12f;
+			_spoilageRateCache["mead"] = 0.12f;
+			_spoilageRateCache["grain"] = 0.12f;
+			_spoilageRateCache["nuts"] = 0.12f;
+			_humiditySensitivityCache["grain"] = 1f;
+			_humiditySensitivityCache["flour"] = 1f;
+			_humiditySensitivityCache["bread"] = 0.8f;
+			_humiditySensitivityCache["pie"] = 0.8f;
+			_humiditySensitivityCache["dough"] = 0.8f;
+			_humiditySensitivityCache["date_fruit"] = 0.5f;
+			_humiditySensitivityCache["apple_fruit"] = 0.5f;
+			_humiditySensitivityCache["orange_fruit"] = 0.5f;
+			_humiditySensitivityCache["melon_fruit"] = 0.5f;
+			_humiditySensitivityCache["nuts"] = 0.5f;
+			_humiditySensitivityCache["grape"] = 0.5f;
+			_humiditySensitivityCache["cabbage_vegetable"] = 0.6f;
+			_humiditySensitivityCache["leek_vegetable"] = 0.6f;
+			_humiditySensitivityCache["carrot_vegetable"] = 0.6f;
+			_humiditySensitivityCache["wine"] = 0.5f;
+			_humiditySensitivityCache["stew"] = 0.5f;
+			_humiditySensitivityCache["milk"] = 0.5f;
+			_humiditySensitivityCache["egg"] = 0.5f;
+			_humiditySensitivityCache["heavy_cream"] = 0.5f;
+			_humiditySensitivityCache["cheese"] = 0.5f;
+			_humiditySensitivityCache["butter"] = 0.5f;
+			_humiditySensitivityCache["olives"] = 0.5f;
+			_humiditySensitivityCache["beer"] = 0.5f;
+			_humiditySensit

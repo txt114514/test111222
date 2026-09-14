@@ -1,0 +1,653 @@
+﻿PART 71/75
+icyLoyaltyPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix()
+	{
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VanillaProsperitySecurityPatch.cs =====
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.GameComponents;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultSettlementSecurityModel), "CalculateProsperityEffectOnSecurity")]
+public static class VanillaProsperitySecurityPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix()
+	{
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VanillaSecurityLoyaltyPatch.cs =====
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.GameComponents;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultSettlementLoyaltyModel), "GetSettlementLoyaltyChangeDueToSecurity")]
+public static class VanillaSecurityLoyaltyPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix()
+	{
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VanillaStarvationLoyaltyPatch.cs =====
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.GameComponents;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultSettlementLoyaltyModel), "GetSettlementLoyaltyChangeDueToFoodStocks")]
+public static class VanillaStarvationLoyaltyPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix()
+	{
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VillageBattleLivestockPatch.cs =====
+using System;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Engine;
+using TaleWorlds.Library;
+using TaleWorlds.MountAndBlade;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(Mission), "AfterStart")]
+public static class VillageBattleLivestockPatch
+{
+	private static readonly (string tag, string itemId)[] AnimalSpawnTags = new(string, string)[5]
+	{
+		("sp_sheep", "sheep"),
+		("sp_cow", "cow"),
+		("sp_hog", "hog"),
+		("sp_goose", "goose"),
+		("sp_chicken", "chicken")
+	};
+
+	[HarmonyPostfix]
+	public static void Postfix()
+	{
+		try
+		{
+			if (MapEvent.PlayerMapEvent == null)
+			{
+				return;
+			}
+			Settlement mapEventSettlement = MapEvent.PlayerMapEvent.MapEventSettlement;
+			if (mapEventSettlement == null || !mapEventSettlement.IsVillage)
+			{
+				return;
+			}
+			Mission current = Mission.Current;
+			if (current == null)
+			{
+				return;
+			}
+			Scene scene = current.Scene;
+			if (scene == null)
+			{
+				return;
+			}
+			(string, string)[] animalSpawnTags = AnimalSpawnTags;
+			for (int i = 0; i < animalSpawnTags.Length; i++)
+			{
+				(string, string) tuple = animalSpawnTags[i];
+				string item = tuple.Item1;
+				string item2 = tuple.Item2;
+				ItemObject itemObject = Game.Current.ObjectManager.GetObject<ItemObject>(item2);
+				if (itemObject == null)
+				{
+					continue;
+				}
+				foreach (GameEntity item3 in scene.FindEntitiesWithTag(item))
+				{
+					SpawnAnimalAtMarker(current, item3, itemObject);
+				}
+			}
+			foreach (GameEntity item4 in scene.FindEntitiesWithTag("sp_horse"))
+			{
+				if (item4.Tags.Length >= 2)
+				{
+					ItemObject itemObject2 = Game.Current.ObjectManager.GetObject<ItemObject>(item4.Tags[1]);
+					if (itemObject2 != null && itemObject2.HasHorseComponent)
+					{
+						SpawnAnimalAtMarker(current, item4, itemObject2);
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in VillageBattleLivestockPatch: " + ex.Message);
+		}
+	}
+
+	private static void SpawnAnimalAtMarker(Mission mission, GameEntity marker, ItemObject animalItem)
+	{
+		MatrixFrame globalFrame = marker.GetGlobalFrame();
+		globalFrame.rotation.OrthonormalizeAccordingToForwardAndKeepUpAsZAxis();
+		ItemRosterElement rosterElement = new ItemRosterElement(animalItem);
+		Agent agent = mission.SpawnMonster(rosterElement, default(ItemRosterElement), in globalFrame.origin, globalFrame.rotation.f.AsVec2);
+		agent.SetAgentFlags(agent.GetAgentFlags() | AgentFlag.CanWander);
+		SimulateAnimalAnimations(agent);
+	}
+
+	private static void SimulateAnimalAnimations(Agent agent)
+	{
+		int num = 10 + MBRandom.RandomInt(90);
+		for (int i = 0; i < num; i++)
+		{
+			agent.TickActionChannels(0.1f);
+			Vec3 vec = agent.ComputeAnimationDisplacement(0.1f);
+			if (vec.LengthSquared > 0f)
+			{
+				agent.TeleportToPosition(agent.Position + vec);
+			}
+			agent.AgentVisuals.GetSkeleton().TickAnimations(0.1f, agent.AgentVisuals.GetGlobalFrame(), tickAnimsForChildren: true);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VillageGoldPatch.cs =====
+using System;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(Village), "DailyTick")]
+public static class VillageGoldPatch
+{
+	private const float BASE_GOLD = 100f;
+
+	private const float GOLD_PER_HEARTH = 2.4f;
+
+	private const float APPROACH_RATE = 0.25f;
+
+	[ThreadStatic]
+	private static int _savedGold;
+
+	[HarmonyPrefix]
+	public static void Prefix(Village __instance)
+	{
+		_savedGold = __instance.Gold;
+	}
+
+	[HarmonyPostfix]
+	public static void Postfix(Village __instance)
+	{
+		int gold = __instance.Gold;
+		if (gold != _savedGold)
+		{
+			__instance.ChangeGold(_savedGold - gold);
+		}
+		float num = Math.Min(__instance.Hearth, 1200f);
+		float num2 = 100f + num * 2.4f;
+		int changeAmount = MathF.Round(0.25f * (num2 - (float)_savedGold));
+		__instance.ChangeGold(changeAmount);
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VillageHearthCapPatch.cs =====
+using HarmonyLib;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem.Settlements;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(Village), "DailyTick")]
+public static class VillageHearthCapPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(Village __instance)
+	{
+		float num = GlobalSettings<HAPSettings>.Instance?.VillageHearthCap ?? 1000;
+		if (__instance.Hearth > num)
+		{
+			__instance.Hearth = num;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VillageProductionNamePatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.ViewModelCollection.GameMenu.TownManagement;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(TownManagementVillageItemVM), "RefreshValues")]
+public static class VillageProductionNamePatch
+{
+	private static readonly Dictionary<string, TextObject> _displayNames = new Dictionary<string, TextObject>
+	{
+		["wheat_farm"] = new TextObject("{=HAP_VT_WheatFarm}Wheat Farm"),
+		["europe_horse_ranch"] = new TextObject("{=HAP_VT_HorseRanch}Horse Ranch"),
+		["steppe_horse_ranch"] = new TextObject("{=HAP_VT_HorseRanch}Horse Ranch"),
+		["desert_horse_ranch"] = new TextObject("{=HAP_VT_HorseRanch}Horse Ranch"),
+		["battanian_horse_ranch"] = new TextObject("{=HAP_VT_HorseRanch}Horse Ranch"),
+		["sturgian_horse_ranch"] = new TextObject("{=HAP_VT_HorseRanch}Horse Ranch"),
+		["vlandian_horse_ranch"] = new TextObject("{=HAP_VT_HorseRanch}Horse Ranch"),
+		["lumberjack"] = new TextObject("{=HAP_VT_LumberCamp}Lumber Camp"),
+		["clay_mine"] = new TextObject("{=HAP_VT_ClayPits}Clay Pits"),
+		["salt_mine"] = new TextObject("{=HAP_VT_SaltMine}Salt Mine"),
+		["iron_mine"] = new TextObject("{=HAP_VT_IronMine}Iron Mine"),
+		["fisherman"] = new TextObject("{=HAP_VT_Fishery}Fishery"),
+		["cattle_farm"] = new TextObject("{=HAP_VT_CattleFarm}Cattle Farm"),
+		["sheep_farm"] = new TextObject("{=HAP_VT_SheepFarm}Sheep Farm"),
+		["swine_farm"] = new TextObject("{=HAP_VT_SwineFarm}Swine Farm"),
+		["vineyard"] = new TextObject("{=HAP_VT_Vineyard}Vineyard"),
+		["flax_plant"] = new TextObject("{=HAP_VT_FlaxField}Flax Field"),
+		["date_farm"] = new TextObject("{=HAP_VT_PalmOrchard}Palm Orchard"),
+		["olive_trees"] = new TextObject("{=HAP_VT_OliveGrove}Olive Grove"),
+		["silk_plant"] = new TextObject("{=HAP_VT_CottonPlantation}Cotton Plantation"),
+		["silver_mine"] = new TextObject("{=HAP_VT_SilverMine}Silver Mine"),
+		["trapper"] = new TextObject("{=HAP_VT_Trapper}Trapper"),
+		["walrus_hunter"] = new TextObject("{=HAP_VT_WalrusHunters}Walrus Hunters"),
+		["whaler"] = new TextObject("{=HAP_VT_Whalers}Whalers")
+	};
+
+	private static FieldInfo _villageField;
+
+	public static string GetDisplayName(string villageTypeId)
+	{
+		if (_displayNames.TryGetValue(villageTypeId, out var value))
+		{
+			return value.ToString();
+		}
+		return null;
+	}
+
+	public static void Postfix(TownManagementVillageItemVM __instance)
+	{
+		try
+		{
+			if (_villageField == null)
+			{
+				_villageField = typeof(TownManagementVillageItemVM).GetField("_village", BindingFlags.Instance | BindingFlags.NonPublic);
+			}
+			if (_villageField == null)
+			{
+				return;
+			}
+			Village village = _villageField.GetValue(__instance) as Village;
+			if (village?.VillageType != null)
+			{
+				string displayName = GetDisplayName(village.VillageType.StringId);
+				if (displayName != null)
+				{
+					__instance.ProductionName = displayName;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in VillageProductionNamePatch: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VillagePurchaseNotificationPatch.cs =====
+using System;
+using System.Reflection;
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using SandBox.ViewModelCollection.Nameplate.NameplateNotifications;
+using SandBox.ViewModelCollection.Nameplate.NameplateNotifications.SettlementNotificationTypes;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Core;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(ItemSoldNotificationItemVM))]
+public static class VillagePurchaseNotificationPatch
+{
+	private static readonly TextObject _purchasedStr = new TextObject("{=qIeDZoSx}Purchased{ITEMS}");
+
+	private static readonly TextObject _soldStr = new TextObject("{=YgyHVu8S}Sold{ITEMS}");
+
+	private static readonly TextObject _collectedStr = new TextObject("{=HAP_Collected}Collected{ITEMS}");
+
+	private static readonly TextObject _suppliedStr = new TextObject("{=HAP_Supplied}Supplied{ITEMS}");
+
+	private static readonly TextObject _itemTransactionStr = new TextObject("{=CqAhj27p} {ITEM_NAME} x{ITEM_NUMBER}");
+
+	[HarmonyPatch(MethodType.Constructor, new Type[]
+	{
+		typeof(Action<SettlementNotificationItemBaseVM>),
+		typeof(PartyBase),
+		typeof(PartyBase),
+		typeof(ItemRosterElement),
+		typeof(int),
+		typeof(int)
+	})]
+	[HarmonyPostfix]
+	public static void ConstructorPostfix(ItemSoldNotificationItemVM __instance, PartyBase receiverParty, PartyBase payerParty, ItemRosterElement item, int number)
+	{
+		try
+		{
+			if (receiverParty == null || !receiverParty.IsSettlement || !receiverParty.Settlement.IsVillage)
+			{
+				return;
+			}
+			bool flag = number < 0;
+			int variable = Math.Abs(number);
+			bool flag2 = false;
+			if (payerParty != null && payerParty.IsMobile)
+			{
+				MobileParty mobileParty = payerParty.MobileParty;
+				if (IsFishingParty(mobileParty))
+				{
+					flag2 = true;
+				}
+			}
+			bool flag3 = false;
+			if (payerParty != null && payerParty.IsMobile && HerderPartyComponent.IsHerderParty(payerParty.MobileParty))
+			{
+				flag3 = true;
+			}
+			bool flag4 = false;
+			if (flag && payerParty != null && payerParty.IsMobile && !flag2 && !flag3)
+			{
+				MobileParty mobileParty2 = payerParty.MobileParty;
+				if (CastleForagerPartyComponent.IsForagerParty(mobileParty2))
+				{
+					CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(mobileParty2);
+					if (foragerComponent != null && receiverParty.Settlement.Village?.Bound == foragerComponent.HomeCastle)
+					{
+						flag4 = true;
+					}
+				}
+			}
+			TextObject textObject = ((flag2 | flag3) ? _suppliedStr : ((!flag4) ? (flag ? _purchasedStr : _soldStr) : _collectedStr));
+			_itemTransactionStr.SetTextVariable("ITEM_NAME", item.EquipmentElement.Item.Name);
+			_itemTransactionStr.SetTextVariable("ITEM_NUMBER", variable);
+			textObject.SetTextVariable("ITEMS", _itemTransactionStr.ToString());
+			__instance.Text = textObject.ToString();
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	[HarmonyPatch("AddNewTransaction")]
+	[HarmonyPostfix]
+	public static void AddNewTransactionPostfix(ItemSoldNotificationItemVM __instance)
+	{
+		try
+		{
+			PartyBase receiverParty = __instance.ReceiverParty;
+			PartyBase payerParty = __instance.PayerParty;
+			ItemRosterElement item = __instance.Item;
+			if (receiverParty == null || !receiverParty.IsSettlement || !receiverParty.Settlement.IsVillage)
+			{
+				return;
+			}
+			FieldInfo fieldInfo = AccessTools.Field(typeof(ItemSoldNotificationItemVM), "_number");
+			if (fieldInfo == null)
+			{
+				return;
+			}
+			int num = (int)fieldInfo.GetValue(__instance);
+			bool flag = num < 0;
+			int variable = Math.Abs(num);
+			bool flag2 = false;
+			if (payerParty != null && payerParty.IsMobile && IsFishingParty(payerParty.MobileParty))
+			{
+				flag2 = true;
+			}
+			bool flag3 = false;
+			if (payerParty != null && payerParty.IsMobile && HerderPartyComponent.IsHerderParty(payerParty.MobileParty))
+			{
+				flag3 = true;
+			}
+			bool flag4 = false;
+			if (flag && payerParty != null && payerParty.IsMobile && !flag2 && !flag3)
+			{
+				MobileParty mobileParty = payerParty.MobileParty;
+				if (CastleForagerPartyComponent.IsForagerParty(mobileParty))
+				{
+					CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(mobileParty);
+					if (foragerComponent != null && receiverParty.Settlement.Village?.Bound == foragerComponent.HomeCastle)
+					{
+						flag4 = true;
+					}
+				}
+			}
+			TextObject textObject = ((flag2 | flag3) ? _suppliedStr : ((!flag4) ? (flag ? _purchasedStr : _soldStr) : _collectedStr));
+			_itemTransactionStr.SetTextVariable("ITEM_NAME", item.EquipmentElement.Item.Name);
+			_itemTransactionStr.SetTextVariable("ITEM_NUMBER", variable);
+			textObject.SetTextVariable("ITEMS", _itemTransactionStr.ToString());
+			__instance.Text = textObject.ToString();
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	private static bool IsFishingParty(MobileParty party)
+	{
+		if (party == null || party.PartyComponent == null)
+		{
+			return false;
+		}
+		string name = party.PartyComponent.GetType().Name;
+		return name == "FishingPartyComponent";
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VillagerDestinationPatch.cs =====
+using System;
+using System.Collections.Generic;
+using HarmonyLib;
+using Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(VillagerCampaignBehavior))]
+public static class VillagerDestinationPatch
+{
+	private const float CASTLE_REDIRECT_MIN_SPACE = 20f;
+
+	private const bool DEBUG_CASTLE_SUPPLY = false;
+
+	private static HashSet<MobileParty> _hasVisitedCastle = new HashSet<MobileParty>();
+
+	public static bool HasVisitedCastle(MobileParty villagerParty)
+	{
+		return _hasVisitedCastle.Contains(villagerParty);
+	}
+
+	public static void MarkCastleVisited(MobileParty villagerParty)
+	{
+		_hasVisitedCastle.Add(villagerParty);
+	}
+
+	public static void ClearCastleVisitFlag(MobileParty villagerParty)
+	{
+		_hasVisitedCastle.Remove(villagerParty);
+	}
+
+	public static void ClearAllCastleVisitFlags()
+	{
+		_hasVisitedCastle.Clear();
+	}
+
+	[HarmonyPrefix]
+	[HarmonyPatch("SendVillagerPartyToTradeBoundTown")]
+	public static bool SendVillagerPartyToTradeBoundTown_Prefix(VillagerCampaignBehavior __instance, MobileParty villagerParty)
+	{
+		try
+		{
+			Village village = villagerParty.HomeSettlement?.Village;
+			if (village == null)
+			{
+				return true;
+			}
+			Settlement bound = village.Bound;
+			if (bound == null || !bound.IsCastle)
+			{
+				return true;
+			}
+			if (HasVisitedCastle(villagerParty))
+			{
+				return true;
+			}
+			Town town = bound.Town;
+			if (town == null)
+			{
+				return true;
+			}
+			if (bound.IsUnderSiege)
+			{
+				bool flag = false;
+				return true;
+			}
+			int num = town.FoodStocksUpperLimit();
+			float num2 = (float)num - town.FoodStocks;
+			if (num2 < 20f)
+			{
+				bool flag2 = false;
+				return true;
+			}
+			if (FactionManager.IsAtWarAgainstFaction(villagerParty.MapFaction, bound.MapFaction))
+			{
+				bool flag3 = false;
+				return true;
+			}
+			if (!HasFoodToDeposit(villagerParty, town))
+			{
+				return true;
+			}
+			bool flag4 = false;
+			MoveVillagersToSettlement(villagerParty, bound);
+			return false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in VillagerDestinationPatch: " + ex.Message);
+			return true;
+		}
+	}
+
+	private static void MoveVillagersToSettlement(MobileParty villagerParty, Settlement destination)
+	{
+		AiHelper.GetBestNavigationTypeAndAdjustedDistanceOfSettlementForMobileParty(villagerParty, destination, isTargetingPort: false, out var bestNavigationType, out var _, out var isFromPort);
+		SetPartyAiAction.GetActionForVisitingSettlement(villagerParty, destination, bestNavigationType, isFromPort, isTargetingPort: false);
+	}
+
+	private static bool HasFoodToDeposit(MobileParty villagerParty, Town castle)
+	{
+		ItemRoster itemRoster = villagerParty.ItemRoster;
+		bool flag = FoodSystemConstants.IsEmergencyMode(castle);
+		Settlement tradeBoundTown = villagerParty.HomeSettlement?.Village?.TradeBound;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item == null || elementCopyAtIndex.Amount <= 0)
+			{
+				continue;
+			}
+			bool flag2 = item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores;
+			bool isFood = item.IsFood;
+			if (flag)
+			{
+				if (flag2 | isFood)
+				{
+					return true;
+				}
+				if (item.HasHorseComponent)
+				{
+					if (item.HorseComponent.IsLiveStock)
+					{
+						return true;
+					}
+					if (item.ItemCategory != null && item.ItemCategory.StringId == "sumpter_horse")
+					{
+						return true;
+					}
+				}
+			}
+			else if (flag2 && !RawMaterialRegistry.IsProtectedForCastle(item.StringId, castle, tradeBoundTown, RawMaterialRegistry.ProtectionContext.VillagerRouting))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VillagerGoldDepositPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(VillagerCampaignBehavior), "OnSettlementEntered")]
+public static class VillagerGoldDepositPatch
+{
+	[ThreadStatic]
+	private static bool _shouldProcess;
+
+	[ThreadStatic]
+	private static int _savedTradeGold;
+
+	[ThreadStatic]
+	private static int _savedTaxAccumulated;
+
+	[HarmonyPrefix]
+	public static void Prefix

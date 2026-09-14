@@ -1,0 +1,683 @@
+﻿PART 28/75
+uipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && TownSupplyLinePartyComponent.IsPackAnimal(item))
+			{
+				int num3 = Math.Min(elementCopyAtIndex.Amount, targetCount - num);
+				if (num3 > 0)
+				{
+					party.ItemRoster.AddToCounts(item, num3);
+					itemRoster.AddToCounts(item, -num3);
+					num += num3;
+				}
+			}
+			num2--;
+		}
+		return num;
+	}
+
+	private int TakeRidingMountsFromMarket(MobileParty party, Settlement donor, int targetCount)
+	{
+		if (party == null || donor?.ItemRoster == null || targetCount <= 0)
+		{
+			return 0;
+		}
+		int num = 0;
+		ItemRoster itemRoster = donor.ItemRoster;
+		int num2 = itemRoster.Count - 1;
+		while (num2 >= 0 && num < targetCount)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num2);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && TownSupplyLinePartyComponent.IsRidingMount(item))
+			{
+				int num3 = Math.Min(elementCopyAtIndex.Amount, targetCount - num);
+				if (num3 > 0)
+				{
+					party.ItemRoster.AddToCounts(item, num3);
+					itemRoster.AddToCounts(item, -num3);
+					num += num3;
+				}
+			}
+			num2--;
+		}
+		return num;
+	}
+
+	private Settlement FindBestNavalDonor(Settlement recipient)
+	{
+		if (recipient == null || !recipient.HasPort)
+		{
+			return null;
+		}
+		Settlement result = null;
+		float num = float.MaxValue;
+		foreach (Settlement item in Settlement.All)
+		{
+			if (item.IsTown && item != recipient && IsValidNavalDonor(item, recipient, out var travelDays) && travelDays < num)
+			{
+				num = travelDays;
+				result = item;
+			}
+		}
+		return result;
+	}
+
+	private bool IsValidNavalDonor(Settlement candidate, Settlement recipient, out float travelDays)
+	{
+		travelDays = float.MaxValue;
+		if (candidate == null || !candidate.IsTown || candidate.Town == null)
+		{
+			return false;
+		}
+		if (!candidate.HasPort)
+		{
+			return false;
+		}
+		if (candidate.IsUnderSiege)
+		{
+			return false;
+		}
+		if (candidate.SiegeEvent != null && candidate.SiegeEvent.IsBlockadeActive)
+		{
+			return false;
+		}
+		if (candidate.Town.InRebelliousState)
+		{
+			return false;
+		}
+		if (candidate.MapFaction != recipient.MapFaction)
+		{
+			return false;
+		}
+		if (_activeSupplyLines.TryGetValue(candidate, out var value))
+		{
+			if (value != null && value.IsActive)
+			{
+				return false;
+			}
+			_activeSupplyLines.Remove(candidate);
+		}
+		if (_lastSpawnTime.TryGetValue(candidate, out var value2) && value2.ElapsedHoursUntilNow < 168f)
+		{
+			return false;
+		}
+		if (_lastFailedSpawnTimes.TryGetValue(candidate, out var value3))
+		{
+			if (value3.ElapsedHoursUntilNow < 24f)
+			{
+				return false;
+			}
+			_lastFailedSpawnTimes.Remove(candidate);
+		}
+		if (candidate.Town.FoodStocks < 400f)
+		{
+			return false;
+		}
+		if (FoodSystemConstants.IsEmergencyMode(candidate.Town))
+		{
+			return false;
+		}
+		float num = FoodSystemConstants.GetEmergencyThreshold(candidate.Town) * 2f;
+		float num2 = Math.Min(300f, candidate.Town.FoodStocks - num);
+		if (num2 < 100f)
+		{
+			return false;
+		}
+		MobileParty garrisonParty = candidate.Town.GarrisonParty;
+		if (garrisonParty == null || garrisonParty.MemberRoster.TotalManCount < 100)
+		{
+			return false;
+		}
+		if (!HasSuitableShips(candidate))
+		{
+			return false;
+		}
+		if (!IsReachableByWater(candidate, recipient, out var distance))
+		{
+			return false;
+		}
+		travelDays = distance / (Campaign.Current.EstimatedAverageLordPartySpeed * (float)CampaignTime.HoursInDay);
+		if (travelDays > 6f)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private bool IsReachableByWater(Settlement from, Settlement to, out float distance)
+	{
+		distance = float.MaxValue;
+		try
+		{
+			if (!from.HasPort || !to.HasPort)
+			{
+				return false;
+			}
+			float distance2 = Campaign.Current.Models.MapDistanceModel.GetDistance(from, to, isFromPort: true, isTargetingPort: true, MobileParty.NavigationType.Naval);
+			if (distance2 > 0f && distance2 < 100000000f)
+			{
+				distance = distance2;
+				return true;
+			}
+			return false;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private List<Ship> GetSuitableShipsFromPort(Settlement settlement)
+	{
+		List<Ship> result = new List<Ship>();
+		if (settlement?.Town == null)
+		{
+			return result;
+		}
+		try
+		{
+			List<Ship> list = new List<Ship>();
+			List<Ship> list2 = new List<Ship>();
+			foreach (Ship availableShip in settlement.Town.AvailableShips)
+			{
+				if (availableShip.ShipHull.IsTradeShip)
+				{
+					list.Add(availableShip);
+				}
+				else if ((int)availableShip.InventoryCapacity >= 2000)
+				{
+					list2.Add(availableShip);
+				}
+			}
+			if (list.Count > 0)
+			{
+				list.Sort((Ship a, Ship b) => b.InventoryCapacity.CompareTo(a.InventoryCapacity));
+				result = list;
+			}
+			else if (list2.Count > 0)
+			{
+				list2.Sort((Ship a, Ship b) => b.InventoryCapacity.CompareTo(a.InventoryCapacity));
+				result = list2;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[NavalConvoy] Error scanning ships: " + ex.Message);
+		}
+		return result;
+	}
+
+	private int CalculateShipsNeeded(List<Ship> candidates, int troopCount, int cargoWeight, out int minCrewRequired)
+	{
+		minCrewRequired = 0;
+		if (candidates == null || candidates.Count == 0)
+		{
+			return int.MaxValue;
+		}
+		int num = troopCount;
+		int num2 = cargoWeight;
+		int num3 = 0;
+		for (int i = 0; i < candidates.Count; i++)
+		{
+			if (num <= 0 && num2 <= 0)
+			{
+				break;
+			}
+			Ship ship = candidates[i];
+			num -= ship.TotalCrewCapacity;
+			num2 -= (int)ship.InventoryCapacity;
+			minCrewRequired += ship.SkeletalCrewCapacity;
+			num3++;
+		}
+		if (num > 0 || num2 > 0)
+		{
+			return candidates.Count + 1;
+		}
+		return Math.Max(1, num3);
+	}
+
+	private void SpawnNavalSupplyConvoy(Settlement donor, Settlement recipient)
+	{
+		try
+		{
+			if ((_activeSupplyLines.TryGetValue(donor, out var value) && value != null && value.IsActive) || (_incomingSupply.TryGetValue(recipient, out var value2) && value2 != null && value2.IsActive))
+			{
+				return;
+			}
+			_activeSupplyLines.Remove(donor);
+			_incomingSupply.Remove(recipient);
+			Town town = donor.Town;
+			Town town2 = recipient.Town;
+			MobileParty mobileParty = town?.GarrisonParty;
+			if (town == null || town2 == null || mobileParty == null)
+			{
+				return;
+			}
+			SupplyPlan supplyPlan = ComputePlan(town, town2);
+			if (!supplyPlan.Valid)
+			{
+				return;
+			}
+			List<Ship> suitableShipsFromPort = GetSuitableShipsFromPort(donor);
+			if (suitableShipsFromPort.Count == 0)
+			{
+				bool flag = false;
+				return;
+			}
+			int cargoWeight = supplyPlan.Food * 10;
+			int num = CalculateShipsNeeded(suitableShipsFromPort, supplyPlan.Troops, cargoWeight, out var minCrewRequired);
+			if (num > suitableShipsFromPort.Count)
+			{
+				num = suitableShipsFromPort.Count;
+				int num2 = 0;
+				int num3 = 0;
+				minCrewRequired = 0;
+				for (int i = 0; i < num; i++)
+				{
+					num2 += suitableShipsFromPort[i].TotalCrewCapacity;
+					num3 += (int)suitableShipsFromPort[i].InventoryCapacity;
+					minCrewRequired += suitableShipsFromPort[i].SkeletalCrewCapacity;
+				}
+				int num4 = num3 / 10;
+				if (num4 < 100)
+				{
+					bool flag2 = false;
+					return;
+				}
+				supplyPlan.Food = Math.Min(supplyPlan.Food, num4);
+				supplyPlan.Troops = Math.Min(num2, Math.Max(20, (int)Math.Ceiling((float)supplyPlan.Food / 3f)));
+			}
+			if (supplyPlan.Troops < minCrewRequired)
+			{
+				supplyPlan.Troops = Math.Min(120, minCrewRequired);
+				int totalManCount = mobileParty.MemberRoster.TotalManCount;
+				int num5 = (int)((float)totalManCount * 0.2f);
+				if (supplyPlan.Troops > num5)
+				{
+					bool flag3 = false;
+					return;
+				}
+			}
+			_supplyLineCounter++;
+			string stringId = "naval_supply_convoy_" + donor.StringId + "_" + _supplyLineCounter;
+			MobileParty mobileParty2 = NavalSupplyConvoyPartyComponent.CreateNavalSupplyConvoy(stringId, donor, recipient);
+			if (mobileParty2 == null)
+			{
+				Main.Log("ERROR: Failed to create naval supply convoy for " + donor.Name?.ToString() + " -> " + recipient.Name);
+				return;
+			}
+			TransferTroopsForNavalConvoy(mobileParty, mobileParty2, supplyPlan.Troops);
+			int num6 = BorrowShipsFromPort(mobileParty2, donor, num);
+			if (num6 == 0)
+			{
+				bool flag4 = false;
+				_lastFailedSpawnTimes[donor] = CampaignTime.Now;
+				ReturnTroopsToGarrison(mobileParty2, mobileParty);
+				DestroyPartyAction.Apply(null, mobileParty2);
+				return;
+			}
+			int food = supplyPlan.Food;
+			if (food < 100)
+			{
+				bool flag5 = false;
+				_lastFailedSpawnTimes[donor] = CampaignTime.Now;
+				ReturnTroopsToGarrison(mobileParty2, mobileParty);
+				ReturnShipsToPort(mobileParty2, donor);
+				DestroyPartyAction.Apply(null, mobileParty2);
+				return;
+			}
+			town.FoodStocks = Math.Max(0f, town.FoodStocks - (float)food);
+			RecordDailyDispatch(donor, food);
+			List<(ItemObject, int)> list = GenerateFoodFromTown(donor, food);
+			foreach (var (itemObject, num7) in list)
+			{
+				if (itemObject != null && num7 > 0)
+				{
+					mobileParty2.ItemRoster.AddToCounts(itemObject, num7);
+				}
+			}
+			NavalSupplyConvoyPartyComponent component = NavalSupplyConvoyPartyComponent.GetComponent(mobileParty2);
+			if (component != null)
+			{
+				component.ShipsBorrowed = num6;
+				component.State = NavalSupplyConvoyPartyComponent.ConvoyState.TravelingToDestination;
+				component.SetDestination(recipient);
+			}
+			_activeSupplyLines[donor] = mobileParty2;
+			_incomingSupply[recipient] = mobileParty2;
+			_lastSpawnTime[donor] = CampaignTime.Now;
+			bool flag6 = false;
+			bool flag7 = donor.OwnerClan == Clan.PlayerClan;
+			bool flag8 = recipient.OwnerClan == Clan.PlayerClan;
+			int num8 = GlobalSettings<HAPSettings>.Instance?.SupplyLineNotifications?.SelectedIndex ?? 2;
+			if (num8 >= 1 && (flag7 | flag8))
+			{
+				TextObject textObject = new TextObject("{=HAP_NavalConvoySpawn}{DONOR_NAME} is sending supplies by sea to {RECIPIENT_NAME}.");
+				textObject.SetTextVariable("DONOR_NAME", donor.Name);
+				textObject.SetTextVariable("RECIPIENT_NAME", recipient.Name);
+				Color color = (flag7 ? _spendColor : _receiveColor);
+				InformationManager.DisplayMessage(new InformationMessage(textObject.ToString(), Colors.Yellow));
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in SpawnNavalSupplyConvoy: " + ex.Message);
+		}
+	}
+
+	private void TransferTroopsForNavalConvoy(MobileParty garrison, MobileParty party, int targetCount)
+	{
+		int num = 0;
+		TroopRoster memberRoster = garrison.MemberRoster;
+		List<TroopRosterElement> list = new List<TroopRosterElement>();
+		for (int i = 0; i < memberRoster.Count; i++)
+		{
+			TroopRosterElement elementCopyAtIndex = memberRoster.GetElementCopyAtIndex(i);
+			if (!elementCopyAtIndex.Character.IsHero && elementCopyAtIndex.Number > 0)
+			{
+				list.Add(elementCopyAtIndex);
+			}
+		}
+		list.Sort(delegate(TroopRosterElement a, TroopRosterElement b)
+		{
+			bool flag2 = IsMariner(a.Character);
+			bool flag3 = IsMariner(b.Character);
+			if (flag2 != flag3)
+			{
+				return flag3.CompareTo(flag2);
+			}
+			int num3 = b.Character.Tier.CompareTo(a.Character.Tier);
+			return (num3 != 0) ? num3 : b.Character.TroopWage.CompareTo(a.Character.TroopWage);
+		});
+		foreach (TroopRosterElement item in list)
+		{
+			if (num >= targetCount)
+			{
+				break;
+			}
+			int troopCount = memberRoster.GetTroopCount(item.Character);
+			if (troopCount > 0)
+			{
+				int num2 = Math.Min(troopCount, targetCount - num);
+				if (num2 > 0)
+				{
+					party.MemberRoster.AddToCounts(item.Character, num2);
+					memberRoster.AddToCounts(item.Character, -num2);
+					num += num2;
+				}
+			}
+		}
+		bool flag = false;
+	}
+
+	private static bool IsMariner(CharacterObject character)
+	{
+		if (character == null)
+		{
+			return false;
+		}
+		if (!_navalSoldierTraitSearched)
+		{
+			_navalSoldierTraitSearched = true;
+			_navalSoldierTrait = MBObjectManager.Instance.GetObject<TraitObject>("NavalSoldier");
+		}
+		if (_navalSoldierTrait == null)
+		{
+			return false;
+		}
+		return character.GetTraitLevel(_navalSoldierTrait) > 0;
+	}
+
+	private bool HasSuitableShips(Settlement settlement)
+	{
+		if (settlement?.Town == null)
+		{
+			return false;
+		}
+		try
+		{
+			foreach (Ship availableShip in settlement.Town.AvailableShips)
+			{
+				if (availableShip.ShipHull.IsTradeShip)
+				{
+					return true;
+				}
+				if ((int)availableShip.InventoryCapacity >= 2000)
+				{
+					return true;
+				}
+			}
+		}
+		catch
+		{
+		}
+		return false;
+	}
+
+	private int BorrowShipsFromPort(MobileParty convoy, Settlement donor, int shipsNeeded)
+	{
+		int num = 0;
+		try
+		{
+			List<Ship> suitableShipsFromPort = GetSuitableShipsFromPort(donor);
+			int num2 = Math.Min(shipsNeeded, suitableShipsFromPort.Count);
+			for (int i = 0; i < num2; i++)
+			{
+				try
+				{
+					ChangeShipOwnerAction.ApplyByTransferring(convoy.Party, suitableShipsFromPort[i]);
+					num++;
+				}
+				catch (Exception ex)
+				{
+					Main.Log("[NavalConvoy] Failed to borrow ship: " + ex.Message);
+				}
+			}
+			bool flag = false;
+		}
+		catch (Exception ex2)
+		{
+			Main.Log("ERROR in BorrowShipsFromPort: " + ex2.Message);
+		}
+		return num;
+	}
+
+	private void ReturnShipsToPort(MobileParty convoy, Settlement port)
+	{
+		try
+		{
+			if (convoy == null || port?.Town == null)
+			{
+				return;
+			}
+			List<Ship> list = new List<Ship>(convoy.Ships);
+			foreach (Ship item in list)
+			{
+				try
+				{
+					ChangeShipOwnerAction.ApplyByTransferring(port.Party, item);
+				}
+				catch
+				{
+					try
+					{
+						DestroyShipAction.ApplyByDiscard(item);
+					}
+					catch
+					{
+					}
+				}
+			}
+			bool flag = false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in ReturnShipsToPort: " + ex.Message);
+		}
+	}
+
+	private DangerCheckResult EvaluateNearbyDanger(MobileParty party, Settlement ignoreSiegeAt = null)
+	{
+		DangerCheckResult dangerCheckResult = new DangerCheckResult();
+		try
+		{
+			if (party.CurrentSettlement != null)
+			{
+				return dangerCheckResult;
+			}
+			float radius = (NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(party) ? 12f : 6f);
+			float num = party.Party.EstimatedStrength;
+			if (num < 1f)
+			{
+				num = 1f;
+			}
+			MobileParty mobileParty = null;
+			float num2 = float.MaxValue;
+			float num3 = 0f;
+			Vec2 position = party.Position.ToVec2();
+			LocatableSearchData<MobileParty> data = MobileParty.StartFindingLocatablesAroundPosition(position, radius);
+			MobileParty mobileParty2 = null;
+			for (MobileParty mobileParty3 = MobileParty.FindNextLocatable(ref data); mobileParty3 != null; mobileParty3 = MobileParty.FindNextLocatable(ref data))
+			{
+				if (mobileParty3 != party && mobileParty3.IsActive && mobileParty3.CurrentSettlement == null)
+				{
+					float num4 = position.Distance(mobileParty3.Position.ToVec2());
+					if (FactionManager.IsAtWarAgainstFaction(party.MapFaction, mobileParty3.MapFaction))
+					{
+						if (!mobileParty3.IsCaravan && !mobileParty3.IsVillager && (ignoreSiegeAt == null || mobileParty3.BesiegedSettlement != ignoreSiegeAt) && (!NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(party) || mobileParty3.HasNavalNavigationCapability || !party.IsCurrentlyAtSea) && (!TownSupplyLinePartyComponent.IsSupplyLineParty(party) || mobileParty3.HasLandNavigationCapability || party.IsCurrentlyAtSea))
+						{
+							float estimatedStrength = mobileParty3.Party.EstimatedStrength;
+							if (!(estimatedStrength < 1f))
+							{
+								float num5 = num / estimatedStrength;
+								if (num5 < 0.8f && num4 < num2)
+								{
+									mobileParty = mobileParty3;
+									num2 = num4;
+									num3 = estimatedStrength;
+								}
+							}
+						}
+					}
+					else if (party.MapFaction == mobileParty3.MapFaction && num4 < 10f && mobileParty3.MapEvent != null && mobileParty2 == null && (!NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(party) || mobileParty3.MapEvent.IsBlockade || mobileParty3.MapEvent.IsBlockadeSallyOut || mobileParty3.MapEvent.IsNavalMapEvent) && (NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(party) || (!mobileParty3.MapEvent.IsBlockade && !mobileParty3.MapEvent.IsBlockadeSallyOut)))
+					{
+						mobileParty2 = mobileParty3;
+					}
+				}
+			}
+			if (mobileParty != null)
+			{
+				dangerCheckResult.Action = DangerAction.FleeFromEnemy;
+				dangerCheckResult.ThreatParty = mobileParty;
+				dangerCheckResult.StrengthRatio = num / num3;
+				bool flag = false;
+			}
+			else if (mobileParty2 != null)
+			{
+				dangerCheckResult.Action = DangerAction.HelpFriendly;
+				dangerCheckResult.FriendlyParty = mobileParty2;
+				bool flag2 = false;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in EvaluateNearbyDanger: " + ex.Message);
+		}
+		return dangerCheckResult;
+	}
+
+	private void HandleFleeFromEnemy(MobileParty party, TownSupplyLinePartyComponent component, MobileParty threat)
+	{
+		Vec2 vec = party.Position.ToVec2();
+		Vec2 vec2 = threat.Position.ToVec2();
+		Vec2 vec3 = vec - vec2;
+		float lengthSquared = vec3.LengthSquared;
+		if (lengthSquared < 0.001f)
+		{
+			vec3 = Vec2.One;
+		}
+		vec3.Normalize();
+		Settlement settlement = FindSafeDestinationInDirection(party, vec3);
+		if (settlement != null)
+		{
+			SetFleeFromParty(party, threat, settlement);
+			bool flag = false;
+			return;
+		}
+		Settlement settlement2 = FindNearestFriendlyTown(party);
+		if (settlement2 != null)
+		{
+			SetFleeFromParty(party, threat, settlement2);
+			bool flag2 = false;
+			return;
+		}
+		Vec2 pos = vec + vec3 * 15f;
+		party.SetMoveGoToPoint(new CampaignVec2(pos, isOnLand: true), MobileParty.NavigationType.Default);
+		component.ThreatParty = threat;
+		bool flag3 = false;
+	}
+
+	private void HandleHelpFriendly(MobileParty party, TownSupplyLinePartyComponent component, MobileParty friendlyParty)
+	{
+		try
+		{
+			if (friendlyParty == null || friendlyParty.MapEvent == null)
+			{
+				return;
+			}
+			foreach (PartyBase involvedParty in friendlyParty.MapEvent.InvolvedParties)
+			{
+				if (involvedParty.IsMobile && FactionManager.IsAtWarAgainstFaction(party.MapFaction, involvedParty.MapFaction))
+				{
+					party.SetMoveEngageParty(involvedParty.MobileParty, MobileParty.NavigationType.Default);
+					bool flag = false;
+					return;
+				}
+			}
+			bool flag2 = false;
+			ReapplyMovement(party, component);
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in HandleHelpFriendly: " + ex.Message);
+		}
+	}
+
+	private Settlement FindSafeDestinationInDirection(MobileParty party, Vec2 direction)
+	{
+		Settlement result = null;
+		float num = float.MinValue;
+		Vec2 getPosition2D = party.GetPosition2D;
+		foreach (Settlement item in Settlement.All)
+		{
+			if (item.MapFaction != null && !FactionManager.IsAtWarAgainstFaction(party.MapFaction, item.MapFaction) && !item.IsUnderSiege && !item.IsUnderRaid && (item.IsTown || item.IsCastle) && (item.MapFaction == party.MapFaction || !item.IsCastle))
+			{
+				Vec2 vec = item.GatePosition.ToVec2();
+				Vec2 vb = vec - getPosition2D;
+				float num2 = vb.Length;
+				if (num2 < 1f)
+				{
+					num2 = 1f;
+				}
+				vb.Normalize();
+				float num3 = Vec2.DotProduct(direction, vb);
+				float num4 = num3 * 50f - num2;
+				if (num4 > num)
+				{
+					num = num4;
+					result = item;
+				}
+			}
+		}
+		return result;
+	}
+
+	private void SetFleeFromParty(MobileParty party, MobileParty threat, Settlement destination)
+	{
+		try
+		{
+			if (party.PartyComponent is TownSupplyLinePartyComponent townSupplyLinePartyComponent)
+			{
+				townSupplyLinePartyComponent.ThreatParty = threat;
+			}
+			party.SetMoveGoToSettlement(destination, MobileParty.NavigationType.Default, isTargetingTh

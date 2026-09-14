@@ -1,0 +1,612 @@
+﻿PART 69/75
+wModel.ItemRosterElement.EquipmentElement.Item);
+		}
+	}
+
+	[DataSourceProperty]
+	public HintViewModel HAPReserveHint { get; }
+
+	public SPItemVMReserveMixin(SPItemVM viewModel)
+		: base(viewModel)
+	{
+		HAPReserveHint = new HintViewModel(_reserveHintText);
+	}
+
+	[DataSourceMethod]
+	public void ExecuteHAPReserveToggle()
+	{
+		if (HAPCanReserve)
+		{
+			SPItemVM viewModel = base.ViewModel;
+			if (viewModel != null)
+			{
+				ReservedItemService.Toggle(viewModel.ItemRosterElement.EquipmentElement.Item);
+				OnPropertyChangedWithValue(HAPIsReserved, "HAPIsReserved");
+			}
+		}
+	}
+
+	public override void OnRefresh()
+	{
+		base.OnRefresh();
+		OnPropertyChangedWithValue(HAPCanReserve, "HAPCanReserve");
+		OnPropertyChangedWithValue(HAPIsReserved, "HAPIsReserved");
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\StarvationWoundingPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+public static class StarvationWoundingPatch
+{
+	private const float GRACE_DAYS = 3f;
+
+	private const float FULL_RATE_DAYS = 7f;
+
+	private const float MIN_RATE = 0.01f;
+
+	private const float MAX_RATE = 0.1f;
+
+	private static readonly TextObject _weakenedText = new TextObject("{=HAP_StatusWeakened}weakened");
+
+	private static readonly TextObject _starvingStatusText = new TextObject("{=HAP_StatusStarving}starving");
+
+	public static readonly TextObject DaysWithoutFoodLabel = new TextObject("{=HAP_DaysWithoutFood}Days without food");
+
+	private static readonly Dictionary<string, int> _partyStarvationDays = new Dictionary<string, int>();
+
+	private static bool _patchApplied = false;
+
+	private static TextObject _starvingText;
+
+	private static TextObject _raftStateText;
+
+	public static string FormatDaysWithoutFoodValue(float starvationDays)
+	{
+		int num = (int)starvationDays;
+		if (num < 3)
+		{
+			return num.ToString();
+		}
+		if (num < 7)
+		{
+			return num + " (" + _weakenedText.ToString() + ")";
+		}
+		return num + " (" + _starvingStatusText.ToString() + ")";
+	}
+
+	public static void UpdatePartyStarvation(MobileParty party, bool isStarving)
+	{
+		if (party == null)
+		{
+			return;
+		}
+		if (party.IsMainParty && Hero.MainHero.IsPrisoner)
+		{
+			_partyStarvationDays.Remove(party.StringId);
+			return;
+		}
+		string stringId = party.StringId;
+		if (isStarving)
+		{
+			_partyStarvationDays.TryGetValue(stringId, out var value);
+			_partyStarvationDays[stringId] = value + 1;
+		}
+		else if (_partyStarvationDays.Count > 0)
+		{
+			_partyStarvationDays.Remove(stringId);
+		}
+	}
+
+	public static float GetPartyStarvationDays(MobileParty party)
+	{
+		if (party == null)
+		{
+			return 0f;
+		}
+		if (party.IsMainParty && Hero.MainHero.IsPrisoner)
+		{
+			_partyStarvationDays.Remove(party.StringId);
+			return 0f;
+		}
+		int value;
+		return _partyStarvationDays.TryGetValue(party.StringId, out value) ? ((float)value) : 0f;
+	}
+
+	public static void ClearPartyStarvation(MobileParty party)
+	{
+		if (party != null && _partyStarvationDays.Count > 0)
+		{
+			_partyStarvationDays.Remove(party.StringId);
+		}
+	}
+
+	public static void ApplyPatch(Harmony harmony)
+	{
+		if (_patchApplied)
+		{
+			return;
+		}
+		try
+		{
+			_starvingText = GetPrivateStaticField<TextObject>(typeof(DefaultPartyHealingModel), "_starvingText") ?? new TextObject("{=HAP_Starving}Starving");
+			_raftStateText = GetPrivateStaticField<TextObject>(typeof(DefaultPartyHealingModel), "_raftStateText") ?? new TextObject("{=HAP_RaftState}On Raft");
+			MethodInfo methodInfo = AccessTools.Method(typeof(DefaultPartyHealingModel), "GetDailyHealingForRegulars", new Type[3]
+			{
+				typeof(PartyBase),
+				typeof(bool),
+				typeof(bool)
+			});
+			if (methodInfo == null)
+			{
+				Main.Log("StarvationWoundingPatch: Could not find GetDailyHealingForRegulars");
+				return;
+			}
+			MethodInfo method = AccessTools.Method(typeof(StarvationWoundingPatch), "Postfix");
+			harmony.Patch(methodInfo, null, new HarmonyMethod(method));
+			_patchApplied = true;
+			Main.Log("StarvationWoundingPatch: Patched GetDailyHealingForRegulars");
+		}
+		catch (Exception ex)
+		{
+			Main.Log("StarvationWoundingPatch ERROR: " + ex.Message);
+		}
+	}
+
+	private static T GetPrivateStaticField<T>(Type type, string fieldName) where T : class
+	{
+		return AccessTools.Field(type, fieldName)?.GetValue(null) as T;
+	}
+
+	public static void Postfix(ref ExplainedNumber __result, PartyBase party, bool isPrisoners, bool includeDescriptions)
+	{
+		if (isPrisoners || party == null || !party.IsMobile)
+		{
+			return;
+		}
+		MobileParty mobileParty = party.MobileParty;
+		if (mobileParty == null)
+		{
+			return;
+		}
+		bool flag = mobileParty.IsGarrison && mobileParty.CurrentSettlement != null && mobileParty.CurrentSettlement.IsStarving;
+		bool flag2 = !mobileParty.IsGarrison && party.IsStarving;
+		if (!flag && !flag2)
+		{
+			return;
+		}
+		float num = 0f;
+		if (!mobileParty.IsGarrison && !mobileParty.IsMilitia && mobileParty.IsInRaftState)
+		{
+			num = (0f - (float)party.MemberRoster.TotalRegulars) * 0.25f;
+		}
+		__result = new ExplainedNumber(0f, includeDescriptions);
+		float num2 = ((!flag) ? GetPartyStarvationDays(mobileParty) : StarvationDesertionBehavior.GetStarvationDays(mobileParty.CurrentSettlement));
+		if (num2 >= 3f)
+		{
+			float num3 = MathF.Clamp((num2 - 3f) / 4f, 0f, 1f);
+			float num4 = 0.01f + 0.09f * num3;
+			int num5 = MBRandom.RoundRandomized((float)party.MemberRoster.TotalRegulars * num4);
+			if (num5 > 0)
+			{
+				__result.Add(0f - (float)num5, _starvingText);
+			}
+		}
+		if (num < 0f)
+		{
+			__result.Add(num, _raftStateText);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\SupplyLineFleeTooltipPatch.cs =====
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(MobileParty), "GetBehaviorText")]
+public class SupplyLineFleeTooltipPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(MobileParty __instance, ref TextObject __result)
+	{
+		if (TownSupplyLinePartyComponent.IsSupplyLineParty(__instance))
+		{
+			TownSupplyLinePartyComponent component = TownSupplyLinePartyComponent.GetComponent(__instance);
+			if (component?.ThreatParty != null && component.ThreatParty.IsActive)
+			{
+				__result = new TextObject("{=AcMayd1p}Running from {TARGET_PARTY}.");
+				__result.SetTextVariable("TARGET_PARTY", component.ThreatParty.Name);
+			}
+		}
+		else if (NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(__instance))
+		{
+			NavalSupplyConvoyPartyComponent component2 = NavalSupplyConvoyPartyComponent.GetComponent(__instance);
+			if (component2?.ThreatParty != null && component2.ThreatParty.IsActive)
+			{
+				__result = new TextObject("{=AcMayd1p}Running from {TARGET_PARTY}.");
+				__result.SetTextVariable("TARGET_PARTY", component2.ThreatParty.Name);
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\SupplyLineTroopNotificationPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using SandBox.ViewModelCollection.Nameplate.NameplateNotifications;
+using SandBox.ViewModelCollection.Nameplate.NameplateNotifications.SettlementNotificationTypes;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Roster;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(TroopGivenToSettlementNotificationItemVM))]
+[HarmonyPatch(MethodType.Constructor)]
+[HarmonyPatch(new Type[]
+{
+	typeof(Action<SettlementNotificationItemBaseVM>),
+	typeof(Hero),
+	typeof(TroopRoster),
+	typeof(int)
+})]
+public static class SupplyLineTroopNotificationPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(TroopGivenToSettlementNotificationItemVM __instance, Hero giverHero)
+	{
+		try
+		{
+			if (giverHero != null && TownSupplyLineBehavior.PendingSupplyLineTroopNotifications.TryGetValue(giverHero, out var value))
+			{
+				__instance.CharacterName = value;
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\SupplyPartyPrisonerNotificationPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using SandBox.ViewModelCollection.Nameplate.NameplateNotifications;
+using SandBox.ViewModelCollection.Nameplate.NameplateNotifications.SettlementNotificationTypes;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(SettlementNameplateNotificationsVM))]
+[HarmonyPatch("OnPrisonerSold")]
+public static class SupplyPartyPrisonerNotificationPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(SettlementNameplateNotificationsVM __instance, PartyBase sellerParty, PartyBase buyerParty, TroopRoster prisoners)
+	{
+		try
+		{
+			if (sellerParty == null || !sellerParty.IsMobile || sellerParty.LeaderHero != null)
+			{
+				return;
+			}
+			MobileParty mobileParty = sellerParty.MobileParty;
+			if ((CastleForagerPartyComponent.IsForagerParty(mobileParty) || TownSupplyLinePartyComponent.IsSupplyLineParty(mobileParty) || NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(mobileParty)) && buyerParty != null && buyerParty.IsSettlement && prisoners != null && prisoners.Count > 0 && AccessTools.Field(typeof(SettlementNameplateNotificationsVM), "_settlement")?.GetValue(__instance) is Settlement settlement && buyerParty.Settlement == settlement && settlement.IsInspected)
+			{
+				int createdTick = (int)(AccessTools.Field(typeof(SettlementNameplateNotificationsVM), "_tickSinceEnabled")?.GetValue(__instance) ?? ((object)0));
+				__instance.Notifications.Add(new PrisonerSoldNotificationItemVM(delegate(SettlementNotificationItemBaseVM item)
+				{
+					__instance.Notifications.Remove(item);
+				}, mobileParty, prisoners, createdTick));
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\SupplyPartyPrisonerSellBlockPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(PartiesSellPrisonerCampaignBehavior), "OnSettlementEntered")]
+public static class SupplyPartyPrisonerSellBlockPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(MobileParty mobileParty, Settlement settlement, Hero hero)
+	{
+		try
+		{
+			if (mobileParty == null)
+			{
+				return true;
+			}
+			if (CastleForagerPartyComponent.IsForagerParty(mobileParty))
+			{
+				return false;
+			}
+			if (TownSupplyLinePartyComponent.IsSupplyLineParty(mobileParty))
+			{
+				return false;
+			}
+		}
+		catch (Exception)
+		{
+			return true;
+		}
+		return true;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\SupplyPartySpeedBonusPatch.cs =====
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultPartySpeedCalculatingModel), "CalculateFinalSpeed")]
+public static class SupplyPartySpeedBonusPatch
+{
+	private static readonly TextObject _bonusText = new TextObject("{=!}Supply Caravan");
+
+	[HarmonyPostfix]
+	public static void Postfix(MobileParty mobileParty, ref ExplainedNumber __result)
+	{
+		if (mobileParty != null && (mobileParty.PartyComponent is CastleForagerPartyComponent || mobileParty.PartyComponent is TownSupplyLinePartyComponent))
+		{
+			__result.AddFactor(0.1f, _bonusText);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\TimeOfDayTooltipPatch.cs =====
+using System;
+using System.Collections.Generic;
+using HarmonyLib;
+using HarvestAndProduction.Models;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.Core;
+using TaleWorlds.Core.ViewModelCollection.Information;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(CampaignUIHelper), "GetTimeOfDayAndResetCameraTooltip")]
+public static class TimeOfDayTooltipPatch
+{
+	private static readonly TextObject _temperatureLabel = new TextObject("{=HAP_Temperature}Temperature");
+
+	private static readonly TextObject _humidityLabel = new TextObject("{=HAP_Humidity}Humidity");
+
+	private static readonly TextObject _weatherLabel = new TextObject("{=HAP_Weather}Weather");
+
+	private static readonly TextObject _climateLabel = new TextObject("{=HAP_Climate}Climate");
+
+	private static readonly TextObject _weatherClear = new TextObject("{=HAP_WeatherClear}Clear");
+
+	private static readonly TextObject _weatherLightRain = new TextObject("{=HAP_WeatherLightRain}Light Rain");
+
+	private static readonly TextObject _weatherHeavyRain = new TextObject("{=HAP_WeatherHeavyRain}Heavy Rain");
+
+	private static readonly TextObject _weatherSnowy = new TextObject("{=HAP_WeatherSnowy}Snowy");
+
+	private static readonly TextObject _weatherBlizzard = new TextObject("{=HAP_WeatherBlizzard}Blizzard");
+
+	private static readonly TextObject _weatherStorm = new TextObject("{=HAP_WeatherStorm}Storm");
+
+	private static readonly TextObject _climateDesert = new TextObject("{=HAP_ClimateDesert}Desert");
+
+	private static readonly TextObject _climateTropical = new TextObject("{=HAP_ClimateTropical}Tropical");
+
+	private static readonly TextObject _climateCold = new TextObject("{=HAP_ClimateCold}Cold");
+
+	private static readonly TextObject _climateTemperate = new TextObject("{=HAP_ClimateTemperate}Temperate");
+
+	private static readonly TextObject _climateUnknown = new TextObject("{=HAP_ClimateUnknown}Unknown");
+
+	[HarmonyPostfix]
+	public static void Postfix(ref List<TooltipProperty> __result)
+	{
+		try
+		{
+			if (MobileParty.MainParty == null || Campaign.Current?.MapSceneWrapper == null)
+			{
+				return;
+			}
+			(float Temperature, float Humidity) mainPartyEnvironment = FoodConsumptionModel.GetMainPartyEnvironment();
+			float num = mainPartyEnvironment.Temperature;
+			float num2 = mainPartyEnvironment.Humidity;
+			MapWeatherModel.WeatherEvent weatherEventInPosition = Campaign.Current.Models.MapWeatherModel.GetWeatherEventInPosition(MobileParty.MainParty.GetPosition2D);
+			int getHourOfDay = CampaignTime.Now.GetHourOfDay;
+			if (getHourOfDay >= 22 || getHourOfDay < 6)
+			{
+				float num3;
+				switch (Campaign.Current.MapSceneWrapper.GetFaceTerrainType(MobileParty.MainParty.CurrentNavigationFace))
+				{
+				case TerrainType.Desert:
+				case TerrainType.Dune:
+					num3 = -15f;
+					break;
+				case TerrainType.Forest:
+					num3 = -5f;
+					break;
+				case TerrainType.River:
+				case TerrainType.UnderBridge:
+					num3 = -5f;
+					break;
+				case TerrainType.CoastalSea:
+				case TerrainType.OpenSea:
+					num3 = -4f;
+					break;
+				default:
+					num3 = -8f;
+					break;
+				}
+				if (weatherEventInPosition != MapWeatherModel.WeatherEvent.Clear)
+				{
+					num3 *= 0.5f;
+				}
+				num += num3;
+				num2 = Math.Min(100f, num2 + 15f);
+			}
+			__result.Add(new TooltipProperty("", "", 0));
+			__result.Add(new TooltipProperty(_temperatureLabel.ToString(), $"{(int)Math.Round(num)}°C", 0));
+			__result.Add(new TooltipProperty(_humidityLabel.ToString(), $"{(int)Math.Round(num2)}%", 0));
+			__result.Add(new TooltipProperty(_weatherLabel.ToString(), GetWeatherDisplayName(weatherEventInPosition), 0));
+			float height = 0f;
+			Campaign.Current.MapSceneWrapper.GetHeightAtPoint(new CampaignVec2(MobileParty.MainParty.GetPosition2D, isOnLand: true), ref height);
+			string climateZone = FoodConsumptionModel.GetClimateZone(MobileParty.MainParty.GetPosition2D, height);
+			__result.Add(new TooltipProperty(_climateLabel.ToString(), GetClimateDisplayName(climateZone), 0));
+		}
+		catch
+		{
+		}
+	}
+
+	private static string GetWeatherDisplayName(MapWeatherModel.WeatherEvent weather)
+	{
+		if (MobileParty.MainParty != null)
+		{
+			string realisticWeatherEvent = FoodConsumptionModel.GetRealisticWeatherEvent(MobileParty.MainParty);
+			if (!string.IsNullOrEmpty(realisticWeatherEvent))
+			{
+				return realisticWeatherEvent;
+			}
+		}
+		return weather switch
+		{
+			MapWeatherModel.WeatherEvent.Clear => _weatherClear.ToString(), 
+			MapWeatherModel.WeatherEvent.LightRain => _weatherLightRain.ToString(), 
+			MapWeatherModel.WeatherEvent.HeavyRain => _weatherHeavyRain.ToString(), 
+			MapWeatherModel.WeatherEvent.Snowy => _weatherSnowy.ToString(), 
+			MapWeatherModel.WeatherEvent.Blizzard => _weatherBlizzard.ToString(), 
+			MapWeatherModel.WeatherEvent.Storm => _weatherStorm.ToString(), 
+			_ => _weatherClear.ToString(), 
+		};
+	}
+
+	private static string GetClimateDisplayName(string climateZone)
+	{
+		return climateZone switch
+		{
+			"Desert" => _climateDesert.ToString(), 
+			"Tropical" => _climateTropical.ToString(), 
+			"Cold" => _climateCold.ToString(), 
+			"Temperate" => _climateTemperate.ToString(), 
+			_ => _climateUnknown.ToString(), 
+		};
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\TownDailyTickPendingFoodPatch.cs =====
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.Settlements;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(Town), "DailyTick")]
+public static class TownDailyTickPendingFoodPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(Town __instance)
+	{
+		FoodSalePatch.ClearPendingForTown(__instance);
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\TownDefenderPartiesGuardPatch.cs =====
+using System;
+using System.Collections.Generic;
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+
+namespace HarvestAndProduction.Patches;
+
+public static class TownDefenderPartiesGuardPatch
+{
+	[HarmonyPatch(typeof(Town), "GetDefenderParties")]
+	public static class GetDefenderPartiesPatch
+	{
+		[HarmonyPrefix]
+		public static bool Prefix(Town __instance, MapEvent.BattleTypes battleType, ref IEnumerable<PartyBase> __result)
+		{
+			List<PartyBase> list = (List<PartyBase>)(__result = new List<PartyBase>());
+			Settlement settlement = __instance?.Settlement;
+			if (settlement == null)
+			{
+				return false;
+			}
+			list.Add(settlement.Party);
+			IFaction besiegerFactionSafe = GetBesiegerFactionSafe(settlement);
+			if (besiegerFactionSafe == null)
+			{
+				bool flag = settlement.SiegeEvent != null;
+				if (flag)
+				{
+					Main.Log("[DefenderGuard] Siege at " + settlement.Name?.ToString() + " has no reachable BesiegerCamp — returning settlement party only (" + settlement.Parties.Count + " parties inside).");
+				}
+				else
+				{
+					bool flag2 = false;
+				}
+				if (flag)
+				{
+					return false;
+				}
+				for (int i = 0; i < settlement.

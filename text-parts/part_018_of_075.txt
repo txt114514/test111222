@@ -1,0 +1,650 @@
+﻿PART 18/75
+ners_on_consequence, 90);
+		starter.AddPlayerLine("herder_enemy_surrender_attack", "herder_enemy_surrender_options", "close_window", "{=HAP_HerderAttackSurrendered}Don't bother pleading. At them, lads!", null, herder_fight_on_consequence, 85);
+		starter.AddPlayerLine("herder_enemy_surrender_let_go", "herder_enemy_surrender_options", "close_window", "{=HAP_HerderEnemyLetGo}Get out of here before I change my mind.", null, herder_leave_on_consequence, 80);
+		starter.AddDialogLine("herder_enemy_goods_taken_response", "herder_enemy_goods_taken", "close_window", "{=HAP_HerderEnemyGoodsTaken}Thank you for your mercy...", null, herder_leave_on_consequence);
+	}
+
+	private bool IsHerderPartyEncounter(out bool hasGoods, out bool isEnemy)
+	{
+		hasGoods = false;
+		isEnemy = false;
+		if (PlayerEncounter.Current == null)
+		{
+			return false;
+		}
+		if (Campaign.Current.CurrentConversationContext != ConversationContext.PartyEncounter)
+		{
+			return false;
+		}
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null || !encounteredParty.IsMobile)
+		{
+			return false;
+		}
+		MobileParty mobileParty = encounteredParty.MobileParty;
+		if (!HerderPartyComponent.IsHerderParty(mobileParty))
+		{
+			return false;
+		}
+		HerderPartyComponent component = HerderPartyComponent.GetComponent(mobileParty);
+		if (component == null)
+		{
+			return false;
+		}
+		Settlement settlement = component.Village?.Settlement;
+		if (settlement != null)
+		{
+			MBTextManager.SetTextVariable("SETTLEMENT_NAME", settlement.EncyclopediaLinkWithName);
+		}
+		TextObject text = ((component.AnimalType == HerderPartyComponent.HerdType.Cow) ? new TextObject("{=HAP_HerderCowText}cattle") : new TextObject("{=HAP_HerderSheepText}sheep"));
+		MBTextManager.SetTextVariable("ANIMAL_TYPE", text);
+		if (Hero.MainHero.Clan?.Kingdom != null)
+		{
+			MBTextManager.SetTextVariable("PLAYER_ADDRESS", new TextObject("{=HAP_VillagerAddressLord}my {?PLAYER.GENDER}lady{?}lord{\\?}"));
+		}
+		else
+		{
+			MBTextManager.SetTextVariable("PLAYER_ADDRESS", new TextObject("{=HAP_VillagerAddressCommoner}traveler"));
+		}
+		hasGoods = HasValuableGoods(encounteredParty);
+		isEnemy = FactionManager.IsAtWarAgainstFaction(encounteredParty.MapFaction, Hero.MainHero.MapFaction);
+		return true;
+	}
+
+	private bool herder_criminal_first_encounter_condition()
+	{
+		if (!IsHerderPartyEncounter(out var _, out var isEnemy))
+		{
+			return false;
+		}
+		if (isEnemy)
+		{
+			return false;
+		}
+		if (GetHerderInteraction(PlayerEncounter.EncounteredParty.MobileParty) != 0)
+		{
+			return false;
+		}
+		IFaction mapFaction = PlayerEncounter.EncounteredParty.MapFaction;
+		if (mapFaction != null && Hero.MainHero.MapFaction != mapFaction)
+		{
+			float mainHeroCrimeRating = mapFaction.MainHeroCrimeRating;
+			if (mainHeroCrimeRating > 0f)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private bool herder_friendly_no_goods_condition()
+	{
+		if (!IsHerderPartyEncounter(out var hasGoods, out var isEnemy))
+		{
+			return false;
+		}
+		if (isEnemy)
+		{
+			return false;
+		}
+		if (GetHerderInteraction(PlayerEncounter.EncounteredParty.MobileParty) != 0)
+		{
+			return false;
+		}
+		return !hasGoods;
+	}
+
+	private bool herder_friendly_has_goods_condition()
+	{
+		if (!IsHerderPartyEncounter(out var hasGoods, out var isEnemy))
+		{
+			return false;
+		}
+		if (isEnemy)
+		{
+			return false;
+		}
+		if (GetHerderInteraction(PlayerEncounter.EncounteredParty.MobileParty) != 0)
+		{
+			return false;
+		}
+		return hasGoods;
+	}
+
+	private bool herder_friendly_return_condition()
+	{
+		if (!IsHerderPartyEncounter(out var _, out var isEnemy))
+		{
+			return false;
+		}
+		if (isEnemy)
+		{
+			return false;
+		}
+		return GetHerderInteraction(PlayerEncounter.EncounteredParty.MobileParty) == 1;
+	}
+
+	private bool herder_hostile_return_condition()
+	{
+		if (!IsHerderPartyEncounter(out var _, out var isEnemy))
+		{
+			return false;
+		}
+		if (isEnemy)
+		{
+			return false;
+		}
+		return GetHerderInteraction(PlayerEncounter.EncounteredParty.MobileParty) == 2;
+	}
+
+	private bool herder_enemy_condition()
+	{
+		if (!IsHerderPartyEncounter(out var _, out var isEnemy))
+		{
+			return false;
+		}
+		return isEnemy;
+	}
+
+	private bool herder_has_goods_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		return encounteredParty != null && HasValuableGoods(encounteredParty);
+	}
+
+	private bool herder_has_goods_or_animals_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null || !encounteredParty.IsMobile)
+		{
+			return false;
+		}
+		if (HasValuableGoods(encounteredParty))
+		{
+			return true;
+		}
+		HerderPartyComponent component = HerderPartyComponent.GetComponent(encounteredParty.MobileParty);
+		return component != null && component.AnimalCount > 0;
+	}
+
+	private bool herder_demand_has_goods_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null)
+		{
+			return false;
+		}
+		if (encounteredParty.MapFaction == Hero.MainHero.MapFaction)
+		{
+			return false;
+		}
+		return HasValuableGoods(encounteredParty);
+	}
+
+	private bool herder_demand_no_goods_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null)
+		{
+			return false;
+		}
+		if (encounteredParty.MapFaction == Hero.MainHero.MapFaction)
+		{
+			return false;
+		}
+		return !HasValuableGoods(encounteredParty);
+	}
+
+	private bool herder_open_trade_screen_condition()
+	{
+		MobileParty conversationParty = MobileParty.ConversationParty;
+		if (conversationParty == null)
+		{
+			return false;
+		}
+		InventoryScreenHelper.OpenTradeWithCaravanOrAlleyParty(conversationParty);
+		return true;
+	}
+
+	private bool herder_will_fight_condition()
+	{
+		return !herder_will_surrender();
+	}
+
+	private bool herder_will_surrender_condition()
+	{
+		return herder_will_surrender();
+	}
+
+	private bool herder_will_surrender()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null || !encounteredParty.IsMobile)
+		{
+			return true;
+		}
+		int totalManCount = encounteredParty.MobileParty.MemberRoster.TotalManCount;
+		int totalManCount2 = MobileParty.MainParty.MemberRoster.TotalManCount;
+		if (totalManCount <= 0)
+		{
+			return true;
+		}
+		float num = (float)totalManCount2 / (float)totalManCount;
+		return num >= 2f;
+	}
+
+	private bool herder_bribe_feasible_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null)
+		{
+			return false;
+		}
+		CalculateHerderBribeAmount(encounteredParty, out var gold, out var items);
+		_cachedBribeGold = gold;
+		_cachedBribeItems = items;
+		bool flag = gold > 0;
+		bool flag2 = items != null && items.Count > 0;
+		if (!flag && !flag2)
+		{
+			return false;
+		}
+		int totalManCount = encounteredParty.MobileParty.MemberRoster.TotalManCount;
+		int totalManCount2 = MobileParty.MainParty.MemberRoster.TotalManCount;
+		if (totalManCount > 0 && (float)totalManCount2 / (float)totalManCount < 1f)
+		{
+			return false;
+		}
+		if (flag & flag2)
+		{
+			MBTextManager.SetTextVariable("BRIBE_OFFER", new TextObject("{=HAP_HerderBribeGoldAndItems}{BRIBE_GOLD}{GOLD_ICON} and {BRIBE_ITEMS}"));
+		}
+		else if (flag)
+		{
+			MBTextManager.SetTextVariable("BRIBE_OFFER", new TextObject("{=HAP_HerderBribeGoldOnly}{BRIBE_GOLD}{GOLD_ICON}"));
+		}
+		else
+		{
+			MBTextManager.SetTextVariable("BRIBE_OFFER", new TextObject("{=HAP_HerderBribeItemsOnly}{BRIBE_ITEMS}"));
+		}
+		MBTextManager.SetTextVariable("BRIBE_GOLD", gold);
+		if (flag2)
+		{
+			bool flag3 = true;
+			for (int i = 0; i < items.Count; i++)
+			{
+				ItemRosterElement elementCopyAtIndex = items.GetElementCopyAtIndex(i);
+				if (elementCopyAtIndex.Amount > 0)
+				{
+					TextObject textObject = new TextObject("{=HAP_HerderBribeItemEntry}{AMOUNT} {ITEM_NAME}");
+					textObject.SetTextVariable("AMOUNT", elementCopyAtIndex.Amount);
+					textObject.SetTextVariable("ITEM_NAME", elementCopyAtIndex.EquipmentElement.Item.Name);
+					if (flag3)
+					{
+						MBTextManager.SetTextVariable("LEFT", textObject);
+						flag3 = false;
+					}
+					else
+					{
+						MBTextManager.SetTextVariable("RIGHT", textObject);
+						MBTextManager.SetTextVariable("LEFT", GameTexts.FindText("str_LEFT_comma_RIGHT").ToString());
+					}
+				}
+			}
+			MBTextManager.SetTextVariable("BRIBE_ITEMS", GameTexts.FindText("str_LEFT_ONLY").ToString());
+		}
+		return true;
+	}
+
+	private bool herder_set_faction_name_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty?.MapFaction != null)
+		{
+			MBTextManager.SetTextVariable("FACTION_NAME", encounteredParty.MapFaction.Name);
+		}
+		return true;
+	}
+
+	private bool herder_pretalk_condition()
+	{
+		MobileParty conversationParty = MobileParty.ConversationParty;
+		if (conversationParty == null)
+		{
+			return true;
+		}
+		HerderPartyComponent component = HerderPartyComponent.GetComponent(conversationParty);
+		if (component != null)
+		{
+			HerderPartyCampaignBehavior.OnAnimalsRemovedFromHerd(component);
+		}
+		return true;
+	}
+
+	private bool herder_crime_warning_clickable(out TextObject explanation)
+	{
+		explanation = new TextObject("{=HAP_HerderCrimeWarning}This will be considered a crime.");
+		return true;
+	}
+
+	private bool herder_war_warning_clickable(out TextObject explanation)
+	{
+		explanation = new TextObject("{=1LlH1Jof}This action will start a war.");
+		return true;
+	}
+
+	private void herder_accept_bribe_on_consequence()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null)
+		{
+			return;
+		}
+		int cachedBribeGold = _cachedBribeGold;
+		ItemRoster itemRoster = _cachedBribeItems ?? new ItemRoster();
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.Amount > 0)
+			{
+				PartyBase.MainParty.ItemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, elementCopyAtIndex.Amount);
+				encounteredParty.ItemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, -elementCopyAtIndex.Amount);
+			}
+		}
+		if (cachedBribeGold > 0)
+		{
+			GiveGoldAction.ApplyForPartyToCharacter(encounteredParty, Hero.MainHero, cachedBribeGold);
+		}
+		BeHostileAction.ApplyMinorCoercionHostileAction(PartyBase.MainParty, encounteredParty);
+		Hero hero = encounteredParty.MobileParty?.HomeSettlement?.Village?.Bound?.Owner;
+		if (hero != null && hero.Clan != Clan.PlayerClan)
+		{
+			ChangeRelationAction.ApplyPlayerRelation(hero, -3);
+		}
+		SkillLevelingManager.OnLoot(MobileParty.MainParty, encounteredParty.MobileParty, itemRoster, attacked: false);
+		_cachedBribeGold = 0;
+		_cachedBribeItems = null;
+		SetHerderInteraction(encounteredParty.MobileParty, 2);
+		HerderPartyComponent component = HerderPartyComponent.GetComponent(encounteredParty.MobileParty);
+		if (component != null)
+		{
+			HerderPartyCampaignBehavior.OnAnimalsRemovedFromHerd(component);
+		}
+		PlayerEncounter.LeaveEncounter = true;
+	}
+
+	private void herder_take_goods_on_consequence()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty != null)
+		{
+			ItemRoster itemRoster = new ItemRoster(encounteredParty.ItemRoster);
+			int partyTradeGold = encounteredParty.MobileParty.PartyTradeGold;
+			if (partyTradeGold > 0)
+			{
+				GiveGoldAction.ApplyForPartyToCharacter(encounteredParty, Hero.MainHero, partyTradeGold);
+			}
+			if (!FactionManager.IsAtWarAgainstFaction(encounteredParty.MapFaction, Hero.MainHero.MapFaction))
+			{
+				BeHostileAction.ApplyMajorCoercionHostileAction(PartyBase.MainParty, encounteredParty);
+			}
+			Hero hero = encounteredParty.MobileParty?.HomeSettlement?.Village?.Bound?.Owner;
+			if (hero != null && hero.Clan != Clan.PlayerClan)
+			{
+				ChangeRelationAction.ApplyPlayerRelation(hero, -5);
+			}
+			SkillLevelingManager.OnLoot(MobileParty.MainParty, encounteredParty.MobileParty, itemRoster, attacked: false);
+			SetHerderInteraction(encounteredParty.MobileParty, 2);
+			encounteredParty.ItemRoster.Clear();
+			HerderPartyComponent component = HerderPartyComponent.GetComponent(encounteredParty.MobileParty);
+			if (component != null)
+			{
+				HerderPartyCampaignBehavior.OnAnimalsRemovedFromHerd(component);
+			}
+			if (itemRoster.Count > 0)
+			{
+				InventoryScreenHelper.OpenScreenAsLoot(new Dictionary<PartyBase, ItemRoster> { 
+				{
+					PartyBase.MainParty,
+					itemRoster
+				} });
+			}
+			else
+			{
+				PlayerEncounter.LeaveEncounter = true;
+			}
+		}
+	}
+
+	private void herder_take_prisoners_on_consequence()
+	{
+		try
+		{
+			PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+			if (encounteredParty != null)
+			{
+				SetHerderInteraction(encounteredParty.MobileParty, 2);
+			}
+			BeHostileAction.ApplyEncounterHostileAction(PartyBase.MainParty, encounteredParty);
+			if (PlayerEncounter.Battle == null)
+			{
+				PlayerEncounter.StartBattle();
+			}
+			PlayerEncounter.Battle.SetOverrideWinner(PlayerEncounter.Battle.PlayerSide);
+			PlayerEncounter.EnemySurrender = true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in herder_take_prisoners_on_consequence: " + ex.Message);
+			PlayerEncounter.LeaveEncounter = true;
+		}
+	}
+
+	private void herder_fight_on_consequence()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty != null)
+		{
+			SetHerderInteraction(encounteredParty.MobileParty, 2);
+			BeHostileAction.ApplyEncounterHostileAction(PartyBase.MainParty, encounteredParty);
+		}
+	}
+
+	private void herder_leave_on_consequence()
+	{
+		PlayerEncounter.LeaveEncounter = true;
+	}
+
+	private bool HasValuableGoods(PartyBase party)
+	{
+		if (party?.ItemRoster == null)
+		{
+			return false;
+		}
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = party.ItemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.EquipmentElement.Item != null && elementCopyAtIndex.Amount > 0 && elementCopyAtIndex.EquipmentElement.Item.ItemCategory != DefaultItemCategories.PackAnimal)
+			{
+				return true;
+			}
+		}
+		return party.MobileParty != null && party.MobileParty.PartyTradeGold > 0;
+	}
+
+	private void CalculateHerderBribeAmount(PartyBase party, out int gold, out ItemRoster items)
+	{
+		gold = 0;
+		items = new ItemRoster();
+		if (party?.MobileParty == null)
+		{
+			return;
+		}
+		gold = party.MobileParty.PartyTradeGold / 2;
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = party.ItemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.EquipmentElement.Item != null && elementCopyAtIndex.EquipmentElement.Item.ItemCategory != DefaultItemCategories.PackAnimal)
+			{
+				int elementNumber = party.ItemRoster.GetElementNumber(i);
+				if (elementNumber > 0)
+				{
+					int number = MathF.Max(1, elementNumber / 2);
+					items.AddToCounts(elementCopyAtIndex.EquipmentElement, number);
+				}
+			}
+		}
+	}
+
+	private void SetHerderInteraction(MobileParty party, int interaction)
+	{
+		if (party != null)
+		{
+			_interactedHerders[party] = interaction;
+		}
+	}
+
+	private int GetHerderInteraction(MobileParty party)
+	{
+		if (party != null && _interactedHerders.TryGetValue(party, out var value))
+		{
+			return value;
+		}
+		return 0;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\LivestockProductionBehavior.cs =====
+using System;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class LivestockProductionBehavior : CampaignBehaviorBase
+{
+	private const int MIN_COWS_FOR_MILK = 4;
+
+	private const int COWS_PER_MILK_BASE = 4;
+
+	private const int MIN_POULTRY_FOR_EGGS = 8;
+
+	private const int POULTRY_PER_EGG_BASE = 8;
+
+	private const int COWS_PER_HANDLER = 5;
+
+	private const int POULTRY_PER_HANDLER = 15;
+
+	private const int CHECK_INTERVAL_DAYS = 4;
+
+	private CampaignTime _lastMilkProductionCheck = CampaignTime.Zero;
+
+	private CampaignTime _lastEggProductionCheck = CampaignTime.Zero;
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, OnDailyTickParty);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		dataStore.SyncData("_lastMilkProductionCheck", ref _lastMilkProductionCheck);
+		dataStore.SyncData("_lastEggProductionCheck", ref _lastEggProductionCheck);
+	}
+
+	private void OnDailyTickParty(MobileParty party)
+	{
+		if (party == MobileParty.MainParty)
+		{
+			ProcessMilkProduction(party);
+			ProcessEggProduction(party);
+		}
+	}
+
+	private void ProcessMilkProduction(MobileParty party)
+	{
+		if (_lastMilkProductionCheck != CampaignTime.Zero && CampaignTime.Now.ToDays - _lastMilkProductionCheck.ToDays < 4.0)
+		{
+			return;
+		}
+		int cowCount = GetCowCount(party);
+		if (cowCount < 4)
+		{
+			return;
+		}
+		int totalHealthyCount = party.MemberRoster.TotalHealthyCount;
+		int val = totalHealthyCount * 5;
+		int num = Math.Min(cowCount, val);
+		int num2 = num / 4;
+		int num3 = MBRandom.RandomInt(-1, 2);
+		int num4 = Math.Max(0, num2 + num3);
+		if (num4 > 0)
+		{
+			ItemObject itemObject = Game.Current.ObjectManager.GetObject<ItemObject>("milk");
+			if (itemObject != null)
+			{
+				party.ItemRoster.AddToCounts(itemObject, num4);
+				TextObject textObject = ((cowCount == 1) ? new TextObject("{=HAP_CowSingular}{COUNT} cow") : new TextObject("{=HAP_CowPlural}{COUNT} cows"));
+				textObject.SetTextVariable("COUNT", cowCount);
+				TextObject textObject2 = ((num4 == 1) ? new TextObject("{=HAP_MilkSingular}{COUNT} jug of milk") : new TextObject("{=HAP_MilkPlural}{COUNT} jugs of milk"));
+				textObject2.SetTextVariable("COUNT", num4);
+				TextObject textObject3 = new TextObject("{=HAP_MilkProduced}Your {COW_TEXT} produced {MILK_TEXT}.");
+				textObject3.SetTextVariable("COW_TEXT", textObject);
+				textObject3.SetTextVariable("MILK_TEXT", textObject2);
+				Color color = Color.ConvertStringToColor("#85BB65FF");
+				InformationManager.DisplayMessage(new InformationMessage(textObject3.ToString(), color));
+			}
+		}
+		_lastMilkProductionCheck = CampaignTime.Now;
+	}
+
+	private int GetCowCount(MobileParty party)
+	{
+		int result = 0;
+		ItemObject itemObject = Game.Current.ObjectManager.GetObject<ItemObject>("cow");
+		if (itemObject != null)
+		{
+			for (int i = 0; i < party.ItemRoster.Count; i++)
+			{
+				ItemObject itemAtIndex = party.ItemRoster.GetItemAtIndex(i);
+				if (itemAtIndex != null && itemAtIndex.StringId == "cow")
+				{
+					result = party.ItemRoster.GetElementNumber(i);
+					break;
+				}
+			}
+		}
+		return result;
+	}
+
+	private void ProcessEggProduction(MobileParty party)
+	{
+		if (_lastEggProductionCheck != CampaignTime.Zero && CampaignTime.Now.ToDays - _lastEggProductionCheck.ToDays < 4.0)
+		{
+			return;
+		}
+		int poultryCount = GetPoultryCount(party);
+		if (poultryCount < 8)
+		{
+			return;
+		}
+		int totalHealthyCount = party.MemberRoster.TotalHealthyCount;
+		int val = totalHealthyCount * 15;
+		int num = Math.Min(poultryCount, val);
+		int num2 = num / 8;
+		int num3 = MBRandom.RandomInt(-1, 2);
+		int num4 = Math.Max(0, num2 + num3);
+		if (num4 > 0)
+		{
+			ItemObject itemObject = Game.Current.ObjectManager.GetObject<ItemObject>("egg");
+			if (itemObject != null)
+			{
+				party.ItemRoster.AddToCounts(itemObject, num4);
+				TextObject poultryCountDescriptionLocalized = GetPoultryCountDescriptionLocalized(party);
+				TextObje

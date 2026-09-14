@@ -1,0 +1,650 @@
+﻿PART 40/75
+rty == null || village == null)
+			{
+				return;
+			}
+			Settlement settlement = village.Settlement;
+			if (settlement == null)
+			{
+				return;
+			}
+			CultureObject culture = settlement.Culture;
+			if (culture == null || (culture.MeleeMilitiaTroop == null && culture.RangedMilitiaTroop == null))
+			{
+				return;
+			}
+			int totalManCount = party.MemberRoster.TotalManCount;
+			if (totalManCount <= 0)
+			{
+				return;
+			}
+			float valueOrDefault = (village.Bound?.Town?.Security).GetValueOrDefault();
+			float num = Math.Min(0.3f, valueOrDefault / 100f * 0.3f);
+			int num2 = Math.Max(0, (int)((float)totalManCount * num));
+			int num3 = CountMilitia(party, culture);
+			int num4 = num2 - num3;
+			if (num4 <= 0)
+			{
+				return;
+			}
+			CharacterObject characterObject = FindCivilianTroop(party, culture);
+			if (characterObject == null)
+			{
+				return;
+			}
+			int troopCount = GetTroopCount(party.MemberRoster, characterObject);
+			num4 = Math.Min(num4, troopCount);
+			if (num4 <= 0)
+			{
+				return;
+			}
+			float resultNumber = Campaign.Current.Models.SettlementMilitiaModel.CalculateVeteranMilitiaSpawnChance(settlement).ResultNumber;
+			Campaign.Current.Models.SettlementMilitiaModel.CalculateMilitiaSpawnRate(settlement, out var meleeTroopRate, out var _);
+			party.MemberRoster.AddToCounts(characterObject, -num4);
+			for (int i = 0; i < num4; i++)
+			{
+				bool isVeteran = MBRandom.RandomFloat < resultNumber;
+				bool isMelee = MBRandom.RandomFloat < meleeTroopRate;
+				CharacterObject characterObject2 = PickMilitiaTroop(culture, isVeteran, isMelee);
+				if (characterObject2 != null)
+				{
+					party.MemberRoster.AddToCounts(characterObject2, 1);
+				}
+				else
+				{
+					party.MemberRoster.AddToCounts(characterObject, 1);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in MilitiaGuardHelper.EnsureMilitiaGuards: " + ex.Message);
+		}
+	}
+
+	private static CharacterObject PickMilitiaTroop(CultureObject culture, bool isVeteran, bool isMelee)
+	{
+		CharacterObject characterObject = null;
+		if (isVeteran)
+		{
+			characterObject = (isMelee ? culture.MeleeEliteMilitiaTroop : culture.RangedEliteMilitiaTroop);
+			if (characterObject == null)
+			{
+				characterObject = (isMelee ? culture.MeleeMilitiaTroop : culture.RangedMilitiaTroop);
+			}
+		}
+		else
+		{
+			characterObject = (isMelee ? culture.MeleeMilitiaTroop : culture.RangedMilitiaTroop);
+		}
+		if (characterObject == null)
+		{
+			if (isVeteran)
+			{
+				characterObject = (isMelee ? culture.RangedEliteMilitiaTroop : culture.MeleeEliteMilitiaTroop);
+			}
+			if (characterObject == null)
+			{
+				characterObject = (isMelee ? culture.RangedMilitiaTroop : culture.MeleeMilitiaTroop);
+			}
+		}
+		return characterObject;
+	}
+
+	private static int CountMilitia(MobileParty party, CultureObject culture)
+	{
+		int num = 0;
+		for (int i = 0; i < party.MemberRoster.Count; i++)
+		{
+			TroopRosterElement elementCopyAtIndex = party.MemberRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.Character != null && IsMilitiaTroop(elementCopyAtIndex.Character, culture))
+			{
+				num += elementCopyAtIndex.Number;
+			}
+		}
+		return num;
+	}
+
+	private static bool IsMilitiaTroop(CharacterObject troop, CultureObject culture)
+	{
+		return troop == culture.MeleeMilitiaTroop || troop == culture.RangedMilitiaTroop || troop == culture.MeleeEliteMilitiaTroop || troop == culture.RangedEliteMilitiaTroop;
+	}
+
+	private static CharacterObject FindCivilianTroop(MobileParty party, CultureObject culture)
+	{
+		CharacterObject result = null;
+		int num = 0;
+		for (int i = 0; i < party.MemberRoster.Count; i++)
+		{
+			TroopRosterElement elementCopyAtIndex = party.MemberRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.Character != null && !elementCopyAtIndex.Character.IsHero && !IsMilitiaTroop(elementCopyAtIndex.Character, culture) && elementCopyAtIndex.Number > num)
+			{
+				num = elementCopyAtIndex.Number;
+				result = elementCopyAtIndex.Character;
+			}
+		}
+		return result;
+	}
+
+	private static int GetTroopCount(TroopRoster roster, CharacterObject troop)
+	{
+		for (int i = 0; i < roster.Count; i++)
+		{
+			TroopRosterElement elementCopyAtIndex = roster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.Character == troop)
+			{
+				return elementCopyAtIndex.Number;
+			}
+		}
+		return 0;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\CustomSettlementEconomyModel.cs =====
+using System.Collections.Generic;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Extensions;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Models;
+
+public class CustomSettlementEconomyModel : DefaultSettlementEconomyModel
+{
+	private const float DEMAND_MULTIPLIER_CRITICAL = 2.5f;
+
+	private const float DEMAND_MULTIPLIER_EMERGENCY = 1.8f;
+
+	private const float DEMAND_MULTIPLIER_LOW = 1.3f;
+
+	private const float LIVESTOCK_DEMAND_FACTOR = 0.7f;
+
+	private const float THRESHOLD_CRITICAL = 0.1f;
+
+	private const float THRESHOLD_EMERGENCY = 0.2f;
+
+	private const float THRESHOLD_LOW = 0.4f;
+
+	private const float WORKSHOP_DEMAND_MULTIPLIER = 0.5f;
+
+	private const float INERTIA_EXPONENT = 0.2f;
+
+	private const float EQUIPMENT_BUDGET_MULTIPLIER = 3f;
+
+	private const float ANIMAL_BUDGET_MULTIPLIER = 2f;
+
+	private const float EMERGENCY_BUDGET_MULT_FOOD = 6f;
+
+	private const float EMERGENCY_BUDGET_MULT_LIVESTOCK = 4f;
+
+	private const float EMERGENCY_BUDGET_MULT_PACK = 2f;
+
+	private const float HORSE_DEMAND_MULTIPLIER = 1.2f;
+
+	private static Dictionary<Town, Dictionary<ItemCategory, float>> _workshopDemandCache = new Dictionary<Town, Dictionary<ItemCategory, float>>();
+
+	private static int _lastCacheDay = -1;
+
+	private static HashSet<ItemCategory> _livestockCategories;
+
+	private static bool _livestockCategoriesInitialized = false;
+
+	private static HashSet<ItemCategory> _horseCategories;
+
+	private static bool _horseCategoriesInitialized = false;
+
+	public static void ClearCache()
+	{
+		_workshopDemandCache.Clear();
+		_lastCacheDay = -1;
+	}
+
+	private static void InitializeLivestockCategories()
+	{
+		if (_livestockCategoriesInitialized)
+		{
+			return;
+		}
+		_livestockCategories = new HashSet<ItemCategory>();
+		if (DefaultItemCategories.Cow != null)
+		{
+			_livestockCategories.Add(DefaultItemCategories.Cow);
+		}
+		if (DefaultItemCategories.Sheep != null)
+		{
+			_livestockCategories.Add(DefaultItemCategories.Sheep);
+		}
+		if (DefaultItemCategories.Hog != null)
+		{
+			_livestockCategories.Add(DefaultItemCategories.Hog);
+		}
+		foreach (ItemCategory item in ItemCategories.All)
+		{
+			if (item != null)
+			{
+				string text = item.StringId?.ToLowerInvariant() ?? "";
+				if (text == "goose" || text == "chicken" || text == "hare")
+				{
+					_livestockCategories.Add(item);
+				}
+			}
+		}
+		_livestockCategoriesInitialized = true;
+	}
+
+	private static bool IsLivestockCategory(ItemCategory category)
+	{
+		if (category == null)
+		{
+			return false;
+		}
+		InitializeLivestockCategories();
+		return _livestockCategories.Contains(category);
+	}
+
+	private static void InitializeHorseCategories()
+	{
+		if (_horseCategoriesInitialized)
+		{
+			return;
+		}
+		_horseCategories = new HashSet<ItemCategory>();
+		foreach (ItemCategory item in ItemCategories.All)
+		{
+			if (item == null)
+			{
+				continue;
+			}
+			string text = item.StringId ?? "";
+			switch (text)
+			{
+			default:
+				if (!(text == "sumpter_horse"))
+				{
+					continue;
+				}
+				break;
+			case "horse":
+			case "war_horse":
+			case "noble_horse":
+				break;
+			}
+			_horseCategories.Add(item);
+		}
+		_horseCategoriesInitialized = true;
+	}
+
+	private static bool IsHorseCategory(ItemCategory category)
+	{
+		if (category == null)
+		{
+			return false;
+		}
+		InitializeHorseCategories();
+		return _horseCategories.Contains(category);
+	}
+
+	public override (float, float) GetSupplyDemandForCategory(Town town, ItemCategory category, float dailySupply, float dailyDemand, float oldSupply, float oldDemand)
+	{
+		oldSupply = MathF.Max(0.1f, oldSupply);
+		oldDemand = MathF.Max(0.1f, oldDemand);
+		dailySupply = MathF.Max(0.1f, dailySupply);
+		dailyDemand = MathF.Max(0.1f, dailyDemand);
+		float x = dailySupply / oldSupply;
+		float x2 = dailyDemand / oldDemand;
+		float b = oldSupply * MathF.Pow(x, 0.2f);
+		float b2 = oldDemand * MathF.Pow(x2, 0.2f);
+		b = MathF.Max(0.1f, b);
+		b2 = MathF.Max(0.1f, b2);
+		return (b, b2);
+	}
+
+	public override float GetEstimatedDemandForCategory(Town town, ItemData itemData, ItemCategory category)
+	{
+		float estimatedDemandForCategory = base.GetEstimatedDemandForCategory(town, itemData, category);
+		if (town == null || category == null)
+		{
+			return estimatedDemandForCategory;
+		}
+		float workshopInputDemand = GetWorkshopInputDemand(town, category);
+		return estimatedDemandForCategory + workshopInputDemand;
+	}
+
+	public override float GetDailyDemandForCategory(Town town, ItemCategory category, int extraProsperity)
+	{
+		float dailyDemandForCategory = base.GetDailyDemandForCategory(town, category, extraProsperity);
+		if (town == null || category == null)
+		{
+			return dailyDemandForCategory;
+		}
+		float foodDemandMultiplier = GetFoodDemandMultiplier(town, category);
+		dailyDemandForCategory *= foodDemandMultiplier;
+		if (IsHorseCategory(category))
+		{
+			dailyDemandForCategory *= 1.2f;
+		}
+		return dailyDemandForCategory;
+	}
+
+	private float GetFoodDemandMultiplier(Town town, ItemCategory category)
+	{
+		bool flag = category.Properties == ItemCategory.Property.BonusToFoodStores;
+		bool flag2 = IsLivestockCategory(category);
+		if (!flag && !flag2)
+		{
+			return 1f;
+		}
+		int num = town.FoodStocksUpperLimit();
+		if (num <= 0)
+		{
+			return 1f;
+		}
+		float num2 = town.FoodStocks / (float)num;
+		float num3;
+		if (num2 < 0.1f)
+		{
+			num3 = 2.5f;
+		}
+		else if (num2 < 0.2f)
+		{
+			float amount = (num2 - 0.1f) / 0.1f;
+			num3 = MathF.Lerp(2.5f, 1.8f, amount);
+		}
+		else
+		{
+			if (!(num2 < 0.4f))
+			{
+				return 1f;
+			}
+			float amount2 = (num2 - 0.2f) / 0.2f;
+			num3 = MathF.Lerp(1.8f, 1.3f, amount2);
+		}
+		if (flag2 && !flag)
+		{
+			num3 = 1f + (num3 - 1f) * 0.7f;
+		}
+		return num3;
+	}
+
+	private float GetEmergencyBudgetMultiplier(Town town, ItemCategory category)
+	{
+		if (town == null || !FoodSystemConstants.IsEmergencyMode(town))
+		{
+			return 1f;
+		}
+		int num = town.FoodStocksUpperLimit();
+		if (num <= 0)
+		{
+			return 1f;
+		}
+		float num2 = town.FoodStocks / (float)num;
+		float num3 = 1f - MathF.Clamp(num2 / 0.2f, 0f, 1f);
+		if (num3 <= 0f)
+		{
+			return 1f;
+		}
+		float valueTo;
+		if (category.Properties == ItemCategory.Property.BonusToFoodStores)
+		{
+			valueTo = 6f;
+		}
+		else if (IsLivestockCategory(category))
+		{
+			valueTo = 4f;
+		}
+		else
+		{
+			if (category != DefaultItemCategories.PackAnimal)
+			{
+				return 1f;
+			}
+			valueTo = 2f;
+		}
+		return MathF.Lerp(1f, valueTo, num3);
+	}
+
+	public override float CalculateDailySettlementBudgetForItemCategory(Town town, float demand, ItemCategory category)
+	{
+		float num = base.CalculateDailySettlementBudgetForItemCategory(town, demand, category);
+		if (category != null)
+		{
+			num *= GetEmergencyBudgetMultiplier(town, category);
+			if (!category.IsTradeGood && !category.IsAnimal && category != DefaultItemCategories.Arrows)
+			{
+				float num2 = GlobalSettings<HAPSettings>.Instance?.EquipmentBudgetMultiplier ?? 3f;
+				return num * num2;
+			}
+			if (category.IsAnimal)
+			{
+				float num3 = GlobalSettings<HAPSettings>.Instance?.AnimalBudgetMultiplier ?? 2f;
+				return num * num3;
+			}
+		}
+		return num;
+	}
+
+	public override int GetTownGoldChange(Town town)
+	{
+		float num = GlobalSettings<HAPSettings>.Instance?.TownGoldPerProsperity ?? 12f;
+		float num2 = town.Prosperity * num;
+		return MathF.Round(num2 - (float)town.Gold);
+	}
+
+	private float GetWorkshopInputDemand(Town town, ItemCategory category)
+	{
+		int num = (int)CampaignTime.Now.ToDays;
+		if (_lastCacheDay != num)
+		{
+			_workshopDemandCache.Clear();
+			_lastCacheDay = num;
+		}
+		if (!_workshopDemandCache.TryGetValue(town, out var value))
+		{
+			value = CalculateWorkshopDemands(town);
+			_workshopDemandCache[town] = value;
+		}
+		if (value.TryGetValue(category, out var value2))
+		{
+			return value2;
+		}
+		return 0f;
+	}
+
+	private Dictionary<ItemCategory, float> CalculateWorkshopDemands(Town town)
+	{
+		Dictionary<ItemCategory, float> dictionary = new Dictionary<ItemCategory, float>();
+		if (town?.Workshops == null)
+		{
+			return dictionary;
+		}
+		Workshop[] workshops = town.Workshops;
+		foreach (Workshop workshop in workshops)
+		{
+			if (workshop?.WorkshopType == null || workshop.WorkshopType.IsHidden)
+			{
+				continue;
+			}
+			WorkshopType workshopType = workshop.WorkshopType;
+			if (workshopType?.Productions == null)
+			{
+				continue;
+			}
+			foreach (WorkshopType.Production production in workshopType.Productions)
+			{
+				if (production.Inputs == null)
+				{
+					continue;
+				}
+				foreach (var (itemCategory, num) in production.Inputs)
+				{
+					if (itemCategory != null)
+					{
+						float num2 = MathF.Min(1f, production.ConversionSpeed);
+						float num3 = (float)num * 0.5f * num2;
+						if (dictionary.ContainsKey(itemCategory))
+						{
+							dictionary[itemCategory] += num3;
+						}
+						else
+						{
+							dictionary[itemCategory] = num3;
+						}
+					}
+				}
+			}
+		}
+		return dictionary;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\CustomSettlementFoodModel.cs =====
+using System.Collections.Generic;
+using HarvestAndProduction.Patches;
+using Helpers;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Issues;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Buildings;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Models;
+
+public class CustomSettlementFoodModel : DefaultSettlementFoodModel
+{
+	private const float BASE_SPOILAGE_RATE = 0.03f;
+
+	private const float TOWN_SPOILAGE_REDUCTION_PER_LEVEL = 0.2f;
+
+	private const float CASTLE_SPOILAGE_REDUCTION_PER_LEVEL = 0.1f;
+
+	private static readonly TextObject _prosperityText = GameTexts.FindText("str_prosperity");
+
+	private static readonly TextObject _garrisonText = GameTexts.FindText("str_garrison");
+
+	private static readonly TextObject _spoilageText = new TextObject("{=HAP_Spoilage}Food Spoilage");
+
+	private static readonly TextObject _marketFoodText = new TextObject("{=HAP_MarketFood}Market Requisition");
+
+	private static readonly TextObject _storedFoodText = new TextObject("{=HAP_StoredFood}Stored Food");
+
+	private readonly TextObject _lordResupplyText = new TextObject("{=HAP_LordResupply}Lord Resupply");
+
+	private readonly TextObject _villageSupplyText = new TextObject("{=HAP_VillageSupply}Village Supply");
+
+	private static readonly TextObject _garrisonSupplyText = new TextObject("{=HAP_GarrisonSupply}Garrison Supply");
+
+	private static readonly TextObject _landsAroundSettlementText = GameTexts.FindText("str_lands_around_settlement");
+
+	private readonly TextObject _patrolSupplyText = new TextObject("{=HAP_PatrolSupply}Patrol Supply");
+
+	private readonly TextObject _supplyLineText = new TextObject("{=HAP_SupplyLineFoodEntry}Supply Line");
+
+	private static readonly TextObject _livestockSlaughterText = new TextObject("{=HAP_EmergencySlaughter}Emergency Slaughter");
+
+	public override int FoodStocksUpperLimit => 600;
+
+	public override int NumberOfProsperityToEatOneFood => 80;
+
+	public override int NumberOfMenOnGarrisonToEatOneFood => 40;
+
+	public override int CastleFoodStockUpperLimitBonus => 0;
+
+	public override ExplainedNumber CalculateTownFoodStocksChange(Town town, bool includeMarketStocks = true, bool includeDescriptions = false)
+	{
+		ExplainedNumber bonuses = new ExplainedNumber(0f, includeDescriptions);
+		ExplainedNumber bonuses2 = new ExplainedNumber(0f, includeDescriptions);
+		ExplainedNumber bonuses3 = new ExplainedNumber(town.Prosperity / (float)NumberOfProsperityToEatOneFood);
+		ExplainedNumber bonuses4 = new ExplainedNumber((((float?)town.GarrisonParty?.Party.NumberOfAllMembers) ?? 0f) / (float)NumberOfMenOnGarrisonToEatOneFood);
+		if (town.IsUnderSiege)
+		{
+			PerkHelper.AddPerkBonusForTown(DefaultPerks.Steward.Gourmet, town, ref bonuses4);
+			PerkHelper.AddPerkBonusForTown(DefaultPerks.Medicine.TriageTent, town, ref bonuses2);
+		}
+		PerkHelper.AddPerkBonusForTown(DefaultPerks.Steward.MasterOfWarcraft, town, ref bonuses3);
+		float num = GlobalSettings<HAPSettings>.Instance?.SettlementFoodConsumptionMultiplier ?? 1f;
+		Kingdom kingdom = town.Settlement?.OwnerClan?.Kingdom;
+		if (kingdom != null && HAPPolicies.RationingDecree != null && kingdom.ActivePolicies.Contains(HAPPolicies.RationingDecree))
+		{
+			num *= 0.9f;
+		}
+		float num2 = num;
+		if (town.IsTown)
+		{
+			Kingdom kingdom2 = town.Settlement?.OwnerClan?.Kingdom;
+			if (kingdom2 != null && HAPPolicies.SumptuaryLaws != null && kingdom2.ActivePolicies.Contains(HAPPolicies.SumptuaryLaws))
+			{
+				num2 *= 0.85f;
+			}
+		}
+		bonuses2.Add(bonuses3.ResultNumber * num2, _prosperityText);
+		bonuses2.Add(bonuses4.ResultNumber * num, _garrisonText);
+		town.AddEffectOfBuildings(BuildingEffectEnum.FoodConsumption, ref bonuses2);
+		float num3 = CalculateDailySpoilage(town, includeDescriptions, ref bonuses2);
+		Kingdom kingdom3 = town.Settlement.OwnerClan?.Kingdom;
+		if (kingdom3 != null && kingdom3.HasPolicy(DefaultPolicies.HuntingRights))
+		{
+			bonuses.Add(2f, DefaultPolicies.HuntingRights.Name);
+		}
+		HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+		if (instance != null && instance.EnableArtificialFoodBonus && !town.IsUnderSiege)
+		{
+			int num4 = (town.IsTown ? 15 : 10);
+			bonuses.Add(num4, _landsAroundSettlementText);
+			foreach (Village boundVillage in town.Owner.Settlement.BoundVillages)
+			{
+				float value = 0f;
+				if (boundVillage.VillageState == Village.VillageStates.Normal)
+				{
+					value = (boundVillage.GetHearthLevel() + 1) * 6;
+				}
+				bonuses.Add(value, boundVillage.Name);
+			}
+		}
+		if (!town.IsUnderSiege)
+		{
+			town.AddEffectOfBuildings(BuildingEffectEnum.FoodProduction, ref bonuses);
+			HAPSettings? instance2 = GlobalSettings<HAPSettings>.Instance;
+			if (instance2 != null && instance2.EnableArtificialFoodBonus)
+			{
+				foreach (Building building in town.Buildings)
+				{
+					if (building.BuildingType == DefaultBuildingTypes.CastleFarmlands && building.CurrentLevel > 0)
+					{
+						float value2 = (float)building.CurrentLevel * 6f;
+						bonuses.Add(value2, building.Name);
+						break;
+					}
+				}
+			}
+		}
+		else
+		{
+			PerkHelper.AddPerkBonusForTown(DefaultPerks.Roguery.DirtyFighting, town, ref bonuses);
+		}
+		float num5 = 0f;
+		Dictionary<ItemCategory, int> pendingFoodByCategory = FoodSalePatch.GetPendingFoodByCategory(town);
+		foreach (KeyValuePair<ItemCategory, int> item in pendingFoodByCategory)
+		{
+			ItemCategory key = item.Key;
+			int value3 = item.Value;
+			if (value3 > 0)
+			{
+				bonuses.Add(value3, includeDescriptions ? key.GetName() : null);
+				num5 += (float)value3;
+			}
+		}
+		ExplainedNumber explainedNumber = new Ex

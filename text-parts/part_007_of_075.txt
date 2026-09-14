@@ -1,0 +1,632 @@
+﻿PART 7/75
+entCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && !item.IsFood && (!item.HasHorseComponent || !item.HorseComponent.IsPackAnimal))
+			{
+				int num3 = (settlement.IsTown ? settlement.Town.GetItemPrice(elementCopyAtIndex.EquipmentElement, null, isSelling: true) : settlement.Village.GetItemPrice(elementCopyAtIndex.EquipmentElement, null, isSelling: true));
+				if (num3 <= 0)
+				{
+					num3 = 1;
+				}
+				int num4 = num3 * elementCopyAtIndex.Amount;
+				itemRoster.AddToCounts(item, -elementCopyAtIndex.Amount);
+				settlement.ItemRoster.AddToCounts(item, elementCopyAtIndex.Amount);
+				num += num4;
+				bool flag = false;
+			}
+		}
+		if (num > 0)
+		{
+			GiveGoldAction.ApplyBetweenCharacters(null, partyOwner, num, disableNotification: true);
+			bool flag2 = false;
+		}
+		NotifyPlayerOfTransaction(party, component.HomeCastle, settlement, num, _saleMessageStr, _saleMessageNoLocationStr);
+	}
+
+	private void OnSettlementEntered(MobileParty party, Settlement settlement, Hero hero)
+	{
+		try
+		{
+			if (!CastleForagerPartyComponent.IsForagerParty(party))
+			{
+				return;
+			}
+			CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(party);
+			if (foragerComponent != null)
+			{
+				if (foragerComponent.State == CastleForagerPartyComponent.ForagerState.TravelingToTarget && settlement == foragerComponent.TargetSettlement)
+				{
+					foragerComponent.State = CastleForagerPartyComponent.ForagerState.WaitingAtTarget;
+					foragerComponent.WaitStartTime = CampaignTime.Now;
+				}
+				else if (foragerComponent.State == CastleForagerPartyComponent.ForagerState.Returning && settlement == foragerComponent.HomeCastle)
+				{
+					foragerComponent.State = CastleForagerPartyComponent.ForagerState.WaitingAtCastle;
+					foragerComponent.WaitStartTime = CampaignTime.Now;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in OnSettlementEntered (Forager): " + ex.Message);
+		}
+	}
+
+	private void OnMapEventEnded(MapEvent mapEvent)
+	{
+		if (mapEvent == null)
+		{
+			return;
+		}
+		List<MobileParty> list = null;
+		try
+		{
+			foreach (PartyBase item in mapEvent.InvolvedParties.ToList())
+			{
+				if (item == null || !item.IsMobile)
+				{
+					continue;
+				}
+				MobileParty mobileParty = item.MobileParty;
+				if (mobileParty == null || !mobileParty.IsActive || !CastleForagerPartyComponent.IsForagerParty(mobileParty))
+				{
+					continue;
+				}
+				CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(mobileParty);
+				if (foragerComponent == null || _partiesToDestroy.Contains(mobileParty))
+				{
+					continue;
+				}
+				if (mobileParty.MemberRoster.TotalManCount <= 0)
+				{
+					bool flag = false;
+					ForceDestroyParty(mobileParty, foragerComponent);
+					if (mobileParty.IsActive)
+					{
+						if (list == null)
+						{
+							list = new List<MobileParty>();
+						}
+						list.Add(mobileParty);
+					}
+				}
+				else
+				{
+					bool flag2 = false;
+					ReapplyForagerMovement(mobileParty, foragerComponent);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in OnMapEventEnded (Forager): " + ex.Message);
+		}
+		if (list == null)
+		{
+			return;
+		}
+		foreach (MobileParty item2 in list)
+		{
+			try
+			{
+				if (item2.IsActive)
+				{
+					DestroyPartyAction.Apply(null, item2);
+				}
+			}
+			catch (Exception ex2)
+			{
+				Main.Log("ERROR destroying forager post-battle: " + ex2.Message);
+			}
+		}
+	}
+
+	private void AttachForagersToRaidDefense(MapEvent mapEvent)
+	{
+		try
+		{
+			Settlement mapEventSettlement = mapEvent.MapEventSettlement;
+			if (mapEventSettlement == null)
+			{
+				return;
+			}
+			IFaction mapFaction = mapEventSettlement.MapFaction;
+			if (mapFaction == null)
+			{
+				return;
+			}
+			IFaction faction = mapEvent.AttackerSide?.LeaderParty?.MapFaction;
+			if (faction == null || !FactionManager.IsAtWarAgainstFaction(mapFaction, faction))
+			{
+				return;
+			}
+			MapEventSide mapEventSide = mapEvent.GetMapEventSide(BattleSideEnum.Defender);
+			if (mapEventSide == null)
+			{
+				return;
+			}
+			if (_addNearbyPartyMethod == null)
+			{
+				_addNearbyPartyMethod = typeof(MapEventSide).GetMethod("AddNearbyPartyToPlayerMapEvent", BindingFlags.Instance | BindingFlags.NonPublic);
+				if (_addNearbyPartyMethod == null)
+				{
+					Main.Log("[Forager] WARNING: AddNearbyPartyToPlayerMapEvent not found");
+					return;
+				}
+			}
+			float getEncounterJoiningRadius = Campaign.Current.Models.EncounterModel.GetEncounterJoiningRadius;
+			float num = getEncounterJoiningRadius * getEncounterJoiningRadius;
+			Vec2 vec = mapEvent.Position.ToVec2();
+			foreach (KeyValuePair<Settlement, MobileParty> activeForager in _activeForagers)
+			{
+				MobileParty value = activeForager.Value;
+				if (value != null && value.IsActive && value.MapEvent == null && !_partiesToDestroy.Contains(value) && value.MapFaction != null && value.MapFaction == mapFaction && value.CurrentSettlement == null)
+				{
+					float num2 = vec.DistanceSquared(value.Position.ToVec2());
+					if (!(num2 > num))
+					{
+						_addNearbyPartyMethod.Invoke(mapEventSide, new object[1] { value });
+						bool flag = false;
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in AttachForagersToRaidDefense: " + ex.Message);
+		}
+	}
+
+	private void OnMapEventStarted(MapEvent mapEvent, PartyBase attackerParty, PartyBase defenderParty)
+	{
+		if (mapEvent == null)
+		{
+			return;
+		}
+		try
+		{
+			if (mapEvent.IsRaid && mapEvent.MapEventSettlement != null && mapEvent.MapEventSettlement.IsVillage)
+			{
+				AttachForagersToRaidDefense(mapEvent);
+			}
+			else
+			{
+				if (mapEvent.IsPlayerMapEvent || mapEvent.IsSiegeAssault || mapEvent.IsBlockade || mapEvent.IsBlockadeSallyOut)
+				{
+					return;
+				}
+				Vec2 vec = mapEvent.Position.ToVec2();
+				float getEncounterJoiningRadius = Campaign.Current.Models.EncounterModel.GetEncounterJoiningRadius;
+				float num = getEncounterJoiningRadius * 3f;
+				float num2 = num * num;
+				{
+					foreach (KeyValuePair<Settlement, MobileParty> activeForager in _activeForagers)
+					{
+						MobileParty value = activeForager.Value;
+						if (value == null || !value.IsActive || value.MapEvent != null || _partiesToDestroy.Contains(value) || value.CurrentSettlement != null)
+						{
+							continue;
+						}
+						float num3 = vec.DistanceSquared(value.GetPosition2D);
+						if (num3 > num2)
+						{
+							continue;
+						}
+						IFaction mapFaction = value.MapFaction;
+						if (mapFaction != null)
+						{
+							bool flag = attackerParty?.MapFaction == mapFaction || (attackerParty?.MapFaction != null && !FactionManager.IsAtWarAgainstFaction(mapFaction, attackerParty.MapFaction));
+							bool flag2 = defenderParty?.MapFaction == mapFaction || (defenderParty?.MapFaction != null && !FactionManager.IsAtWarAgainstFaction(mapFaction, defenderParty.MapFaction));
+							bool flag3 = attackerParty?.MapFaction != null && FactionManager.IsAtWarAgainstFaction(mapFaction, attackerParty.MapFaction);
+							bool flag4 = defenderParty?.MapFaction != null && FactionManager.IsAtWarAgainstFaction(mapFaction, defenderParty.MapFaction);
+							MobileParty mobileParty = null;
+							if ((flag & flag4) && defenderParty.IsMobile)
+							{
+								mobileParty = defenderParty.MobileParty;
+							}
+							else if ((flag2 & flag3) && attackerParty.IsMobile)
+							{
+								mobileParty = attackerParty.MobileParty;
+							}
+							if (mobileParty != null)
+							{
+								value.SetMoveEngageParty(mobileParty, MobileParty.NavigationType.Default);
+								bool flag5 = false;
+							}
+						}
+					}
+					return;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in OnMapEventStarted (Forager): " + ex.Message);
+		}
+	}
+
+	private void OnSiegeEventStarted(SiegeEvent siegeEvent)
+	{
+		if (siegeEvent?.BesiegedSettlement == null)
+		{
+			return;
+		}
+		Settlement besiegedSettlement = siegeEvent.BesiegedSettlement;
+		try
+		{
+			List<MobileParty> list = new List<MobileParty>();
+			foreach (KeyValuePair<Settlement, MobileParty> activeForager in _activeForagers)
+			{
+				MobileParty value = activeForager.Value;
+				if (value != null && value.IsActive && !_partiesToDestroy.Contains(value) && value.CurrentSettlement == besiegedSettlement)
+				{
+					list.Add(value);
+				}
+			}
+			foreach (MobileParty item in list)
+			{
+				CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(item);
+				if (foragerComponent != null)
+				{
+					if (besiegedSettlement.MapFaction != item.MapFaction && !FactionManager.IsAtWarAgainstFaction(item.MapFaction, besiegedSettlement.MapFaction))
+					{
+						bool flag = false;
+						HandleTrappedInNeutralSiege(item, foragerComponent);
+					}
+					else
+					{
+						bool flag2 = false;
+						HandleTrappedInSiege(item, foragerComponent);
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in OnSiegeEventStarted (Forager): " + ex.Message);
+		}
+	}
+
+	private void OnSettlementEnteredForPrisoners(MobileParty party, Settlement settlement, Hero hero)
+	{
+		try
+		{
+			if (party == null || settlement == null || !CastleForagerPartyComponent.IsForagerParty(party) || (!settlement.IsTown && !settlement.IsCastle) || settlement.MapFaction != party.MapFaction)
+			{
+				return;
+			}
+			TroopRoster prisonRoster = party.Party.PrisonRoster;
+			if (prisonRoster == null || prisonRoster.TotalManCount == 0)
+			{
+				return;
+			}
+			List<CharacterObject> list = new List<CharacterObject>();
+			foreach (TroopRosterElement item in prisonRoster.GetTroopRoster())
+			{
+				if (item.Character?.HeroObject != null)
+				{
+					list.Add(item.Character);
+				}
+			}
+			if (list.Count == 0)
+			{
+				return;
+			}
+			foreach (CharacterObject item2 in list)
+			{
+				TransferPrisonerAction.Apply(item2, party.Party, settlement.Party);
+			}
+			bool flag = false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in OnSettlementEnteredForPrisoners: " + ex.Message);
+		}
+	}
+
+	private void OnWarDeclared(IFaction faction1, IFaction faction2, DeclareWarAction.DeclareWarDetail detail)
+	{
+		try
+		{
+			foreach (KeyValuePair<Settlement, MobileParty> activeForager in _activeForagers)
+			{
+				MobileParty value = activeForager.Value;
+				if (value == null || !value.IsActive)
+				{
+					continue;
+				}
+				CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(value);
+				if (foragerComponent == null || (value.MapFaction != faction1 && value.MapFaction != faction2))
+				{
+					continue;
+				}
+				Settlement currentSettlement = value.CurrentSettlement;
+				if (currentSettlement != null && FactionManager.IsAtWarAgainstFaction(value.MapFaction, currentSettlement.MapFaction))
+				{
+					bool flag = false;
+					try
+					{
+						LeaveSettlementAction.ApplyForParty(value);
+						InitiateFlee(value, foragerComponent);
+					}
+					catch (Exception)
+					{
+						bool flag2 = false;
+					}
+				}
+				else if (foragerComponent.TargetSettlement != null && foragerComponent.State == CastleForagerPartyComponent.ForagerState.TravelingToTarget && FactionManager.IsAtWarAgainstFaction(value.MapFaction, foragerComponent.TargetSettlement.MapFaction))
+				{
+					bool flag3 = false;
+					foragerComponent.State = CastleForagerPartyComponent.ForagerState.Returning;
+					foragerComponent.SetDestination(foragerComponent.HomeCastle);
+				}
+			}
+		}
+		catch (Exception ex2)
+		{
+			Main.Log("ERROR in OnWarDeclared (Forager): " + ex2.Message);
+		}
+	}
+
+	private void ReapplyForagerMovement(MobileParty party, CastleForagerPartyComponent component)
+	{
+		try
+		{
+			int totalManCount = party.MemberRoster.TotalManCount;
+			int valueOrDefault = (component.HomeCastle?.Town?.GarrisonParty?.MemberRoster.TotalManCount).GetValueOrDefault();
+			int garrisonCount = valueOrDefault + totalManCount;
+			int minTroopsBeforeRefill = GetMinTroopsBeforeRefill(garrisonCount);
+			if (totalManCount > 0 && totalManCount < minTroopsBeforeRefill && component.State != CastleForagerPartyComponent.ForagerState.Idle)
+			{
+				if (component.HomeCastle != null && IsCastleStillValid(component))
+				{
+					component.State = CastleForagerPartyComponent.ForagerState.Returning;
+					component.SetDestination(component.HomeCastle);
+					bool flag = false;
+				}
+				else
+				{
+					component.State = CastleForagerPartyComponent.ForagerState.Idle;
+					bool flag2 = false;
+				}
+				return;
+			}
+			switch (component.State)
+			{
+			case CastleForagerPartyComponent.ForagerState.TravelingToTarget:
+				if (component.TargetSettlement != null)
+				{
+					component.SetDestination(component.TargetSettlement);
+					bool flag5 = false;
+				}
+				else if (component.HomeCastle != null && IsCastleStillValid(component))
+				{
+					component.State = CastleForagerPartyComponent.ForagerState.Returning;
+					component.SetDestination(component.HomeCastle);
+					bool flag6 = false;
+				}
+				else
+				{
+					InitiateFlee(party, component);
+					bool flag7 = false;
+				}
+				break;
+			case CastleForagerPartyComponent.ForagerState.WaitingAtTarget:
+				break;
+			case CastleForagerPartyComponent.ForagerState.Returning:
+				if (component.HomeCastle != null)
+				{
+					component.SetDestination(component.HomeCastle);
+					bool flag8 = false;
+				}
+				else
+				{
+					InitiateFlee(party, component);
+					bool flag9 = false;
+				}
+				break;
+			case CastleForagerPartyComponent.ForagerState.WaitingAtCastle:
+				break;
+			case CastleForagerPartyComponent.ForagerState.Defending:
+				if (component.HomeCastle != null)
+				{
+					if (component.HomeCastle.IsUnderSiege)
+					{
+						component.SetDefendCastle();
+						bool flag10 = false;
+					}
+					else
+					{
+						component.State = CastleForagerPartyComponent.ForagerState.Returning;
+						component.SetDestination(component.HomeCastle);
+						bool flag11 = false;
+					}
+				}
+				else
+				{
+					InitiateFlee(party, component);
+					bool flag12 = false;
+				}
+				break;
+			case CastleForagerPartyComponent.ForagerState.Fleeing:
+				if (component.TargetSettlement != null)
+				{
+					component.SetDestination(component.TargetSettlement);
+					bool flag3 = false;
+				}
+				else
+				{
+					InitiateFlee(party, component);
+					bool flag4 = false;
+				}
+				break;
+			case CastleForagerPartyComponent.ForagerState.Idle:
+				break;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in ReapplyForagerMovement: " + ex.Message);
+		}
+	}
+
+	private int GetForagerBudget(CastleForagerPartyComponent component)
+	{
+		if (component?.HomeCastle?.OwnerClan == Clan.PlayerClan)
+		{
+			return GlobalSettings<HAPSettings>.Instance?.PlayerForagerBudget ?? 5000;
+		}
+		return 5000;
+	}
+
+	private int GetForagerBudgetForCastle(Settlement castle)
+	{
+		if (castle?.OwnerClan == Clan.PlayerClan)
+		{
+			return GlobalSettings<HAPSettings>.Instance?.PlayerForagerBudget ?? 5000;
+		}
+		return 5000;
+	}
+
+	private void BuyFoodAtSettlement(MobileParty party, CastleForagerPartyComponent component)
+	{
+		Settlement targetSettlement = component.TargetSettlement;
+		Settlement homeCastle = component.HomeCastle;
+		if (targetSettlement == null || homeCastle == null || homeCastle.Town == null)
+		{
+			return;
+		}
+		Hero partyOwner = component.PartyOwner;
+		if (partyOwner == null)
+		{
+			return;
+		}
+		bool flag = targetSettlement.IsVillage && targetSettlement.Village?.Bound == homeCastle;
+		List<(EquipmentElement, int)> list = new List<(EquipmentElement, int)>();
+		Town town = homeCastle.Town;
+		int num = town.FoodStocksUpperLimit();
+		int num2 = (int)((float)num * 0.4f);
+		int num3 = (int)town.FoodStocks;
+		int num4 = Math.Max(0, num2 - num3);
+		if (num4 <= 0)
+		{
+			bool flag2 = false;
+			return;
+		}
+		float totalWeightCarried = party.TotalWeightCarried;
+		float num5 = party.InventoryCapacity;
+		float num6 = Math.Max(0f, num5 - totalWeightCarried);
+		int foragerBudget = GetForagerBudget(component);
+		int val = Math.Max(0, foragerBudget - component.TotalGoldSpent);
+		int num7 = Math.Min(partyOwner.Gold, val);
+		if (num7 <= 0 && !flag)
+		{
+			bool flag3 = false;
+			return;
+		}
+		int num8 = 0;
+		int num9 = 0;
+		ItemRoster itemRoster = targetSettlement.ItemRoster;
+		int num10 = itemRoster.Count - 1;
+		while (num10 >= 0 && num4 > num9 && num6 > 0f && (flag || num7 > num8))
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num10);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && item.IsFood)
+			{
+				int num11 = ((!flag) ? (targetSettlement.IsTown ? targetSettlement.Town.GetItemPrice(elementCopyAtIndex.EquipmentElement) : targetSettlement.Village.GetItemPrice(elementCopyAtIndex.EquipmentElement)) : 0);
+				if (num11 >= 0 && (flag || num11 <= 160))
+				{
+					int val2 = (flag ? int.MaxValue : ((num7 - num8) / Math.Max(1, num11)));
+					int val3 = ((item.Weight > 0f) ? ((int)(num6 / item.Weight)) : int.MaxValue);
+					int val4 = num4 - num9;
+					int num12 = Math.Min(elementCopyAtIndex.Amount, Math.Min(val2, Math.Min(val3, val4)));
+					if (num12 > 0)
+					{
+						int num13 = num12 * num11;
+						if (num13 > 0)
+						{
+							GiveGoldAction.ApplyForCharacterToSettlement(partyOwner, targetSettlement, num13, disableNotification: true);
+						}
+						party.ItemRoster.AddToCounts(item, num12);
+						itemRoster.AddToCounts(item, -num12);
+						num8 += num13;
+						num9 += num12;
+						num6 -= item.Weight * (float)num12;
+						component.FoodPurchasedThisTrip += num12;
+						list.Add((elementCopyAtIndex.EquipmentElement, num12));
+						bool flag4 = false;
+					}
+				}
+			}
+			num10--;
+		}
+		component.TotalGoldSpent += num8;
+		bool flag5 = false;
+		if (list.Count > 0)
+		{
+			FireForagerPurchaseNotification(party, targetSettlement, list);
+		}
+	}
+
+	private void BuyAndSlaughterLivestock(MobileParty party, CastleForagerPartyComponent component)
+	{
+		Settlement targetSettlement = component.TargetSettlement;
+		Settlement homeCastle = component.HomeCastle;
+		if (targetSettlement == null || homeCastle == null || homeCastle.Town == null)
+		{
+			return;
+		}
+		bool flag = targetSettlement.IsVillage && targetSettlement.Village?.Bound == homeCastle;
+		Hero partyOwner = component.PartyOwner;
+		if (partyOwner == null || (partyOwner.Gold < 50 && !flag))
+		{
+			return;
+		}
+		int foragerBudget = GetForagerBudget(component);
+		int val = Math.Max(0, foragerBudget - component.TotalGoldSpent);
+		int num = Math.Min(partyOwner.Gold, val);
+		if (num <= 0 && !flag)
+		{
+			return;
+		}
+		int num2 = 0;
+		int num3 = 0;
+		ItemRoster itemRoster = targetSettlement.ItemRoster;
+		List<(EquipmentElement, int)> list = new List<(EquipmentElement, int)>();
+		Dictionary<string, (string, int)> dictionary = new Dictionary<string, (string, int)>
+		{
+			{
+				"cow",
+				("meat_beef", 4)
+			},
+			{
+				"sheep",
+				("meat_mutton", 2)
+			},
+			{
+				"hog",
+				("meat_pork", 2)
+			},
+			{
+				"chicken_product",
+				("meat_poultry", 1)
+			},
+			{
+				"goose_product",
+				("meat_poultry", 1)
+			},
+			{
+				"hare",
+				("meat_hare", 1)
+			}
+		};
+		for (int num4 = itemRoster.Count - 1; num4 >= 0 && (flag || num > num2); num4--)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num4);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item == null || elementCopyAtIndex.Amount <= 0 || !item.HasHorseComponent)
+			{
+				continue;
+			}
+			bool isLiveStock = item.HorseComponent.IsLiveStock;
+			bool flag2 = !isLiveStock && item.ItemCategory != null && item.ItemCategor

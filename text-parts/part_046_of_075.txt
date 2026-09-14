@@ -1,0 +1,555 @@
+﻿PART 46/75
+NonSerializedListener(this, OnGameLoaded);
+		CampaignEvents.OnNewGameCreatedEvent.AddNonSerializedListener(this, OnNewGameCreated);
+		CampaignEvents.OnNewGameCreatedPartialFollowUpEndEvent.AddNonSerializedListener(this, OnNewGameCreatedPartialFollowUpEnd);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		Main.Log("OnSessionLaunched: Ensuring production initialization...");
+		if (!_initialized)
+		{
+			InitializeAllProductions();
+		}
+	}
+
+	private void OnGameLoaded(CampaignGameStarter starter)
+	{
+		Main.Log("OnGameLoaded: Ensuring production initialization...");
+		if (!_initialized)
+		{
+			InitializeAllProductions();
+		}
+	}
+
+	private void OnNewGameCreated(CampaignGameStarter starter)
+	{
+		Main.Log("OnNewGameCreated: Ensuring production initialization...");
+		if (!_initialized)
+		{
+			InitializeAllProductions();
+		}
+	}
+
+	private void OnNewGameCreatedPartialFollowUpEnd(CampaignGameStarter starter)
+	{
+		Main.Log("OnNewGameCreatedPartialFollowUpEnd: Seeding village inventories with starting stock...");
+		SeedVillageInventories();
+		Main.Log("Seeding town inventories based on village production...");
+		SeedTownInventories();
+	}
+
+	private void InitializeAllProductions()
+	{
+		if (_initialized)
+		{
+			Main.Log("Productions already initialized, skipping...");
+			return;
+		}
+		try
+		{
+			Main.Log("Starting PHASE 2 production initialization...");
+			if (Game.Current == null || Game.Current.ObjectManager == null)
+			{
+				Main.Log("ERROR: Game.Current not available yet!");
+				return;
+			}
+			string[] array = new string[23]
+			{
+				"chicken_product", "goose_product", "hare", "crab", "lobster", "cabbage_vegetable", "leek_vegetable", "carrot_vegetable", "mushroom_vegetable", "apple_fruit",
+				"orange_fruit", "melon_fruit", "milk", "heavy_cream", "egg", "honey", "nuts", "black_pepper", "herbs", "straw",
+				"charcoal", "cut_stone", "gold_ore"
+			};
+			List<ItemObject> list = new List<ItemObject>();
+			string[] array2 = array;
+			foreach (string text in array2)
+			{
+				ItemObject itemObject = Game.Current.ObjectManager.GetObject<ItemObject>(text);
+				if (itemObject != null)
+				{
+					list.Add(itemObject);
+				}
+				else
+				{
+					Main.Log("WARNING: Item '" + text + "' not found in ObjectManager");
+				}
+			}
+			Main.Log($"Found {list.Count} custom items");
+			FieldInfo field = typeof(VillageType).GetField("_productions", BindingFlags.Instance | BindingFlags.NonPublic);
+			if (field == null)
+			{
+				Main.Log("ERROR: Could not access VillageType._productions field!");
+				return;
+			}
+			int num = 0;
+			foreach (VillageType item in VillageType.All)
+			{
+				if (!(field.GetValue(item) is MBList<(ItemObject, float)> mBList))
+				{
+					continue;
+				}
+				foreach (ItemObject item2 in list)
+				{
+					bool flag = false;
+					foreach (var item3 in mBList)
+					{
+						if (item3.Item1 == item2)
+						{
+							flag = true;
+							break;
+						}
+					}
+					if (!flag)
+					{
+						mBList.Add((item2, 0.1f));
+						num++;
+					}
+				}
+			}
+			_initialized = true;
+			Main.Log("PHASE 2 initialization complete!");
+			Main.Log($"Added {num} custom item entries to village production lists");
+			Main.Log("Now vanilla TickGoodProduction will call CalculateDailyProductionAmount for these items");
+			Main.Log("Production filtered by: secondary type -> climate zone -> seasonal modifiers");
+			Main.Log("CanVillageProduceItem() determines eligibility, CalculateDailyProductionAmount() calculates output");
+		}
+		catch (Exception arg)
+		{
+			Main.Log($"ERROR initializing productions: {arg}");
+		}
+	}
+
+	private void SeedVillageInventories()
+	{
+		try
+		{
+			bool flag = false;
+			int num = 0;
+			int num2 = 0;
+			int num3 = 0;
+			VillageProductionModel villageProductionModel = new VillageProductionModel();
+			string[] array = new string[23]
+			{
+				"chicken_product", "goose_product", "hare", "crab", "lobster", "cabbage_vegetable", "leek_vegetable", "carrot_vegetable", "mushroom_vegetable", "apple_fruit",
+				"orange_fruit", "melon_fruit", "milk", "heavy_cream", "egg", "honey", "nuts", "black_pepper", "herbs", "straw",
+				"charcoal", "cut_stone", "gold_ore"
+			};
+			string[] array2 = new string[48]
+			{
+				"grain", "butter", "cheese", "cow", "sheep", "hog", "fish", "grape", "olives", "date_fruit",
+				"wool", "fur", "hardwood", "clay", "salt", "iron", "silver", "whale_oil", "walrus_tusk", "flax",
+				"cotton", "empire_horse", "t2_empire_horse", "t3_empire_horse", "vlandia_horse", "t2_vlandia_horse", "t3_vlandia_horse", "battania_horse", "t2_battania_horse", "t3_battania_horse",
+				"sturgia_horse", "t2_sturgia_horse", "t3_sturgia_horse", "khuzait_horse", "t2_khuzait_horse", "t3_khuzait_horse", "aserai_horse", "t2_aserai_horse", "t3_aserai_horse", "camel",
+				"war_camel", "pack_camel", "sumpter_horse", "mule", "saddle_horse", "old_horse", "hunter", "charger"
+			};
+			Main.Log($"Village inventory seeding starting (min={1f} days, max={2f} days)...");
+			foreach (Settlement item in Settlement.All)
+			{
+				if (!item.IsVillage || item.Village == null)
+				{
+					continue;
+				}
+				Village village = item.Village;
+				string stringId = village.VillageType.StringId;
+				VillageProductionModel.ClimateZone climateZoneForVillage = VillageProductionModel.GetClimateZoneForVillage(village);
+				SecondaryProductionType secondaryType = VillageSecondaryProductionBehavior.GetSecondaryType(village);
+				bool flag2 = false;
+				int num4 = 0;
+				List<string> list = new List<string>();
+				string[] array3 = array;
+				foreach (string objectName in array3)
+				{
+					ItemObject itemObject = Game.Current.ObjectManager.GetObject<ItemObject>(objectName);
+					if (itemObject != null)
+					{
+						float resultNumber = villageProductionModel.CalculateDailyProductionAmount(village, itemObject).ResultNumber;
+						if (resultNumber > 0f)
+						{
+							float num5 = MBRandom.RandomFloatRanged(1f, 2f);
+							int num6 = (int)(resultNumber * num5);
+							village.Settlement.ItemRoster.AddToCounts(itemObject, num6);
+							num += num6;
+							num4 += num6;
+							flag2 = true;
+							list.Add($"{itemObject.Name} x{num6}");
+						}
+					}
+				}
+				string[] array4 = array2;
+				foreach (string objectName2 in array4)
+				{
+					ItemObject itemObject2 = Game.Current.ObjectManager.GetObject<ItemObject>(objectName2);
+					if (itemObject2 != null)
+					{
+						float resultNumber2 = villageProductionModel.CalculateDailyProductionAmount(village, itemObject2).ResultNumber;
+						if (resultNumber2 > 0f)
+						{
+							float num7 = MBRandom.RandomFloatRanged(1f, 2f);
+							int num8 = (int)(resultNumber2 * num7);
+							village.Settlement.ItemRoster.AddToCounts(itemObject2, num8);
+							num += num8;
+							num4 += num8;
+							flag2 = true;
+							list.Add($"{itemObject2.Name} x{num8}");
+						}
+					}
+				}
+				if (flag2)
+				{
+					num2++;
+					Main.LogVerbose($"{village.Settlement.Name} ({stringId}, {climateZoneForVillage}, {secondaryType}): +{num4} items");
+					Main.LogVerbose("  Items: " + string.Join(", ", list));
+				}
+				else
+				{
+					num3++;
+					Main.LogVerbose($"   {village.Settlement.Name} ({stringId}, {climateZoneForVillage}, {secondaryType}): No production assigned");
+				}
+			}
+			Main.Log("Village inventory seeding complete!");
+			Main.Log($"Total: {num} items across {num2} villages ({num3} skipped)");
+		}
+		catch (Exception arg)
+		{
+			Main.Log($"ERROR seeding village inventories: {arg}");
+		}
+	}
+
+	private void SeedTownInventories()
+	{
+		try
+		{
+			int num = 0;
+			int num2 = 0;
+			VillageProductionCalculatorModel villageProductionCalculatorModel = Campaign.Current.Models.VillageProductionCalculatorModel;
+			foreach (Town allTown in Town.AllTowns)
+			{
+				Settlement settlement = allTown.Settlement;
+				int num3 = 0;
+				int num4 = 0;
+				for (int num5 = settlement.ItemRoster.Count - 1; num5 >= 0; num5--)
+				{
+					ItemRosterElement elementCopyAtIndex = settlement.ItemRoster.GetElementCopyAtIndex(num5);
+					ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+					if (item != null && elementCopyAtIndex.Amount > 0 && VillageProductionModel._customItemIds.Contains(item.StringId))
+					{
+						bool flag = false;
+						foreach (Village tradeBoundVillage in allTown.TradeBoundVillages)
+						{
+							if (villageProductionCalculatorModel.CalculateDailyProductionAmount(tradeBoundVillage, item).ResultNumber > 0f)
+							{
+								flag = true;
+								break;
+							}
+						}
+						if (!flag)
+						{
+							num4 += elementCopyAtIndex.Amount;
+							settlement.ItemRoster.AddToCounts(item, -elementCopyAtIndex.Amount);
+						}
+					}
+				}
+				if (num4 > 0)
+				{
+					Main.LogVerbose($"  {settlement.Name}: Cleaned {num4} invalid custom items from vanilla distribution");
+				}
+				foreach (Village tradeBoundVillage2 in allTown.TradeBoundVillages)
+				{
+					ItemRoster itemRoster = tradeBoundVillage2.Settlement.ItemRoster;
+					for (int i = 0; i < itemRoster.Count; i++)
+					{
+						ItemRosterElement elementCopyAtIndex2 = itemRoster.GetElementCopyAtIndex(i);
+						ItemObject item2 = elementCopyAtIndex2.EquipmentElement.Item;
+						if (item2 != null && elementCopyAtIndex2.Amount > 0 && item2.IsFood)
+						{
+							float num6 = MBRandom.RandomFloatRanged(1f, 2f);
+							int num7 = (int)((float)elementCopyAtIndex2.Amount * num6);
+							if (num7 > 0)
+							{
+								settlement.ItemRoster.AddToCounts(item2, num7);
+								num3 += num7;
+							}
+						}
+					}
+				}
+				if (num3 > 0)
+				{
+					num2++;
+					num += num3;
+					Main.LogVerbose($"  {settlement.Name}: +{num3} items from bound villages");
+				}
+			}
+			Main.Log($"Town inventory seeding complete: {num} items across {num2} towns");
+		}
+		catch (Exception arg)
+		{
+			Main.Log($"ERROR seeding town inventories: {arg}");
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\SecondaryProductionHelper.cs =====
+using System.Collections.Generic;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Models;
+
+public static class SecondaryProductionHelper
+{
+	public static string GetDisplayName(SecondaryProductionType type)
+	{
+		return type switch
+		{
+			SecondaryProductionType.Orchard => new TextObject("{=HAP_Orchard}Orchard").ToString(), 
+			SecondaryProductionType.Garden => new TextObject("{=HAP_Garden}Garden").ToString(), 
+			SecondaryProductionType.Poultry => new TextObject("{=HAP_Poultry}Poultry").ToString(), 
+			SecondaryProductionType.Farmland => new TextObject("{=HAP_Farmland}Farmland").ToString(), 
+			SecondaryProductionType.Livestock => new TextObject("{=HAP_Pasture}Pasture").ToString(), 
+			SecondaryProductionType.Forester => new TextObject("{=HAP_Forester}Forester").ToString(), 
+			SecondaryProductionType.Apiary => new TextObject("{=HAP_Apiary}Apiary").ToString(), 
+			SecondaryProductionType.Herbalist => new TextObject("{=HAP_Herbalist}Herbalist").ToString(), 
+			SecondaryProductionType.Quarry => new TextObject("{=HAP_Quarry}Quarry").ToString(), 
+			SecondaryProductionType.CharcoalBurner => new TextObject("{=HAP_CharcoalBurner}Charcoal Burner").ToString(), 
+			SecondaryProductionType.Paddock => new TextObject("{=HAP_Paddock}Paddock").ToString(), 
+			_ => string.Empty, 
+		};
+	}
+
+	public static string GetTypeName(SecondaryProductionType type)
+	{
+		return type switch
+		{
+			SecondaryProductionType.Orchard => "Orchard", 
+			SecondaryProductionType.Garden => "Garden", 
+			SecondaryProductionType.Poultry => "Poultry", 
+			SecondaryProductionType.Farmland => "Farmland", 
+			SecondaryProductionType.Livestock => "Pasture", 
+			SecondaryProductionType.Forester => "Forester", 
+			SecondaryProductionType.Apiary => "Apiary", 
+			SecondaryProductionType.Herbalist => "Herbalist", 
+			SecondaryProductionType.Quarry => "Quarry", 
+			SecondaryProductionType.CharcoalBurner => "Charcoal Burner", 
+			SecondaryProductionType.Paddock => "Paddock", 
+			_ => "None", 
+		};
+	}
+
+	public static HashSet<string> GetProductionItems(SecondaryProductionType type)
+	{
+		return type switch
+		{
+			SecondaryProductionType.Orchard => new HashSet<string> { "apple_fruit", "orange_fruit", "melon_fruit", "black_pepper" }, 
+			SecondaryProductionType.Garden => new HashSet<string> { "cabbage_vegetable", "leek_vegetable", "carrot_vegetable", "black_pepper" }, 
+			SecondaryProductionType.Poultry => new HashSet<string> { "chicken_product", "goose_product", "egg" }, 
+			SecondaryProductionType.Farmland => new HashSet<string> { "grain" }, 
+			SecondaryProductionType.Livestock => new HashSet<string> { "cow", "sheep", "hog", "straw" }, 
+			SecondaryProductionType.Forester => new HashSet<string> { "hardwood", "nuts", "mushroom_vegetable", "hare" }, 
+			SecondaryProductionType.Apiary => new HashSet<string> { "honey" }, 
+			SecondaryProductionType.Herbalist => new HashSet<string> { "herbs", "black_pepper" }, 
+			SecondaryProductionType.Quarry => new HashSet<string> { "cut_stone" }, 
+			SecondaryProductionType.CharcoalBurner => new HashSet<string> { "charcoal" }, 
+			SecondaryProductionType.Paddock => new HashSet<string> { "sumpter_horse", "mule", "saddle_horse", "old_horse", "pack_camel" }, 
+			_ => new HashSet<string>(), 
+		};
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\SecondaryProductionType.cs =====
+namespace HarvestAndProduction.Models;
+
+public enum SecondaryProductionType
+{
+	None,
+	Orchard,
+	Garden,
+	Poultry,
+	Farmland,
+	Livestock,
+	Forester,
+	Apiary,
+	Herbalist,
+	Quarry,
+	CharcoalBurner,
+	Paddock
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\VillageProductionModel.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using Helpers;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Issues;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Buildings;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Models;
+
+public class VillageProductionModel : DefaultVillageProductionCalculatorModel
+{
+	public enum ClimateZone
+	{
+		Tropical,
+		Desert,
+		Temperate,
+		Cold
+	}
+
+	public class ExternalTooltipEntry
+	{
+		public string Label;
+
+		public float Factor;
+	}
+
+	public delegate List<ExternalTooltipEntry> ExternalTooltipProvider(Village village);
+
+	public class ItemEfficiencyInfo
+	{
+		public string ItemId;
+
+		public string ItemName;
+
+		public float ClimateMultiplier;
+
+		public float SeasonalMultiplier;
+
+		public float HearthMultiplier;
+
+		public float McmMultiplier;
+
+		public float IssueMultiplier;
+
+		public float ScalingFactor;
+
+		public float PerkAndBuildingBonus;
+
+		public float TotalEfficiency => ClimateMultiplier * SeasonalMultiplier * HearthMultiplier * McmMultiplier * IssueMultiplier * ScalingFactor * (1f + PerkAndBuildingBonus);
+	}
+
+	public class VillageEfficiencyBreakdown
+	{
+		public ClimateZone Climate;
+
+		public CampaignTime.Seasons Season;
+
+		public float HearthMultiplier;
+
+		public bool IsHearthCapped;
+
+		public float McmMultiplier;
+
+		public float IssueMultiplier;
+
+		public float PerkAndBuildingBonus;
+
+		public float AverageEfficiency;
+
+		public List<ItemEfficiencyInfo> Items = new List<ItemEfficiencyInfo>();
+
+		public List<IssueEffectInfo> IssueEffects = new List<IssueEffectInfo>();
+	}
+
+	public class IssueEffectInfo
+	{
+		public string IssueName;
+
+		public float Multiplier;
+
+		public List<string> AffectedItemNames = new List<string>();
+	}
+
+	public const float TROPICAL_LATITUDE_MAX = 0.32f;
+
+	public const float COLD_LATITUDE_MIN = 0.52f;
+
+	public const float MOUNTAIN_ALTITUDE_THRESHOLD = 16f;
+
+	public const float TROPICAL_SEASONAL_FACTOR = 0.75f;
+
+	public const float DESERT_SEASONAL_FACTOR = 0.65f;
+
+	public const float TEMPERATE_SEASONAL_FACTOR = 1f;
+
+	public const float COLD_SEASONAL_FACTOR = 1.25f;
+
+	private static Dictionary<Village, ClimateZone> _climateCache = new Dictionary<Village, ClimateZone>();
+
+	private static bool _navalDLCInitialized = false;
+
+	private static PerkObject _blessingsOfTheSeaPerk = null;
+
+	private static PerkObject _portAuthorityPerk = null;
+
+	private static PolicyObject _maritimeWealEdictPolicy = null;
+
+	private static PolicyObject _bolsterTheFyrdPolicy = null;
+
+	private static bool _itemsInitialized = false;
+
+	private static readonly Dictionary<string, ItemObject> _customItems = new Dictionary<string, ItemObject>();
+
+	internal static readonly HashSet<string> _customItemIds = new HashSet<string>
+	{
+		"chicken_product", "goose_product", "crab", "lobster", "hare", "cabbage_vegetable", "leek_vegetable", "carrot_vegetable", "mushroom_vegetable", "apple_fruit",
+		"orange_fruit", "melon_fruit", "milk", "heavy_cream", "egg", "honey", "nuts", "black_pepper", "herbs", "straw",
+		"charcoal", "cut_stone", "gold_ore"
+	};
+
+	private static readonly HashSet<string> _nativeItemIds = new HashSet<string>
+	{
+		"grain", "butter", "cheese", "cow", "sheep", "hog", "fish", "grape", "olives", "date_fruit",
+		"wool", "fur", "hardwood", "clay", "salt", "iron", "silver", "walrus_tusk", "whale_oil", "flax",
+		"cotton", "empire_horse", "t2_empire_horse", "t3_empire_horse", "vlandia_horse", "t2_vlandia_horse", "t3_vlandia_horse", "battania_horse", "t2_battania_horse", "t3_battania_horse",
+		"sturgia_horse", "t2_sturgia_horse", "t3_sturgia_horse", "khuzait_horse", "t2_khuzait_horse", "t3_khuzait_horse", "aserai_horse", "t2_aserai_horse", "t3_aserai_horse", "camel",
+		"war_camel", "pack_camel", "sumpter_horse", "mule", "saddle_horse", "old_horse", "hunter", "charger"
+	};
+
+	private static readonly Dictionary<string, HashSet<string>> _nativeProductionRules = new Dictionary<string, HashSet<string>>
+	{
+		["grain"] = new HashSet<string> { "wheat_farm" },
+		["butter"] = new HashSet<string> { "cattle_farm", "sheep_farm" },
+		["cheese"] = new HashSet<string> { "cattle_farm", "sheep_farm" },
+		["cow"] = new HashSet<string> { "cattle_farm" },
+		["sheep"] = new HashSet<string> { "sheep_farm" },
+		["hog"] = new HashSet<string> { "swine_farm" },
+		["fish"] = new HashSet<string> { "fisherman", "walrus_hunter", "whaler" },
+		["wool"] = new HashSet<string> { "sheep_farm" },
+		["fur"] = new HashSet<string> { "trapper" },
+		["grape"] = new HashSet<string> { "vineyard" },
+		["date_fruit"] = new HashSet<string> { "date_farm" },
+		["olives"] = new HashSet<string> { "olive_trees" },
+		["flax"] = new HashSet<string> { "flax_plant" },
+		["cotton"] = new HashSet<string> { "silk_plant" },
+		["hardwood"] = new HashSet<string> { "lumberjack" },
+		["clay"] = new HashSet<string> { "clay_mine" },
+		["salt"] = new HashSet<string> { "salt_mine" },
+		["iron"] = new HashSet<string> { "iron_mine" },
+		["silver"] = new HashSet<string> { "silver_mine" },
+		["walrus_tusk"] = new HashSet<string> { "walrus_hunter" },
+		["whale_oil"] = new HashSet<string> { "whaler" },
+		["empire_horse"] = new HashSet<string> { "europe_horse_ranch" },
+		["t2_empire_horse"] = new HashSet<string> { "europe_horse_ranch" },
+		["t3_empire_horse"] = new HashSet<string> { "europe_horse_ranch" },
+		["vlandia_horse"] = new HashSet<string> { "vlandian_horse_ranch" },
+		["t2_vlandia_horse"] = new HashSet<string> { "vlandian_horse_ranch" },
+		["t3_vlandia_horse"] = new HashSet<string> { "vlandian_horse_ranch" },
+		["battania_horse"] = new HashSet<string> { "battanian_hor

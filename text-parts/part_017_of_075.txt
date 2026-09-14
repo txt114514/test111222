@@ -1,0 +1,408 @@
+﻿PART 17/75
+ject2, -num2);
+				mobileParty.ItemRoster.AddToCounts(itemObject, num2 * num);
+				int num4 = itemNumber - num2;
+				int num5 = MBRandom.RoundRandomized((float)itemNumber * 0.1f);
+				int num6 = 120 - num4;
+				if (num5 > num6)
+				{
+					num5 = num6;
+				}
+				if (num5 > animalCountInVillage)
+				{
+					num5 = animalCountInVillage;
+				}
+				if (num5 > 0)
+				{
+					village.Owner.ItemRoster.AddToCounts(itemObject2, -num5);
+					mobileParty.ItemRoster.AddToCounts(itemObject2, num5);
+					num4 += num5;
+				}
+				component.AnimalCount = num4;
+				bool flag = false;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in ProcessHerdTurnover: " + ex.Message);
+		}
+	}
+
+	private void OnDropOff(HerderPartyComponent component)
+	{
+		MobileParty mobileParty = component.MobileParty;
+		Village village = component.Village;
+		if (mobileParty == null || village == null)
+		{
+			return;
+		}
+		string text = ((component.AnimalType == HerderPartyComponent.HerdType.Cow) ? "cow" : ((component.AnimalType == HerderPartyComponent.HerdType.Hog) ? "hog" : "sheep"));
+		List<ItemRosterElement> list = new List<ItemRosterElement>();
+		for (int num = mobileParty.ItemRoster.Count - 1; num >= 0; num--)
+		{
+			ItemRosterElement elementCopyAtIndex = mobileParty.ItemRoster.GetElementCopyAtIndex(num);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && !(item.StringId == text))
+			{
+				list.Add(elementCopyAtIndex);
+				village.Settlement.ItemRoster.AddToCounts(item, elementCopyAtIndex.Amount);
+				mobileParty.ItemRoster.AddToCounts(item, -elementCopyAtIndex.Amount);
+				bool flag = false;
+			}
+		}
+		FireSuppliedNotifications(mobileParty, village.Settlement, list);
+		DepositTradeGold(mobileParty, village);
+		TryReinforceParty(component);
+	}
+
+	private void TryReinforceParty(HerderPartyComponent component)
+	{
+		Village village = component.Village;
+		if (village == null || component.Village.Settlement.Party.MapEvent != null || village.VillageState != Village.VillageStates.Normal)
+		{
+			return;
+		}
+		PartyTemplateObject partyTemplateObject = component.Village.Settlement.Culture?.VillagerPartyTemplate;
+		if (partyTemplateObject == null || partyTemplateObject.Stacks.Count == 0)
+		{
+			return;
+		}
+		int num = Math.Min(35, Math.Max(18, (int)(village.Hearth / 40f) + 12));
+		int num2 = num - component.MobileParty.MemberRoster.TotalManCount;
+		if (num2 > 0)
+		{
+			if (num2 > (int)village.Hearth)
+			{
+				num2 = (int)village.Hearth;
+			}
+			if (num2 > 0)
+			{
+				village.Hearth -= (num2 + 1) / 2;
+				CharacterObject character = partyTemplateObject.Stacks.GetRandomElement().Character;
+				component.MobileParty.MemberRoster.AddToCounts(character, num2);
+				MilitiaGuardHelper.EnsureMilitiaGuards(component.MobileParty, village);
+			}
+		}
+	}
+
+	private float GetEndHerdingChance(float herdingHours)
+	{
+		if (herdingHours < 6f)
+		{
+			return 0f;
+		}
+		if (herdingHours > 10f)
+		{
+			return 1f;
+		}
+		return (herdingHours - 6f) / 4f;
+	}
+
+	private float GetEndRoamingChance(HerderPartyComponent component)
+	{
+		MobileParty mobileParty = component.MobileParty;
+		if (mobileParty.TotalWeightCarried >= (float)mobileParty.InventoryCapacity)
+		{
+			return 1f;
+		}
+		float elapsedDaysUntilNow = component.RoamingStartTime.ElapsedDaysUntilNow;
+		if (elapsedDaysUntilNow < 1f)
+		{
+			return 0f;
+		}
+		if (elapsedDaysUntilNow > 3f)
+		{
+			return 1f;
+		}
+		int num = 0;
+		string text = ((component.AnimalType == HerderPartyComponent.HerdType.Cow) ? "cow" : ((component.AnimalType == HerderPartyComponent.HerdType.Hog) ? "hog" : "sheep"));
+		for (int i = 0; i < mobileParty.ItemRoster.Count; i++)
+		{
+			ItemObject itemAtIndex = mobileParty.ItemRoster.GetItemAtIndex(i);
+			if (itemAtIndex != null && itemAtIndex.StringId != text)
+			{
+				num += mobileParty.ItemRoster.GetElementNumber(i);
+			}
+		}
+		if (num < 3)
+		{
+			return 0f;
+		}
+		int num2 = MathF.Round((3f - elapsedDaysUntilNow) / 2f * 4f);
+		return 1f / (float)(num2 + 1);
+	}
+
+	private int GetAnimalCountInVillage(Village village, string animalId)
+	{
+		int num = 0;
+		ItemRoster itemRoster = village.Owner.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemObject itemAtIndex = itemRoster.GetItemAtIndex(i);
+			if (itemAtIndex != null && itemAtIndex.StringId == animalId)
+			{
+				num += itemRoster.GetElementNumber(i);
+				break;
+			}
+		}
+		return num;
+	}
+
+	public static void OnAnimalsRemovedFromHerd(HerderPartyComponent component)
+	{
+		if (component?.MobileParty == null)
+		{
+			return;
+		}
+		string text = ((component.AnimalType == HerderPartyComponent.HerdType.Cow) ? "cow" : ((component.AnimalType == HerderPartyComponent.HerdType.Hog) ? "hog" : "sheep"));
+		int num = 0;
+		MobileParty mobileParty = component.MobileParty;
+		for (int i = 0; i < mobileParty.ItemRoster.Count; i++)
+		{
+			ItemObject itemAtIndex = mobileParty.ItemRoster.GetItemAtIndex(i);
+			if (itemAtIndex != null && itemAtIndex.StringId == text)
+			{
+				num = mobileParty.ItemRoster.GetElementNumber(i);
+				break;
+			}
+		}
+		component.AnimalCount = num;
+		if (num < 20)
+		{
+			component.State = HerderPartyComponent.HerderState.ReturningToVillage;
+			component.HerdingStartTime = CampaignTime.Never;
+			CampaignVec2 gatePosition = component.Village.Settlement.GatePosition;
+			mobileParty.SetMoveGoToPoint(gatePosition, MobileParty.NavigationType.Default);
+		}
+	}
+
+	private void FireSuppliedNotifications(MobileParty party, Settlement villageSettlement, List<ItemRosterElement> items)
+	{
+		if (items == null || items.Count == 0 || villageSettlement == null || party == null)
+		{
+			return;
+		}
+		try
+		{
+			foreach (ItemRosterElement item in items)
+			{
+				if (item.EquipmentElement.Item != null && item.Amount > 0)
+				{
+					CampaignEventDispatcher.Instance.OnItemSold(villageSettlement.Party, party.Party, item, item.Amount, villageSettlement);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in HerderBehavior.FireSuppliedNotifications: " + ex.Message);
+		}
+	}
+
+	private void DepositTradeGold(MobileParty party, Village village)
+	{
+		if (party == null || village == null)
+		{
+			return;
+		}
+		int partyTradeGold = party.PartyTradeGold;
+		if (partyTradeGold <= 0)
+		{
+			return;
+		}
+		try
+		{
+			float villageTaxRatio = Campaign.Current.Models.SettlementTaxModel.GetVillageTaxRatio(village);
+			int num = MBRandom.RoundRandomized((float)partyTradeGold * villageTaxRatio);
+			if (num > 0)
+			{
+				village.TradeTaxAccumulated += num;
+			}
+			int num2 = partyTradeGold - num;
+			if (num2 > 0)
+			{
+				village.ChangeGold(num2);
+			}
+			party.PartyTradeGold = 0;
+			bool flag = false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in HerderBehavior.DepositTradeGold: " + ex.Message);
+		}
+	}
+
+	private float GetClimateProductionFactor(Village village)
+	{
+		if (village == null)
+		{
+			return 1f;
+		}
+		try
+		{
+			return VillageProductionModel.GetClimateZoneForVillage(village) switch
+			{
+				VillageProductionModel.ClimateZone.Desert => 0.5f, 
+				VillageProductionModel.ClimateZone.Tropical => 0.75f, 
+				VillageProductionModel.ClimateZone.Cold => 0.85f, 
+				_ => 1f, 
+			};
+		}
+		catch
+		{
+			return 1f;
+		}
+	}
+
+	private bool IsSnowCovered(Settlement settlement)
+	{
+		try
+		{
+			if (Campaign.Current?.Models?.MapWeatherModel == null)
+			{
+				return false;
+			}
+			Campaign.Current.Models.MapWeatherModel.GetSnowAndRainDataForPosition(settlement.GetPosition2D, CampaignTime.Now, out var snowValue, out var _);
+			return snowValue > 0.55f;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private bool ShouldDisbandNow(HerderPartyComponent component)
+	{
+		Village village = component.Village;
+		if (village == null)
+		{
+			return true;
+		}
+		if (village.Hearth < 300f)
+		{
+			return true;
+		}
+		if (village.Bound?.Town != null && village.Bound.Town.Security < 60f)
+		{
+			return true;
+		}
+		if (village.VillageState != Village.VillageStates.Normal)
+		{
+			return true;
+		}
+		if (IsSnowCovered(village.Settlement))
+		{
+			return true;
+		}
+		if (CampaignTime.Now.GetSeasonOfYear == CampaignTime.Seasons.Winter)
+		{
+			return true;
+		}
+		if (component.OriginalClan != village.Settlement.OwnerClan)
+		{
+			return true;
+		}
+		if (component.AnimalCount < 20)
+		{
+			return true;
+		}
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\HerderPartyDialogueBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using HarvestAndProduction.PartyComponents;
+using Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.Encounters;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class HerderPartyDialogueBehavior : CampaignBehaviorBase
+{
+	private int _cachedBribeGold = 0;
+
+	private ItemRoster _cachedBribeItems = null;
+
+	private const int INTERACTION_NONE = 0;
+
+	private const int INTERACTION_FRIENDLY = 1;
+
+	private const int INTERACTION_HOSTILE = 2;
+
+	private Dictionary<MobileParty, int> _interactedHerders = new Dictionary<MobileParty, int>();
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+		CampaignEvents.MobilePartyDestroyed.AddNonSerializedListener(this, OnMobilePartyDestroyed);
+	}
+
+	private void OnMobilePartyDestroyed(MobileParty party, PartyBase destroyer)
+	{
+		_interactedHerders.Remove(party);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		_interactedHerders.Clear();
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		AddDialogues(starter);
+	}
+
+	private void AddDialogues(CampaignGameStarter starter)
+	{
+		starter.AddDialogLine("herder_friendly_start_criminal", "start", "herder_friendly_talk", "{=HAP_HerderGreetCriminal}You... we've heard about you. Please, {PLAYER_ADDRESS}, we're just herders from {SETTLEMENT_NAME}. We want no trouble.[rf:idle_angry][ib:nervous]", herder_criminal_first_encounter_condition, null, 111);
+		starter.AddDialogLine("herder_friendly_start_no_goods", "start", "herder_friendly_talk", "{=HAP_HerderGreetingNoGoods}Greetings, {PLAYER_ADDRESS}. We're herders from {SETTLEMENT_NAME}, tending our {ANIMAL_TYPE} in the pastures. We haven't gathered any produce yet.", herder_friendly_no_goods_condition, null, 111);
+		starter.AddDialogLine("herder_friendly_start_has_goods", "start", "herder_friendly_talk", "{=HAP_HerderGreetingHasGoods}Hail, {PLAYER_ADDRESS}! We're herders from {SETTLEMENT_NAME}. The {ANIMAL_TYPE} have been producing well — we've got fresh milk and goods to show for it.", herder_friendly_has_goods_condition, null, 111);
+		starter.AddDialogLine("herder_friendly_return", "start", "herder_friendly_talk", "{=HAP_HerderFriendlyReturn}Ah, it's you again, {PLAYER_ADDRESS}. What can we do for you?", herder_friendly_return_condition, null, 111);
+		starter.AddDialogLine("herder_hostile_return", "start", "herder_friendly_talk", "{=HAP_HerderHostileReturn}You again? Haven't you taken enough from us?[rf:idle_angry][ib:nervous]", herder_hostile_return_condition, null, 111);
+		starter.AddDialogLine("herder_friendly_pretalk", "herder_friendly_pretalk", "herder_friendly_talk", "{=HAP_HerderPretalk}Aye, what else can we do for you?", herder_pretalk_condition, null);
+		starter.AddPlayerLine("herder_friendly_buy", "herder_friendly_talk", "herder_player_trade", "{=HAP_HerderBuyOption}I'd like to buy some of your goods — or some of the livestock.", herder_has_goods_or_animals_condition, null);
+		starter.AddPlayerLine("herder_friendly_demand_has_goods", "herder_friendly_talk", "herder_friendly_demand_response", "{=HAP_HerderDemandGoods}Hand over your goods and livestock. Now.", herder_demand_has_goods_condition, null, 91);
+		starter.AddPlayerLine("herder_friendly_demand_no_goods", "herder_friendly_talk", "herder_friendly_demand_response", "{=HAP_HerderDemandNoGoods}Hand over your gold and anything of value. Now.", herder_demand_no_goods_condition, null, 90);
+		starter.AddPlayerLine("herder_friendly_leave", "herder_friendly_talk", "close_window", "{=HAP_HerderLeave}Safe travels and good herding.", null, herder_leave_on_consequence, 80);
+		starter.AddDialogLine("herder_player_trade_screen", "herder_player_trade", "herder_friendly_pretalk", "{=HAP_HerderTradeScreen}Sure, have a look at what we've got. We can part with some livestock too if the price is right.[rf:convo_relaxed_happy][ib:demure]", herder_open_trade_screen_condition, null);
+		starter.AddDialogLine("herder_friendly_demand_bribe", "herder_friendly_demand_response", "herder_friendly_bribe_options", "{=HAP_HerderBribeResponse}Wait, wait! We're just herders! Here, take {BRIBE_OFFER} and let us go. Please![rf:idle_angry][ib:nervous]", herder_bribe_feasible_condition, null, 110);
+		starter.AddDialogLine("herder_friendly_demand_fight", "herder_friendly_demand_response", "herder_friendly_fight_options", "{=HAP_HerderFightResponse}We may be simple herders, but we'll not hand over our herd without a fight![rf:idle_angry][ib:aggressive]", herder_will_fight_condition, null);
+		starter.AddDialogLine("herder_friendly_demand_surrender", "herder_friendly_demand_response", "herder_friendly_surrender_options", "{=HAP_HerderSurrenderResponse}Please, we're just herders! Take what you want, but spare our lives![rf:idle_angry][ib:nervous]", herder_will_surrender_condition, null);
+		starter.AddPlayerLine("herder_friendly_fight_attack", "herder_friendly_fight_options", "close_window", "{=HAP_HerderAttack}So be it. Attack!", null, herder_fight_on_consequence, 100, herder_war_warning_clickable);
+		starter.AddPlayerLine("herder_friendly_fight_backdown", "herder_friendly_fight_options", "herder_friendly_pretalk", "{=HAP_HerderBackDown}Perhaps I was too hasty. Forget I said anything.", null, null, 80);
+		starter.AddPlayerLine("herder_friendly_surrender_take_goods", "herder_friendly_surrender_options", "herder_friendly_goods_taken", "{=HAP_HerderTakeGoods}Just the milk and wool. Get out of here.", herder_has_goods_condition, herder_take_goods_on_consequence, 100, herder_crime_warning_clickable);
+		starter.AddPlayerLine("herder_friendly_surrender_prisoners", "herder_friendly_surrender_options", "herder_friendly_prisoner_warning", "{=HAP_HerderTakePrisoners}You're my prisoners now.", null, null, 90, herder_war_warning_clickable);
+		starter.AddPlayerLine("herder_friendly_surrender_attack", "herder_friendly_surrender_options", "close_window", "{=HAP_HerderAttackSurrendered}Don't bother pleading. At them, lads!", null, herder_fight_on_consequence, 85, herder_war_warning_clickable);
+		starter.AddPlayerLine("herder_friendly_surrender_let_go", "herder_friendly_surrender_options", "close_window", "{=HAP_HerderLetGo}Fine. Get out of my sight.", null, herder_leave_on_consequence, 80);
+		starter.AddPlayerLine("herder_friendly_bribe_accept", "herder_friendly_bribe_options", "herder_friendly_bribe_taken", "{=HAP_HerderBribeAccept}All right. Hand it over and get out of here.", null, herder_accept_bribe_on_consequence, 100, herder_crime_warning_clickable);
+		starter.AddPlayerLine("herder_friendly_bribe_want_all", "herder_friendly_bribe_options", "herder_friendly_demand_escalate", "{=HAP_HerderBribeWantAll}That's not enough. I want everything.", null, null, 90);
+		starter.AddPlayerLine("herder_friendly_bribe_nevermind", "herder_friendly_bribe_options", "herder_friendly_pretalk", "{=HAP_HerderBribeNevermind}Fine. Keep your scraps.", null, null, 80);
+		starter.AddDialogLine("herder_friendly_escalate_fight", "herder_friendly_demand_escalate", "herder_friendly_fight_options", "{=HAP_HerderEscalateFight}Everything? You'll have to fight us for it![rf:idle_angry][ib:aggressive]", herder_will_fight_condition, null);
+		starter.AddDialogLine("herder_friendly_escalate_surrender", "herder_friendly_demand_escalate", "herder_friendly_surrender_options", "{=HAP_HerderEscalateSurrender}Please... take it all then. Just don't hurt us![rf:idle_angry][ib:nervous]", herder_will_surrender_condition, null);
+		starter.AddDialogLine("herder_friendly_bribe_taken_response", "herder_friendly_bribe_taken", "close_window", "{=HAP_HerderBribeTakenResponse}Thank you... we'll be on our way.", null, herder_leave_on_consequence);
+		starter.AddDialogLine("herder_friendly_goods_taken_response", "herder_friendly_goods_taken", "close_window", "{=HAP_HerderGoodsTakenResponse}Thank you for sparing us... We'll remember this.", null, herder_leave_on_consequence);
+		starter.AddDialogLine("herder_friendly_prisoner_warning_response", "herder_friendly_prisoner_warning", "herder_friendly_prisoner_confirm", "{=HAP_HerderPrisonerWarning}The {FACTION_NAME} won't stand for this! You're making a grave mistake![rf:idle_angry][ib:nervous]", herder_set_faction_name_condition, null);
+		starter.AddPlayerLine("herder_friendly_prisoner_confirm_yes", "herder_friendly_prisoner_confirm", "close_window", "{=HAP_HerderPrisonerConfirm}Enough talking. Now march.", null, herder_take_prisoners_on_consequence);
+		starter.AddPlayerLine("herder_friendly_prisoner_confirm_no", "herder_friendly_prisoner_confirm", "close_window", "{=HAP_HerderPrisonerCancel}Never mind. Go on your way.", null, herder_leave_on_consequence, 80);
+		starter.AddDialogLine("herder_enemy_start", "start", "herder_enemy_talk", "{=HAP_HerderEnemyGreeting}What do you want? We're just herders from {SETTLEMENT_NAME}. We want no part of your war.[rf:idle_angry][ib:nervous]", herder_enemy_condition, null, 111);
+		starter.AddPlayerLine("herder_enemy_attack", "herder_enemy_talk", "close_window", "{=HAP_HerderEnemyAttack}Your people chose war. Now face the consequences!", null, herder_fight_on_consequence);
+		starter.AddPlayerLine("herder_enemy_demand", "herder_enemy_talk", "herder_enemy_demand_response", "{=HAP_HerderEnemyDemand}Surrender your livestock and yourselves. Resist and you die.", null, null, 90);
+		starter.AddPlayerLine("herder_enemy_leave", "herder_enemy_talk", "close_window", "{=HAP_HerderEnemyLeave}I have no quarrel with shepherds. Be gone.", null, herder_leave_on_consequence, 80);
+		starter.AddDialogLine("herder_enemy_demand_fight", "herder_enemy_demand_response", "herder_enemy_fight_options", "{=HAP_HerderEnemyFight}We're not warriors, but we won't go down without a fight![rf:idle_angry][ib:aggressive]", herder_will_fight_condition, null);
+		starter.AddDialogLine("herder_enemy_demand_surrender", "herder_enemy_demand_response", "herder_enemy_surrender_options", "{=HAP_HerderEnemySurrender}We can't fight you. We surrender. Please, have mercy![rf:idle_angry][ib:nervous]", herder_will_surrender_condition, null);
+		starter.AddPlayerLine("herder_enemy_fight_attack", "herder_enemy_fight_options", "close_window", "{=HAP_HerderAttack}So be it. Attack!", null, herder_fight_on_consequence);
+		starter.AddPlayerLine("herder_enemy_fight_leave", "herder_enemy_fight_options", "close_window", "{=HAP_HerderEnemyFightLeave}You're not worth my time. Be gone.", null, herder_leave_on_consequence, 80);
+		starter.AddPlayerLine("herder_enemy_surrender_take_goods", "herder_enemy_surrender_options", "herder_enemy_goods_taken", "{=HAP_HerderEnemyTakeGoods}Just the livestock and produce. Get out of here.", herder_has_goods_condition, herder_take_goods_on_consequence);
+		starter.AddPlayerLine("herder_enemy_surrender_prisoners", "herder_enemy_surrender_options", "close_window", "{=HAP_HerderEnemyTakePrisoners}You're prisoners of war now. March.", null, herder_take_priso

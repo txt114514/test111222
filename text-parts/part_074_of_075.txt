@@ -1,0 +1,810 @@
+﻿PART 74/75
+rdinalIgnoreCase)
+	{
+		["grain"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "bakery", "brewery", "studfarm" },
+		["egg"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "bakery" },
+		["honey"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "brewery" },
+		["grape"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "wine_press" },
+		["olives"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "olive_press" }
+	};
+
+	private static readonly Dictionary<string, ProtectionContext> _contextRestrictions = new Dictionary<string, ProtectionContext>(StringComparer.OrdinalIgnoreCase);
+
+	private static Dictionary<string, HashSet<string>> _workshopCache = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+	private static bool _initialized = false;
+
+	public static void Initialize()
+	{
+		if (!_initialized)
+		{
+			CampaignEvents.WorkshopTypeChangedEvent.AddNonSerializedListener(new RawMaterialRegistryListener(), OnWorkshopTypeChanged);
+			CampaignEvents.DailyTickEvent.AddNonSerializedListener(new RawMaterialRegistryListener(), OnDailyTick);
+			_initialized = true;
+			_workshopCache.Clear();
+			Main.Log("RawMaterialRegistry initialized.");
+		}
+	}
+
+	public static void Reset()
+	{
+		_workshopCache.Clear();
+		_initialized = false;
+	}
+
+	private static void OnWorkshopTypeChanged(Workshop workshop)
+	{
+		if (workshop?.Settlement != null)
+		{
+			string stringId = workshop.Settlement.StringId;
+			_workshopCache.Remove(stringId);
+			bool flag = false;
+		}
+	}
+
+	private static void OnDailyTick()
+	{
+		_workshopCache.Clear();
+	}
+
+	public static bool IsRawMaterial(string itemId)
+	{
+		return _materialToWorkshops.ContainsKey(itemId);
+	}
+
+	public static bool IsProtected(string itemId, Settlement settlement, ProtectionContext context)
+	{
+		if (!_materialToWorkshops.TryGetValue(itemId, out var value))
+		{
+			return false;
+		}
+		if (_contextRestrictions.TryGetValue(itemId, out var value2) && (value2 & context) == 0)
+		{
+			return false;
+		}
+		if (settlement == null)
+		{
+			return false;
+		}
+		HashSet<string> workshopTypes = GetWorkshopTypes(settlement);
+		if (!value.Overlaps(workshopTypes))
+		{
+			return false;
+		}
+		if (CountItemInMarket(settlement, itemId) >= 50)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	public static bool IsProtectedForCastle(string itemId, Town castle, Settlement tradeBoundTown, ProtectionContext context)
+	{
+		if (castle != null && FoodSystemConstants.IsEmergencyMode(castle))
+		{
+			return false;
+		}
+		if (!_materialToWorkshops.TryGetValue(itemId, out var value))
+		{
+			return false;
+		}
+		if (_contextRestrictions.TryGetValue(itemId, out var value2) && (value2 & context) == 0)
+		{
+			return false;
+		}
+		if (tradeBoundTown == null)
+		{
+			return false;
+		}
+		if (tradeBoundTown.IsUnderSiege)
+		{
+			return false;
+		}
+		if (castle?.Owner?.Settlement?.MapFaction != tradeBoundTown.MapFaction)
+		{
+			return false;
+		}
+		HashSet<string> workshopTypes = GetWorkshopTypes(tradeBoundTown);
+		if (!value.Overlaps(workshopTypes))
+		{
+			return false;
+		}
+		if (CountItemInMarket(tradeBoundTown, itemId) >= 50)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private static int CountItemInMarket(Settlement settlement, string itemId)
+	{
+		if (settlement?.ItemRoster == null)
+		{
+			return 0;
+		}
+		ItemRoster itemRoster = settlement.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.EquipmentElement.Item != null && string.Equals(elementCopyAtIndex.EquipmentElement.Item.StringId, itemId, StringComparison.OrdinalIgnoreCase))
+			{
+				return elementCopyAtIndex.Amount;
+			}
+		}
+		return 0;
+	}
+
+	private static HashSet<string> GetWorkshopTypes(Settlement settlement)
+	{
+		string stringId = settlement.StringId;
+		if (_workshopCache.TryGetValue(stringId, out var value))
+		{
+			return value;
+		}
+		HashSet<string> hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		if (settlement.Town != null)
+		{
+			Workshop[] workshops = settlement.Town.Workshops;
+			foreach (Workshop workshop in workshops)
+			{
+				if (workshop?.WorkshopType != null && !workshop.WorkshopType.IsHidden)
+				{
+					hashSet.Add(workshop.WorkshopType.StringId);
+				}
+			}
+		}
+		_workshopCache[stringId] = hashSet;
+		bool flag = false;
+		return hashSet;
+	}
+
+	public static void InvalidateSettlement(Settlement settlement)
+	{
+		if (settlement != null)
+		{
+			_workshopCache.Remove(settlement.StringId);
+		}
+	}
+
+	public static void InvalidateAll()
+	{
+		_workshopCache.Clear();
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\ReservedItemService.cs =====
+using System.Collections.Generic;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction;
+
+public static class ReservedItemService
+{
+	private static HashSet<string> _reservedItemIds = new HashSet<string>();
+
+	private static List<string> _reservedItemIdList = new List<string>();
+
+	public static bool CanReserve(ItemObject item)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		if (item.IsFood)
+		{
+			return true;
+		}
+		if (item.HasHorseComponent && item.HorseComponent.IsLiveStock)
+		{
+			return true;
+		}
+		return false;
+	}
+
+	public static bool IsReserved(ItemObject item)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		return _reservedItemIds.Contains(item.StringId);
+	}
+
+	public static void Toggle(ItemObject item)
+	{
+		if (item != null && CanReserve(item) && !_reservedItemIds.Add(item.StringId))
+		{
+			_reservedItemIds.Remove(item.StringId);
+		}
+	}
+
+	public static bool ShouldUseReservedFood(MobileParty party)
+	{
+		if (party != MobileParty.MainParty)
+		{
+			return false;
+		}
+		return GetUnreservedFoodCount(party) <= 0;
+	}
+
+	public static int GetUnreservedFoodCount(MobileParty party)
+	{
+		if (party == null || party.ItemRoster == null)
+		{
+			return 0;
+		}
+		if (party != MobileParty.MainParty)
+		{
+			return GetActualFoodCountFromRoster(party.ItemRoster);
+		}
+		int num = 0;
+		ItemRoster itemRoster = party.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemObject itemAtIndex = itemRoster.GetItemAtIndex(i);
+			if (itemAtIndex != null && itemAtIndex.IsFood && !IsReserved(itemAtIndex))
+			{
+				num += itemRoster.GetElementNumber(i);
+			}
+		}
+		return num;
+	}
+
+	private static int GetActualFoodCountFromRoster(ItemRoster roster)
+	{
+		int num = 0;
+		for (int i = 0; i < roster.Count; i++)
+		{
+			ItemObject itemAtIndex = roster.GetItemAtIndex(i);
+			if (itemAtIndex != null && itemAtIndex.IsFood)
+			{
+				num += roster.GetElementNumber(i);
+			}
+		}
+		return num;
+	}
+
+	public static void PrepareSave()
+	{
+		_reservedItemIdList = new List<string>(_reservedItemIds);
+		_reservedItemIdList.Sort();
+	}
+
+	public static void SyncData(IDataStore dataStore)
+	{
+		dataStore.SyncData("HAP.ReservedItemIds", ref _reservedItemIdList);
+	}
+
+	public static void AfterLoad()
+	{
+		if (_reservedItemIdList == null)
+		{
+			_reservedItemIdList = new List<string>();
+		}
+		_reservedItemIds = new HashSet<string>(_reservedItemIdList);
+	}
+
+	public static void ClearAll()
+	{
+		_reservedItemIds.Clear();
+		_reservedItemIdList.Clear();
+	}
+
+	public static int GetEffectiveFoodVariety(MobileParty party)
+	{
+		if (party != MobileParty.MainParty || _reservedItemIds.Count == 0)
+		{
+			return party.ItemRoster.FoodVariety;
+		}
+		int num = 0;
+		ItemRoster itemRoster = party.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemObject itemAtIndex = itemRoster.GetItemAtIndex(i);
+			if (itemAtIndex != null && itemAtIndex.IsFood && itemRoster.GetElementNumber(i) > 0 && !IsReserved(itemAtIndex))
+			{
+				num++;
+			}
+		}
+		return num;
+	}
+
+	public static bool HasAnyReserved()
+	{
+		return _reservedItemIds.Count > 0;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\SaveDefiners\CastleForagerSaveDefiner.cs =====
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.SaveSystem;
+
+namespace HarvestAndProduction.SaveDefiners;
+
+public class CastleForagerSaveDefiner : SaveableTypeDefiner
+{
+	private const int BASE_SAVE_ID = 789000;
+
+	public CastleForagerSaveDefiner()
+		: base(789000)
+	{
+	}
+
+	protected override void DefineClassTypes()
+	{
+		AddClassDefinition(typeof(CastleForagerPartyComponent), 1);
+	}
+
+	protected override void DefineEnumTypes()
+	{
+		AddEnumDefinition(typeof(CastleForagerPartyComponent.ForagerState), 100);
+	}
+
+	protected override void DefineContainerDefinitions()
+	{
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\SaveDefiners\HerderSaveDefiner.cs =====
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.SaveSystem;
+
+namespace HarvestAndProduction.SaveDefiners;
+
+public class HerderSaveDefiner : SaveableTypeDefiner
+{
+	private const int BASE_SAVE_ID = 789600;
+
+	public HerderSaveDefiner()
+		: base(789600)
+	{
+	}
+
+	protected override void DefineClassTypes()
+	{
+		AddClassDefinition(typeof(HerderPartyComponent), 1);
+	}
+
+	protected override void DefineEnumTypes()
+	{
+		AddEnumDefinition(typeof(HerderPartyComponent.HerdType), 100);
+		AddEnumDefinition(typeof(HerderPartyComponent.HerderState), 101);
+	}
+
+	protected override void DefineContainerDefinitions()
+	{
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\SaveDefiners\NavalSupplyConvoySaveDefiner.cs =====
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.SaveSystem;
+
+namespace HarvestAndProduction.SaveDefiners;
+
+public class NavalSupplyConvoySaveDefiner : SaveableTypeDefiner
+{
+	private const int BASE_SAVE_ID = 789300;
+
+	public NavalSupplyConvoySaveDefiner()
+		: base(789300)
+	{
+	}
+
+	protected override void DefineClassTypes()
+	{
+		AddClassDefinition(typeof(NavalSupplyConvoyPartyComponent), 1);
+	}
+
+	protected override void DefineEnumTypes()
+	{
+		AddEnumDefinition(typeof(NavalSupplyConvoyPartyComponent.ConvoyState), 100);
+	}
+
+	protected override void DefineContainerDefinitions()
+	{
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\SaveDefiners\TownSupplyLineSaveDefiner.cs =====
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.SaveSystem;
+
+namespace HarvestAndProduction.SaveDefiners;
+
+public class TownSupplyLineSaveDefiner : SaveableTypeDefiner
+{
+	private const int BASE_SAVE_ID = 789200;
+
+	public TownSupplyLineSaveDefiner()
+		: base(789200)
+	{
+	}
+
+	protected override void DefineClassTypes()
+	{
+		AddClassDefinition(typeof(TownSupplyLinePartyComponent), 1);
+	}
+
+	protected override void DefineEnumTypes()
+	{
+		AddEnumDefinition(typeof(TownSupplyLinePartyComponent.SupplyLineState), 100);
+	}
+
+	protected override void DefineContainerDefinitions()
+	{
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\StringCache.cs =====
+using System.Collections.Concurrent;
+
+namespace HarvestAndProduction;
+
+public static class StringCache
+{
+	private static readonly ConcurrentDictionary<string, string> _lowerCaseCache = new ConcurrentDictionary<string, string>();
+
+	public static string GetLowerCase(string input)
+	{
+		if (string.IsNullOrEmpty(input))
+		{
+			return string.Empty;
+		}
+		return _lowerCaseCache.GetOrAdd(input, (string s) => s.ToLower());
+	}
+
+	public static void Clear()
+	{
+		_lowerCaseCache.Clear();
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\ViewModels\EncyclopediaWorkshopItemVM.cs =====
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.ViewModels;
+
+public class EncyclopediaWorkshopItemVM : ViewModel
+{
+	private string _shopId;
+
+	private string _shopName;
+
+	private readonly Workshop _workshop;
+
+	private readonly bool _isScouted;
+
+	[DataSourceProperty]
+	public string ShopId
+	{
+		get
+		{
+			return _shopId;
+		}
+		set
+		{
+			if (value != _shopId)
+			{
+				_shopId = value;
+				OnPropertyChangedWithValue(value, "ShopId");
+			}
+		}
+	}
+
+	[DataSourceProperty]
+	public string ShopName
+	{
+		get
+		{
+			return _shopName;
+		}
+		set
+		{
+			if (value != _shopName)
+			{
+				_shopName = value;
+				OnPropertyChangedWithValue(value, "ShopName");
+			}
+		}
+	}
+
+	public EncyclopediaWorkshopItemVM(string shopId, Workshop workshop, bool isScouted)
+	{
+		_shopId = shopId;
+		_workshop = workshop;
+		_isScouted = isScouted;
+		_shopName = workshop.WorkshopType.Name?.ToString() ?? "";
+	}
+
+	public void ExecuteBeginHint()
+	{
+		if (_isScouted)
+		{
+			InformationManager.ShowTooltip(typeof(Workshop), _workshop);
+		}
+		else
+		{
+			MBInformationManager.ShowHint(_shopName);
+		}
+	}
+
+	public void ExecuteEndHint()
+	{
+		MBInformationManager.HideInformations();
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\Properties\AssemblyInfo.cs =====
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+
+[assembly: AssemblyTitle("Harvest_and_Production")]
+[assembly: AssemblyDescription("")]
+[assembly: AssemblyConfiguration("")]
+[assembly: AssemblyCompany("")]
+[assembly: AssemblyProduct("Harvest_and_Production")]
+[assembly: AssemblyCopyright("Copyright ©  2025")]
+[assembly: AssemblyTrademark("")]
+[assembly: ComVisible(false)]
+[assembly: Guid("0f1c5911-b024-4756-b4cc-de0b865a234f")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.0.0.0")]
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\StartBattleDiagnosticPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.Party;
+
+[HarmonyPatch(typeof(StartBattleAction), "Apply")]
+public static class StartBattleDiagnosticPatch
+{
+	[HarmonyPrefix]
+	public static void Prefix(PartyBase attackerParty, PartyBase defenderParty)
+	{
+		bool flag = false;
+		flag |= IsPartySuspicious(attackerParty);
+		if (flag | IsPartySuspicious(defenderParty))
+		{
+			Main.Log("[BattleDiag] *** Suspicious encounter detected ***");
+			LogPartyInfo("Attacker", attackerParty);
+			LogPartyInfo("Defender", defenderParty);
+		}
+	}
+
+	private static bool IsPartySuspicious(PartyBase party)
+	{
+		if (party == null)
+		{
+			return true;
+		}
+		try
+		{
+			if (party.MobileParty == null)
+			{
+				return true;
+			}
+			if (party.MobileParty.MapFaction == null)
+			{
+				return true;
+			}
+			if (party.MemberRoster == null)
+			{
+				return true;
+			}
+			if (party.MemberRoster.TotalManCount <= 0)
+			{
+				return true;
+			}
+		}
+		catch
+		{
+			return true;
+		}
+		return false;
+	}
+
+	private static void LogPartyInfo(string label, PartyBase party)
+	{
+		if (party == null)
+		{
+			Main.Log("[BattleDiag]   " + label + ": NULL PartyBase");
+			return;
+		}
+		try
+		{
+			MobileParty mobileParty = party.MobileParty;
+			string text = "<null>";
+			try
+			{
+				text = party.Name?.ToString() ?? "<null Name>";
+			}
+			catch
+			{
+				text = "<Name threw>";
+			}
+			string text2 = "<null>";
+			try
+			{
+				text2 = mobileParty?.StringId ?? "<null MP>";
+			}
+			catch
+			{
+				text2 = "<StringId threw>";
+			}
+			string text3 = "<null>";
+			try
+			{
+				text3 = mobileParty?.PartyComponent?.GetType().Name ?? "<no component>";
+			}
+			catch
+			{
+				text3 = "<threw>";
+			}
+			string text4 = "<null>";
+			try
+			{
+				text4 = mobileParty?.MapFaction?.Name?.ToString() ?? "NULL MapFaction";
+			}
+			catch
+			{
+				text4 = "<MapFaction threw>";
+			}
+			string text5 = "<null>";
+			try
+			{
+				text5 = mobileParty?.ActualClan?.Name?.ToString() ?? "NULL ActualClan";
+			}
+			catch
+			{
+				text5 = "<threw>";
+			}
+			string text6 = "<null>";
+			try
+			{
+				text6 = party.Owner?.Name?.ToString() ?? "NULL Owner";
+			}
+			catch
+			{
+				text6 = "<Owner threw>";
+			}
+			string text7 = "<null>";
+			try
+			{
+				text7 = mobileParty?.HomeSettlement?.Name?.ToString() ?? "NULL HomeSettlement";
+			}
+			catch
+			{
+				text7 = "<threw>";
+			}
+			int num = -1;
+			try
+			{
+				num = party.MemberRoster?.TotalManCount ?? (-1);
+			}
+			catch
+			{
+			}
+			int num2 = -1;
+			try
+			{
+				num2 = party.MemberRoster?.TotalHealthyCount ?? (-1);
+			}
+			catch
+			{
+			}
+			bool flag = false;
+			try
+			{
+				flag = mobileParty?.IsActive ?? false;
+			}
+			catch
+			{
+			}
+			string text8 = "none";
+			try
+			{
+				text8 = ((party.MapEvent != null) ? party.MapEvent.ToString() : "none");
+			}
+			catch
+			{
+				text8 = "<threw>";
+			}
+			Main.Log("[BattleDiag]   " + label + ": Name=" + text + " Id=" + text2 + " Component=" + text3 + " Faction=" + text4 + " ActualClan=" + text5 + " Owner=" + text6 + " Home=" + text7 + " Troops=" + num + " Healthy=" + num2 + " Active=" + flag + " MapEvent=" + text8);
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[BattleDiag]   " + label + ": LogPartyInfo crashed: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\WorkshopCapitalTooltipPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.CampaignSystem.ViewModelCollection.ClanManagement.ClanFinance;
+using TaleWorlds.Core.ViewModelCollection.Information;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+[HarmonyPatch(typeof(ClanFinanceWorkshopItemVM), "PopulateStatsList")]
+public static class WorkshopCapitalTooltipPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(ClanFinanceWorkshopItemVM __instance)
+	{
+		try
+		{
+			Workshop workshop = __instance.Workshop;
+			if (workshop == null)
+			{
+				return;
+			}
+			int num = Campaign.Current.Models.ClanFinanceModel.CalculateOwnerIncomeFromWorkshop(workshop);
+			if (__instance.Income != num)
+			{
+				__instance.Income = num;
+				__instance.IncomeValueText = Traverse.Create(__instance).Method("DetermineIncomeText", new Type[1] { typeof(int) }, new object[1] { num }).GetValue<string>();
+			}
+			WorkshopModel workshopModel = Campaign.Current.Models.WorkshopModel;
+			if (workshop.Capital < workshopModel.CapitalLowLimit)
+			{
+				return;
+			}
+			float num2 = GlobalSettings<HAPSettings>.Instance?.WorkshopTaxRate ?? 0.2f;
+			int variable = (int)(num2 * 100f);
+			int initialCapital = workshopModel.InitialCapital;
+			string text = new TextObject("{=Ra17aK4e}Current Capital").ToString();
+			MBBindingList<SelectableItemPropertyVM> itemProperties = __instance.ItemProperties;
+			for (int i = 0; i < itemProperties.Count; i++)
+			{
+				if (itemProperties[i].Name == text)
+				{
+					TextObject tooltipText;
+					if (num2 <= 0f)
+					{
+						tooltipText = new TextObject("{=HAP_WorkshopCapitalTipNoTax}This workshop will send 20% of its profits above {INITIAL_CAPITAL} capital to your treasury.");
+					}
+					else
+					{
+						tooltipText = new TextObject("{=HAP_WorkshopCapitalTipTaxed}This workshop will send 20% of its profits above {INITIAL_CAPITAL} capital to your treasury. The settlement owner taxes {TAX_PERCENT}% of workshop profits before they reach you.");
+						tooltipText.SetTextVariable("TAX_PERCENT", variable);
+					}
+					tooltipText.SetTextVariable("INITIAL_CAPITAL", initialCapital);
+					itemProperties[i] =

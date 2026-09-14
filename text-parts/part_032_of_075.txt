@@ -1,0 +1,206 @@
+﻿PART 32/75
+ncomingSupply.TryGetValue(component.DestinationTown, out var value2) && value2 == party)
+					{
+						_incomingSupply.Remove(component.DestinationTown);
+					}
+				}
+			}
+			else
+			{
+				if (!TownSupplyLinePartyComponent.IsSupplyLineParty(party))
+				{
+					return;
+				}
+				TownSupplyLinePartyComponent component2 = TownSupplyLinePartyComponent.GetComponent(party);
+				if (component2 != null)
+				{
+					if (component2.HomeTown != null && _activeSupplyLines.TryGetValue(component2.HomeTown, out var value3) && value3 == party)
+					{
+						_activeSupplyLines.Remove(component2.HomeTown);
+						_lastSpawnTime[component2.HomeTown] = CampaignTime.Now - CampaignTime.Hours(96f);
+					}
+					if (component2.DestinationTown != null && _incomingSupply.TryGetValue(component2.DestinationTown, out var value4) && value4 == party)
+					{
+						_incomingSupply.Remove(component2.DestinationTown);
+					}
+					_partiesToDestroy.Remove(party);
+					_partiesToReturnTroops.Remove(party);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in TownSupplyLineBehavior.OnMobilePartyDestroyed: " + ex.Message);
+		}
+	}
+
+	private void OnWarDeclared(IFaction faction1, IFaction faction2, DeclareWarAction.DeclareWarDetail detail)
+	{
+		try
+		{
+			foreach (MobileParty item in MobileParty.All)
+			{
+				if (!TownSupplyLinePartyComponent.IsSupplyLineParty(item))
+				{
+					continue;
+				}
+				TownSupplyLinePartyComponent component = TownSupplyLinePartyComponent.GetComponent(item);
+				if (component == null || _partiesToDestroy.Contains(item))
+				{
+					continue;
+				}
+				bool flag = component.DestinationTown == null || !IsSameFactionAsOrigin(component.DestinationTown, component);
+				bool flag2 = component.HomeTown == null || !IsSameFactionAsOrigin(component.HomeTown, component);
+				if ((component.State == TownSupplyLinePartyComponent.SupplyLineState.TravelingToDestination) & flag)
+				{
+					component.State = (flag2 ? TownSupplyLinePartyComponent.SupplyLineState.Fleeing : TownSupplyLinePartyComponent.SupplyLineState.Returning);
+					if (!flag2 && component.HomeTown != null)
+					{
+						component.SetDestination(component.HomeTown);
+					}
+				}
+				else if ((component.State == TownSupplyLinePartyComponent.SupplyLineState.Returning) & flag2)
+				{
+					component.State = TownSupplyLinePartyComponent.SupplyLineState.Fleeing;
+				}
+			}
+			foreach (MobileParty item2 in MobileParty.All)
+			{
+				if (!NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(item2))
+				{
+					continue;
+				}
+				NavalSupplyConvoyPartyComponent component2 = NavalSupplyConvoyPartyComponent.GetComponent(item2);
+				if (component2 == null || _partiesToDestroy.Contains(item2))
+				{
+					continue;
+				}
+				bool flag3 = component2.DestinationTown == null || !IsSameFactionAsOriginNaval(component2.DestinationTown, component2);
+				bool flag4 = component2.HomeTown == null || !IsSameFactionAsOriginNaval(component2.HomeTown, component2);
+				if ((component2.State == NavalSupplyConvoyPartyComponent.ConvoyState.TravelingToDestination) & flag3)
+				{
+					component2.State = (flag4 ? NavalSupplyConvoyPartyComponent.ConvoyState.Fleeing : NavalSupplyConvoyPartyComponent.ConvoyState.Returning);
+					if (!flag4 && component2.HomeTown != null)
+					{
+						component2.SetDestination(component2.HomeTown);
+					}
+				}
+				else if ((component2.State == NavalSupplyConvoyPartyComponent.ConvoyState.Returning) & flag4)
+				{
+					component2.State = NavalSupplyConvoyPartyComponent.ConvoyState.Fleeing;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in TownSupplyLineBehavior.OnWarDeclared: " + ex.Message);
+		}
+	}
+
+	private bool IsSameFactionAsOrigin(Settlement settlement, TownSupplyLinePartyComponent component)
+	{
+		if (settlement == null || settlement.MapFaction == null)
+		{
+			return false;
+		}
+		IFaction faction = component?.OriginalClan?.MapFaction;
+		if (faction == null)
+		{
+			return false;
+		}
+		return settlement.MapFaction == faction;
+	}
+
+	private bool HasArrivedAtSettlement(MobileParty party, Settlement settlement)
+	{
+		if (party == null || settlement == null)
+		{
+			return false;
+		}
+		return party.CurrentSettlement == settlement;
+	}
+
+	private int GetSupplyInteraction(MobileParty party)
+	{
+		if (_interactedSupplyLines.TryGetValue(party, out var value))
+		{
+			return value;
+		}
+		return 0;
+	}
+
+	private void SetSupplyInteraction(MobileParty party, int interaction)
+	{
+		if (_interactedSupplyLines.ContainsKey(party))
+		{
+			_interactedSupplyLines[party] = interaction;
+		}
+		else
+		{
+			_interactedSupplyLines.Add(party, interaction);
+		}
+	}
+
+	private void AddDialogs(CampaignGameStarter starter)
+	{
+		starter.AddDialogLine("supply_talk_friendly_return", "start", "supply_talk_player_options", "{=HAP_SupplyFriendlyReturn}It's you again. We're still running supplies between {HOME_LINK} and {DEST_LINK}.", supply_talk_friendly_return_on_condition, null, 130);
+		starter.AddDialogLine("supply_talk_hostile_return", "start", "supply_talk_player_options", "{=HAP_SupplyHostileReturn}You again! Stay away from our cargo![rf:idle_angry][ib:nervous]", supply_talk_hostile_return_on_condition, null, 130);
+		starter.AddDialogLine("supply_talk_start_returning", "start", "supply_talk_player_options", "{=HAP_SupplyGreetingReturning}Greetings. We've delivered our supplies to {DEST_LINK}, heading back to {HOME_LINK} now.", supply_talk_friendly_returning_on_condition, null, 120);
+		starter.AddDialogLine("supply_talk_start", "start", "supply_talk_player_options", "{=HAP_SupplyGreeting}Greetings. We're carrying supplies from {HOME_LINK} to {DEST_LINK}.", supply_talk_friendly_on_condition, null);
+		starter.AddPlayerLine("supply_talk_demand_friendly", "supply_talk_player_options", "supply_talk_demand_response", "{=HAP_SupplyDemand}Whatever you have, I'm taking it. Surrender or die!", supply_not_same_faction_on_condition, null, 120, supply_demand_clickable_condition);
+		starter.AddPlayerLine("supply_talk_ask_task", "supply_talk_player_options", "supply_talk_explain", "{=HAP_SupplyAskTask}What are you carrying?", null, null, 90);
+		starter.AddPlayerLine("supply_talk_leave", "supply_talk_player_options", "close_window", "{=HAP_SupplyLeave}Safe travels, then.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_talk_explain", "supply_talk_explain", "supply_talk_player_options", "{=HAP_SupplyExplain}Food mostly. {HOME_LINK} can spare some, and {DEST_LINK} needs it badly.", supply_talk_set_link_condition, null);
+		starter.AddDialogLine("supply_talk_demand_fight", "supply_talk_demand_response", "supply_talk_fight_or_leave", "{=HAP_SupplyDemandFight}You want our cargo? We're garrison soldiers, not peasants! You'll have to take it![rf:idle_angry][ib:aggressive]", supply_will_fight_on_condition, null);
+		starter.AddDialogLine("supply_talk_demand_surrender", "supply_talk_demand_response", "supply_talk_demand_options", "{=HAP_SupplyDemandSurrender}We're outnumbered... Please, take the supplies if you must, but spare our lives![rf:idle_angry][ib:nervous]", supply_will_surrender_on_condition, null);
+		starter.AddPlayerLine("supply_fight_attack", "supply_talk_fight_or_leave", "close_window", "{=HAP_SupplyFightAttack}Then we'll take it by force. Attack!", supply_not_same_faction_on_condition, supply_attack_on_consequence, 120, supply_war_warning_condition);
+		starter.AddPlayerLine("supply_fight_leave", "supply_talk_fight_or_leave", "close_window", "{=HAP_SupplyFightLeave}On second thought, be on your way.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddPlayerLine("supply_demand_attack", "supply_talk_demand_options", "supply_talk_attack_warning", "{=HAP_SupplyAttackFriendly}Don't bother pleading. At them!", supply_not_same_faction_on_condition, null, 120, supply_war_warning_condition);
+		starter.AddPlayerLine("supply_demand_take_goods", "supply_talk_demand_options", "supply_talk_goods_taken", "{=HAP_SupplyTakeGoods}Give me all your supplies!", supply_not_same_faction_on_condition, null, 110, supply_take_goods_warning_condition);
+		starter.AddPlayerLine("supply_demand_take_prisoner", "supply_talk_demand_options", "supply_talk_prisoner_warning", "{=HAP_SupplyTakePrisoner}You are my prisoners now.", supply_not_same_faction_on_condition, null, 100, supply_war_warning_condition);
+		starter.AddPlayerLine("supply_demand_nevermind", "supply_talk_demand_options", "close_window", "{=HAP_SupplyNevermind}Never mind. Go on your way.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_talk_goods_taken", "supply_talk_goods_taken", "close_window", "{=HAP_SupplyGoodsTaken}Take it all! Just let us go![rf:idle_angry][ib:nervous]", null, supply_goods_taken_on_consequence);
+		starter.AddDialogLine("supply_talk_prisoner_warning", "supply_talk_prisoner_warning", "supply_talk_prisoner_confirm", "{=HAP_SupplyPrisonerWarning}The lords of {FACTION_NAME} won't stand for this! You're making a grave mistake![rf:idle_angry][ib:nervous]", supply_set_faction_name_condition, null);
+		starter.AddPlayerLine("supply_prisoner_confirm_yes", "supply_talk_prisoner_confirm", "close_window", "{=HAP_SupplyPrisonerYes}Enough talking. Now march.", null, supply_take_prisoner_on_consequence, 120);
+		starter.AddPlayerLine("supply_prisoner_confirm_no", "supply_talk_prisoner_confirm", "supply_talk_demand_options", "{=HAP_SupplyPrisonerNo}Never mind. Go on your way.", null, null, 80);
+		starter.AddDialogLine("supply_talk_attack_warning", "supply_talk_attack_warning", "supply_talk_attack_confirm", "{=HAP_SupplyAttackWarning}Heaven will avenge us, you monster![rf:idle_angry][ib:nervous]", null, null);
+		starter.AddPlayerLine("supply_attack_confirm_yes", "supply_talk_attack_confirm", "close_window", "{=HAP_SupplyAttackYes}Your goods AND your freedom. Seize them!", null, supply_attack_on_consequence, 120);
+		starter.AddPlayerLine("supply_attack_confirm_no", "supply_talk_attack_confirm", "close_window", "{=HAP_SupplyAttackNo}Fine. Get out of my sight.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_talk_defending_start", "start", "supply_defending_options", "{=HAP_SupplyDefending}Stand aside! We're rushing supplies to {HOME_LINK} to help break the siege. You'll find no easy prey here!", supply_talk_defending_on_condition, null, 200);
+		starter.AddPlayerLine("supply_defending_attack", "supply_defending_options", "supply_defending_attack_confirm", "{=HAP_SupplyDefendingAttack}Your supplies will serve my army. Surrender!", null, null, 120);
+		starter.AddPlayerLine("supply_defending_leave", "supply_defending_options", "close_window", "{=HAP_SupplyDefendingLeave}Then I'll leave you to your desperate errand.", null, supply_defending_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_defending_attack_fight", "supply_defending_attack_confirm", "supply_defending_fight_or_leave", "{=HAP_SupplyDefendingFight}Our home is under siege and you'd rob us now?! You'll have to take them from our corpses![rf:idle_angry][ib:aggressive]", supply_will_fight_on_condition, null);
+		starter.AddDialogLine("supply_defending_attack_surrender", "supply_defending_attack_confirm", "supply_defending_surrender_options", "{=HAP_SupplyDefendingSurrender}We're outnumbered... The garrison will suffer for this, but we have no choice.[rf:idle_angry][ib:nervous]", supply_will_surrender_on_condition, null);
+		starter.AddPlayerLine("supply_defending_fight_attack", "supply_defending_fight_or_leave", "close_window", "{=HAP_SupplyFightAttack}Then we'll take it by force. Attack!", null, supply_attack_on_consequence, 120);
+		starter.AddPlayerLine("supply_defending_fight_leave", "supply_defending_fight_or_leave", "close_window", "{=HAP_SupplyFightLeave}On second thought, be on your way.", null, supply_defending_leave_on_consequence, 80);
+		starter.AddPlayerLine("supply_defending_surrender_prisoner", "supply_defending_surrender_options", "close_window", "{=HAP_SupplyAttackYes}Your goods AND your freedom. Seize them!", null, supply_take_prisoner_on_consequence, 120);
+		starter.AddPlayerLine("supply_defending_surrender_goods", "supply_defending_surrender_options", "close_window", "{=HAP_SupplyEnemyTakeGoods}Just the supplies. Get out of here.", null, supply_enemy_goods_taken_on_consequence, 110, supply_enemy_has_goods_on_condition);
+		starter.AddPlayerLine("supply_defending_surrender_letgo", "supply_defending_surrender_options", "close_window", "{=HAP_SupplyAttackNo}Fine. Get out of my sight.", null, supply_defending_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_talk_defending_friendly_start", "start", "supply_defending_friendly_options", "{=HAP_SupplyDefendingFriendly}No time to talk! {HOME_LINK} is under siege - we're rushing supplies to the garrison![rf:idle_angry][ib:nervous]", supply_talk_defending_friendly_on_condition, null, 150);
+		starter.AddPlayerLine("supply_defending_friendly_help", "supply_defending_friendly_options", "close_window", "{=HAP_SupplyDefendingHelp}I'll ride with you. Let's break that siege!", supply_same_faction_on_condition, supply_defending_friendly_help_on_consequence, 120);
+		starter.AddPlayerLine("supply_defending_friendly_godspeed", "supply_defending_friendly_options", "close_window", "{=HAP_SupplyDefendingGodspeed}Godspeed! I hope you make it in time.", null, supply_defending_leave_on_consequence, 80);
+		starter.AddPlayerLine("supply_defending_friendly_attack", "supply_defending_friendly_options", "supply_defending_friendly_attack_warning", "{=HAP_SupplyDefendingFriendlyAttack}Your supplies will serve MY army. Surrender!", supply_not_same_faction_on_condition, null, 120, supply_war_warning_condition);
+		starter.AddPlayerLine("supply_defending_friendly_take_goods", "supply_defending_friendly_options", "supply_defending_friendly_demand_response", "{=HAP_SupplyDefendingFriendlyGoods}Hand over your supplies. You can keep your lives.", supply_not_same_faction_on_condition, null, 110, supply_take_goods_warning_condition);
+		starter.AddDialogLine("supply_defending_friendly_attack_warning_response", "supply_defending_friendly_attack_warning", "supply_defending_friendly_attack_confirm", "{=HAP_SupplyDefendingAttackWarning}You'd attack us while our home burns?! You'll make an enemy of {FACTION_NAME}!", supply_set_faction_name_condition, null);
+		starter.AddPlayerLine("supply_defending_friendly_attack_yes", "supply_defending_friendly_attack_confirm", "close_window", "{=HAP_SupplyAttackYes}Your goods AND your freedom. Seize them!", null, supply_attack_on_consequence, 120);
+		starter.AddPlayerLine("supply_defending_friendly_attack_no", "supply_defending_friendly_attack_confirm", "close_window", "{=HAP_SupplyAttackNo}Fine. Get out of my sight.", null, supply_defending_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_defending_friendly_demand_fight", "supply_defending_friendly_demand_response", "supply_defending_friendly_fight_or_leave", "{=HAP_SupplyDefendingFriendlyFight}You want our supplies while our home burns? We'll die before we let that happen![rf:idle_angry][ib:aggressive]", supply_will_fight_on_condition, null);
+		starter.AddDialogLine("supply_defending_friendly_demand_surrender", "supply_defending_friendly_demand_response", "supply_defending_friendly_goods_warning", "{=HAP_SupplyDefendingFriendlyDemandSurrender}We're outnumbered... The garrison will suffer, but we have no choice.[rf:idle_angry][ib:nervous]", supply_will_surrender_on_condition, null);
+		starter.AddPlayerLine("supply_defending_friendly_fight_attack", "supply_defending_friendly_fight_or_leave", "close_window", "{=HAP_SupplyFightAttack}Then we'll take it by force. Attack!", null, supply_attack_on_consequence, 120, supply_war_warning_condition);
+		starter.AddPlayerLine("supply_defending_friendly_fight_leave", "supply_defending_friendly_fight_or_leave", "close_window", "{=HAP_SupplyFightLeave}On second thought, be on your way.", null, supply_defending_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_defending_friendly_goods_warning_response", "supply_defending_friendly_goods_warning", "supply_defending_friendly_goods_confirm", "{=HAP_SupplyDefendingGoodsWarning}These supplies are for the garrison! Without them, our home may fall!", null, null);
+		starter.AddPlayerLine("supply_defending_friendly_goods_yes", "supply_defending_friendly_goods_confirm", "supply_defending_friendly_goods_taken", "{=HAP_SupplyTakeGoods}Give me all your supplies!", null, null, 120, supply_take_goods_warning_condition);
+		starter.AddPlayerLine("supply_defending_friendly_goods_no", "supply_defending_friendly_goods_confirm", "close_window", "{=HAP_SupplyNevermind}Never mind. Go on your way.", null, supply_defending_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_defending_friendly_goods_taken_response", "supply_defending_friendly_goods_taken", "close_window", "{=HAP_SupplyDefendingGoodsTakenResponse}Take them then... may you be judged for this.", null, supply_goods_taken_on_consequence);
+		starter.AddDialogLine("supply_talk_start_enemy", "start", "supply_talk_enemy_options", "{=HAP_SupplyGreetingEnemy}Hold! We're a supply detachment, not a war party. What do you want?[rf:idle_angry][ib:nervous]", supply_talk_enemy_on_condition, null);
+		starter.AddPlayerLine("supply_enemy_attack", "supply_talk_enemy_options", "supply_talk_enemy_attack_confirm", "{=HAP_SupplyEnemyAttack}Your supplies will serve my army well. Surrender!", null, null, 120);
+		starter.AddPlayerLine("supply_enemy_leave", "supply_talk_enemy_options", "close_window", "{=HAP_SupplyEnemyLeave}I have no quarrel with supply drivers. Go.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_talk_enemy_attack_fight", "supply_talk_enemy_attack_confirm", "supply_talk_enemy_fight_or_leave", "{=HAP_SupplyEnemyFight}You want our cargo? We're garrison soldiers, not peasants! You'll have to take it![rf:idle_angry][ib:aggressive]", supply_will_fight_on_condition, null);
+		starter.AddDialogLine("supply_talk_enemy_attack_surrender", "supply_talk_enemy_attack_confirm", "supply_talk_enemy_attack_final", "{=HAP_SupplyEnemySurrender}We're not here to fight... Take our goods, but let us go![rf:idle_angry][ib:nervous]", supply_will_surrender_on_condition, null);
+		starter.AddPlayerLine("supply_enemy_fight_attack", "supply_talk_enemy_fight_or_leave", "close_window", "{=HAP_SupplyFightAttack}Then we'll take it by force. Attack!", null, supply_attack_on_consequence, 120);
+		starter.AddPlayerLine("supply_enemy_fight_leave", "supply_talk_enemy_fight_or_leave", "close_window", "{=HAP_SupplyFightLeave}On second thought, be on your way.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddPlayerLine("supply_enemy_attack_yes", "supply_talk_enemy_attack_final", "close_window", "{=HAP_SupplyAttackYes}Your goods AND your freedom. Seize them!", null, supply_take_prisoner_on_consequence, 120);
+		starter.AddPlayerLine("supply_enemy_take_goods", "supply_talk_enemy_attack_final", "close_window", "{=HAP_SupplyEnemyTakeGoods}Just the supplies. Get out of here.", null, supply_enemy_goods_taken_on_consequence, 110, supply_enemy_has_goods_on_condition);
+		starter.AddPlayerLine("supply_enemy_attack_no", "supply_talk_enemy_attack_final", "close_window", "{=HAP_SupplyAttackNo}Fine. Get out of my sight.", null, supply_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("supply_talk_fleeing_friendly", "start", "supply_fleeing_friendly_options", "{=HAP_SupplyFleeingFriendly}We've lost our homes... Both {HOME_LINK} and {DEST_LINK} are gone. Heading to {FLEE_TARGET} to regroup.[rf:idle_angry][ib:nervous]", supply_talk_fleeing_friendly_on_condition, null, 160);
+		starter.AddPlayerLine("supply_fleeing_friendly_sympathy", "supply_fleeing_friendly_options", "close_window", "{=HAP_SupplyFleeingSympathy}Safe travels. May you find shelter soon.", null, supply_talk_leave_on_consequence);

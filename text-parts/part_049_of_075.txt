@@ -1,0 +1,756 @@
+﻿PART 49/75
+s)
+			{
+				ItemObject itemObject = Game.Current.ObjectManager.GetObject<ItemObject>(customItemId);
+				if (itemObject != null)
+				{
+					_customItems[customItemId] = itemObject;
+				}
+				else
+				{
+					Main.Log("WARNING: Custom item '" + customItemId + "' not found in ObjectManager");
+				}
+			}
+			_itemsInitialized = true;
+			Main.Log($"Initialized {_customItems.Count} custom items for village production");
+		}
+		catch (Exception arg)
+		{
+			Main.Log($"ERROR initializing custom items: {arg}");
+		}
+	}
+
+	private static void InitializeNavalDLC()
+	{
+		if (_navalDLCInitialized)
+		{
+			return;
+		}
+		_navalDLCInitialized = true;
+		try
+		{
+			Type type = AccessTools.TypeByName("NavalDLC.CharacterDevelopment.NavalPerks");
+			if (type != null)
+			{
+				Type nestedType = type.GetNestedType("Boatswain", BindingFlags.Static | BindingFlags.Public);
+				if (nestedType != null)
+				{
+					PropertyInfo property = nestedType.GetProperty("BlessingsOfTheSea", BindingFlags.Static | BindingFlags.Public);
+					if (property != null)
+					{
+						_blessingsOfTheSeaPerk = property.GetValue(null) as PerkObject;
+					}
+					PropertyInfo property2 = nestedType.GetProperty("PortAuthority", BindingFlags.Static | BindingFlags.Public);
+					if (property2 != null)
+					{
+						_portAuthorityPerk = property2.GetValue(null) as PerkObject;
+					}
+				}
+			}
+			Type type2 = AccessTools.TypeByName("NavalDLC.NavalPolicies");
+			if (type2 != null)
+			{
+				PropertyInfo property3 = type2.GetProperty("MaritimeWealEdict", BindingFlags.Static | BindingFlags.Public);
+				if (property3 != null)
+				{
+					_maritimeWealEdictPolicy = property3.GetValue(null) as PolicyObject;
+				}
+				PropertyInfo property4 = type2.GetProperty("BolsterTheFyrd", BindingFlags.Static | BindingFlags.Public);
+				if (property4 != null)
+				{
+					_bolsterTheFyrdPolicy = property4.GetValue(null) as PolicyObject;
+				}
+			}
+			if (_blessingsOfTheSeaPerk != null || _portAuthorityPerk != null || _maritimeWealEdictPolicy != null || _bolsterTheFyrdPolicy != null)
+			{
+				Main.Log("Naval DLC integration initialized:");
+				Main.Log("  - BlessingsOfTheSea perk: " + ((_blessingsOfTheSeaPerk != null) ? "OK" : "NULL"));
+				Main.Log("  - PortAuthority perk: " + ((_portAuthorityPerk != null) ? "OK" : "NULL"));
+				Main.Log("  - MaritimeWealEdict policy: " + ((_maritimeWealEdictPolicy != null) ? "OK" : "NULL"));
+				Main.Log("  - BolsterTheFyrd policy: " + ((_bolsterTheFyrdPolicy != null) ? "OK" : "NULL"));
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("Error initializing Naval DLC integration: " + ex.Message);
+		}
+	}
+
+	private float GetBaseProductionAmount(Village village, string itemId)
+	{
+		string stringId = village.VillageType.StringId;
+		float num = 0f;
+		num = ((_specialProductionAmounts.ContainsKey(stringId) && _specialProductionAmounts[stringId].ContainsKey(itemId)) ? _specialProductionAmounts[stringId][itemId] : ((!_baseProductionAmounts.ContainsKey(itemId)) ? 1f : _baseProductionAmounts[itemId]));
+		SecondaryProductionType secondaryType = VillageSecondaryProductionBehavior.GetSecondaryType(village);
+		if (secondaryType != SecondaryProductionType.None && _secondaryCustomItemAmounts.ContainsKey(secondaryType) && _secondaryCustomItemAmounts[secondaryType].ContainsKey(itemId) && (!_primaryProductionOverrides.ContainsKey(stringId) || !_primaryProductionOverrides[stringId].Contains(itemId)))
+		{
+			num = _secondaryCustomItemAmounts[secondaryType][itemId];
+		}
+		if (_primaryProductionOverrides.ContainsKey(stringId) && _primaryProductionOverrides[stringId].Contains(itemId) && secondaryType != SecondaryProductionType.None && _secondaryProductionItems.ContainsKey(secondaryType) && _secondaryProductionItems[secondaryType].Contains(itemId))
+		{
+			num *= 1.5f;
+		}
+		if (secondaryType != SecondaryProductionType.None && _secondaryPrimaryOverrides.ContainsKey(secondaryType) && _secondaryPrimaryOverrides[secondaryType].ContainsKey(itemId))
+		{
+			num = _secondaryPrimaryOverrides[secondaryType][itemId];
+		}
+		TerrainType villageTerrain = GetVillageTerrain(village);
+		if (_terrainProductionMultipliers.ContainsKey(villageTerrain) && _terrainProductionMultipliers[villageTerrain].ContainsKey(itemId))
+		{
+			num *= _terrainProductionMultipliers[villageTerrain][itemId];
+		}
+		return num;
+	}
+
+	private ClimateZone GetClimateZone(Village village)
+	{
+		return GetClimateZoneForVillage(village);
+	}
+
+	private static TerrainType GetVillageTerrain(Village village)
+	{
+		try
+		{
+			if (Campaign.Current == null || Campaign.Current.MapSceneWrapper == null)
+			{
+				return TerrainType.Plain;
+			}
+			Vec2 getPosition2D = village.Settlement.GetPosition2D;
+			PathFaceRecord faceIndex = Campaign.Current.MapSceneWrapper.GetFaceIndex(new CampaignVec2(getPosition2D, isOnLand: true));
+			return Campaign.Current.MapSceneWrapper.GetFaceTerrainType(faceIndex);
+		}
+		catch (Exception ex)
+		{
+			Main.Log($"ERROR getting terrain for {village.Name}: {ex.Message}");
+			return TerrainType.Plain;
+		}
+	}
+
+	private float GetClimateMultiplier(ClimateZone climate, Village village, string itemId)
+	{
+		return climate switch
+		{
+			ClimateZone.Desert => GetDesertMultiplier(itemId), 
+			ClimateZone.Tropical => GetTropicalMultiplier(itemId), 
+			ClimateZone.Cold => GetColdMultiplier(itemId), 
+			_ => GetTemperateMultiplier(itemId), 
+		};
+	}
+
+	private float GetClimateSeasonalFactor(ClimateZone climate)
+	{
+		return climate switch
+		{
+			ClimateZone.Tropical => 0.75f, 
+			ClimateZone.Desert => 0.65f, 
+			ClimateZone.Temperate => 1f, 
+			ClimateZone.Cold => 1.25f, 
+			_ => 1f, 
+		};
+	}
+
+	private float ApplyClimateSeasonalModifier(float baseSeasonal, ClimateZone climate, bool isDairyOrLivestock)
+	{
+		if (isDairyOrLivestock)
+		{
+			return baseSeasonal;
+		}
+		float climateSeasonalFactor = GetClimateSeasonalFactor(climate);
+		float val;
+		if (baseSeasonal >= 1f)
+		{
+			float num = baseSeasonal - 1f;
+			val = 1f + num * climateSeasonalFactor;
+		}
+		else
+		{
+			float num2 = 1f - baseSeasonal;
+			val = 1f - num2 * climateSeasonalFactor;
+		}
+		val = Math.Max(0f, val);
+		return Math.Min(4f, val);
+	}
+
+	private bool CanVillageProduceItem(Village village, string itemId)
+	{
+		string stringId = village.VillageType.StringId;
+		if (_primaryProductionOverrides.ContainsKey(stringId) && _primaryProductionOverrides[stringId].Contains(itemId))
+		{
+			return true;
+		}
+		if (_universalItems.Contains(itemId))
+		{
+			return true;
+		}
+		SecondaryProductionType secondaryType = VillageSecondaryProductionBehavior.GetSecondaryType(village);
+		if (secondaryType == SecondaryProductionType.None)
+		{
+			return false;
+		}
+		if (_secondaryProductionItems.ContainsKey(secondaryType))
+		{
+			return _secondaryProductionItems[secondaryType].Contains(itemId);
+		}
+		return false;
+	}
+
+	private HashSet<string> GetEligibleItems(Village village, SecondaryProductionType secondaryType)
+	{
+		if (secondaryType == SecondaryProductionType.None)
+		{
+			return new HashSet<string>();
+		}
+		if (!_secondaryProductionItems.ContainsKey(secondaryType))
+		{
+			return new HashSet<string>();
+		}
+		HashSet<string> hashSet = new HashSet<string>(_secondaryProductionItems[secondaryType]);
+		if (secondaryType == SecondaryProductionType.Livestock)
+		{
+			ClimateZone climateZone = GetClimateZone(village);
+			if (climateZone == ClimateZone.Tropical || climateZone == ClimateZone.Desert)
+			{
+				hashSet.Remove("hog");
+			}
+		}
+		return hashSet;
+	}
+
+	private float CalculateScalingFactor(Village village, string itemId)
+	{
+		SecondaryProductionType secondaryType = VillageSecondaryProductionBehavior.GetSecondaryType(village);
+		if (secondaryType == SecondaryProductionType.None)
+		{
+			return 1f;
+		}
+		HashSet<string> eligibleItems = GetEligibleItems(village, secondaryType);
+		if (eligibleItems.Count == 0)
+		{
+			return 1f;
+		}
+		int num = eligibleItems.Count;
+		int num2 = 0;
+		ClimateZone climateZone = GetClimateZone(village);
+		CampaignTime.Seasons getSeasonOfYear = CampaignTime.Now.GetSeasonOfYear;
+		foreach (string item in eligibleItems)
+		{
+			if (IsNativeItem(item))
+			{
+				num--;
+				continue;
+			}
+			float climateMultiplier = GetClimateMultiplier(climateZone, village, item);
+			float seasonalMultiplier = GetSeasonalMultiplier(item, climateZone);
+			if (climateMultiplier > 0f && seasonalMultiplier > 0f)
+			{
+				num2++;
+			}
+		}
+		if (num2 == 0 || num == 0)
+		{
+			return 1f;
+		}
+		float val = (float)num / (float)num2;
+		return Math.Min(val, 3f);
+	}
+
+	private bool IsNativeItem(string itemId)
+	{
+		int result;
+		switch (itemId)
+		{
+		default:
+			result = ((itemId == "butter") ? 1 : 0);
+			break;
+		case "grain":
+		case "cow":
+		case "sheep":
+		case "hog":
+		case "cheese":
+			result = 1;
+			break;
+		}
+		return (byte)result != 0;
+	}
+
+	private float GetDesertMultiplier(string itemId)
+	{
+		switch (itemId)
+		{
+		case "goose_product":
+		case "apple_fruit":
+		case "mushroom_vegetable":
+		case "cabbage_vegetable":
+		case "leek_vegetable":
+		case "carrot_vegetable":
+		case "nuts":
+		case "hare":
+			return 0f;
+		case "chicken_product":
+		case "egg":
+			return 0.8f;
+		case "milk":
+		case "heavy_cream":
+			return 0.7f;
+		case "charcoal":
+			return 0.4f;
+		case "straw":
+			return 0.6f;
+		case "honey":
+			return 0.8f;
+		case "herb":
+			return 0.7f;
+		case "lobster":
+			return 0.6f;
+		case "melon_fruit":
+		case "orange_fruit":
+			return 1.4f;
+		case "crab":
+			return 0.8f;
+		case "black_pepper":
+			return 1.2f;
+		default:
+			return 0.8f;
+		}
+	}
+
+	private float GetTropicalMultiplier(string itemId)
+	{
+		switch (itemId)
+		{
+		case "apple_fruit":
+		case "mushroom_vegetable":
+		case "nuts":
+			return 0f;
+		case "cabbage_vegetable":
+		case "leek_vegetable":
+		case "carrot_vegetable":
+			return 0.4f;
+		case "milk":
+		case "heavy_cream":
+			return 0.8f;
+		case "black_pepper":
+			return 1.5f;
+		case "melon_fruit":
+		case "orange_fruit":
+			return 1.2f;
+		case "charcoal":
+			return 0.4f;
+		case "cut_stone":
+		case "gold_ore":
+			return 1f;
+		case "lobster":
+			return 0.8f;
+		case "honey":
+			return 0.6f;
+		case "straw":
+			return 0.7f;
+		case "chicken_product":
+		case "goose_product":
+		case "egg":
+		case "herb":
+			return 1f;
+		case "crab":
+			return 1.2f;
+		default:
+			return 0.9f;
+		}
+	}
+
+	private float GetColdMultiplier(string itemId)
+	{
+		switch (itemId)
+		{
+		case "black_pepper":
+		case "melon_fruit":
+		case "orange_fruit":
+			return 0f;
+		case "goose_product":
+			return 0.8f;
+		case "chicken_product":
+		case "egg":
+			return 0.6f;
+		case "honey":
+			return 0.5f;
+		case "straw":
+			return 0.9f;
+		case "herb":
+			return 0.7f;
+		case "cabbage_vegetable":
+		case "leek_vegetable":
+		case "carrot_vegetable":
+			return 0.6f;
+		case "milk":
+		case "heavy_cream":
+			return 0.6f;
+		case "cut_stone":
+		case "gold_ore":
+			return 1f;
+		case "mushroom_vegetable":
+		case "nuts":
+		case "charcoal":
+			return 1f;
+		case "apple_fruit":
+			return 1.2f;
+		case "lobster":
+		case "hare":
+			return 1.6f;
+		case "crab":
+			return 1f;
+		default:
+			return 0.8f;
+		}
+	}
+
+	private float GetTemperateMultiplier(string itemId)
+	{
+		switch (itemId)
+		{
+		case "straw":
+			return 1.2f;
+		case "apple_fruit":
+		case "cabbage_vegetable":
+		case "leek_vegetable":
+		case "carrot_vegetable":
+		case "milk":
+		case "heavy_cream":
+			return 1.1f;
+		case "chicken_product":
+		case "goose_product":
+		case "egg":
+		case "honey":
+		case "nuts":
+		case "mushroom_vegetable":
+		case "hare":
+		case "herb":
+		case "cut_stone":
+		case "gold_ore":
+			return 1f;
+		case "black_pepper":
+			return 0f;
+		case "charcoal":
+			return 0.6f;
+		case "melon_fruit":
+			return 0.7f;
+		case "orange_fruit":
+			return 0f;
+		default:
+			return 0.9f;
+		}
+	}
+
+	private float GetSeasonalMultiplier(string itemId, ClimateZone climate)
+	{
+		return GetSeasonalMultiplierForSeason(itemId, climate, CampaignTime.Now.GetSeasonOfYear);
+	}
+
+	internal float GetSeasonalMultiplierForSeason(string itemId, ClimateZone climate, CampaignTime.Seasons season)
+	{
+		bool isDairyOrLivestock = itemId == "butter" || itemId == "cheese";
+		float num;
+		switch (itemId)
+		{
+		case "cabbage_vegetable":
+			num = GetCabbageSeasonalMultiplier(season);
+			break;
+		case "leek_vegetable":
+			num = GetLeekSeasonalMultiplier(season);
+			break;
+		case "carrot_vegetable":
+			num = GetCarrotSeasonalMultiplier(season);
+			break;
+		case "melon_fruit":
+			num = GetMelonSeasonalMultiplier(season, climate);
+			break;
+		case "apple_fruit":
+			num = GetAppleSeasonalMultiplier(season);
+			break;
+		case "orange_fruit":
+			num = GetOrangeSeasonalMultiplier(season, climate);
+			break;
+		case "chicken_product":
+			num = GetChickenSeasonalMultiplier(season);
+			break;
+		case "goose_product":
+			num = GetGooseSeasonalMultiplier(season);
+			break;
+		case "egg":
+			num = GetEggSeasonalMultiplier(season);
+			break;
+		case "milk":
+			num = GetMilkSeasonalMultiplier(season);
+			break;
+		case "heavy_cream":
+			num = GetHeavyCreamSeasonalMultiplier(season);
+			break;
+		case "mushroom_vegetable":
+			num = GetMushroomSeasonalMultiplier(season);
+			break;
+		case "honey":
+			num = GetHoneySeasonalMultiplier(season, climate);
+			break;
+		case "nuts":
+			num = GetNutsSeasonalMultiplier(season);
+			break;
+		case "black_pepper":
+			num = GetBlackPepperSeasonalMultiplier(season, climate);
+			break;
+		case "herbs":
+			num = GetHerbSeasonalMultiplier(season, climate);
+			break;
+		case "straw":
+			num = GetStrawSeasonalMultiplier(season);
+			break;
+		case "charcoal":
+			num = GetCharcoalSeasonalMultiplier(season);
+			break;
+		case "cut_stone":
+			num = GetCutStoneSeasonalMultiplier(season);
+			break;
+		case "gold_ore":
+			num = GetGoldOreSeasonalMultiplier(season);
+			break;
+		default:
+			return 1f;
+		}
+		switch (itemId)
+		{
+		default:
+			if (!(itemId == "herbs"))
+			{
+				return ApplyClimateSeasonalModifier(num, climate, isDairyOrLivestock);
+			}
+			goto case "honey";
+		case "honey":
+		case "black_pepper":
+		case "orange_fruit":
+		case "melon_fruit":
+			return num;
+		}
+	}
+
+	private float GetCabbageSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 1.5f, 
+			CampaignTime.Seasons.Summer => 1.8f, 
+			CampaignTime.Seasons.Autumn => 1.6f, 
+			CampaignTime.Seasons.Winter => 0.3f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetLeekSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 1.8f, 
+			CampaignTime.Seasons.Summer => 1.3f, 
+			CampaignTime.Seasons.Autumn => 1.8f, 
+			CampaignTime.Seasons.Winter => 0.2f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetCarrotSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 1.3f, 
+			CampaignTime.Seasons.Summer => 1.6f, 
+			CampaignTime.Seasons.Autumn => 2.5f, 
+			CampaignTime.Seasons.Winter => 0.2f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetMelonSeasonalMultiplier(CampaignTime.Seasons season, ClimateZone climate)
+	{
+		if (climate == ClimateZone.Desert)
+		{
+			return season switch
+			{
+				CampaignTime.Seasons.Winter => 1.1f, 
+				CampaignTime.Seasons.Spring => 1.2f, 
+				CampaignTime.Seasons.Summer => 2f, 
+				CampaignTime.Seasons.Autumn => 1.4f, 
+				_ => 1f, 
+			};
+		}
+		return season switch
+		{
+			CampaignTime.Seasons.Summer => 3f, 
+			_ => 0f, 
+		};
+	}
+
+	private float GetAppleSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		switch (season)
+		{
+		case CampaignTime.Seasons.Summer:
+			return 1.5f;
+		case CampaignTime.Seasons.Autumn:
+			return 3f;
+		case CampaignTime.Seasons.Spring:
+		case CampaignTime.Seasons.Winter:
+			return 0f;
+		default:
+			return 1f;
+		}
+	}
+
+	private float GetOrangeSeasonalMultiplier(CampaignTime.Seasons season, ClimateZone climate)
+	{
+		if (climate == ClimateZone.Desert)
+		{
+			return season switch
+			{
+				CampaignTime.Seasons.Winter => 1.6f, 
+				CampaignTime.Seasons.Spring => 1.2f, 
+				CampaignTime.Seasons.Summer => 0.8f, 
+				CampaignTime.Seasons.Autumn => 1f, 
+				_ => 1f, 
+			};
+		}
+		return season switch
+		{
+			CampaignTime.Seasons.Winter => 3f, 
+			CampaignTime.Seasons.Spring => 0.3f, 
+			CampaignTime.Seasons.Summer => 0f, 
+			CampaignTime.Seasons.Autumn => 0f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetChickenSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 1.6f, 
+			CampaignTime.Seasons.Summer => 1.2f, 
+			CampaignTime.Seasons.Autumn => 0.8f, 
+			CampaignTime.Seasons.Winter => 0.6f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetGooseSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 1.9f, 
+			CampaignTime.Seasons.Summer => 1.3f, 
+			CampaignTime.Seasons.Autumn => 0.6f, 
+			CampaignTime.Seasons.Winter => 0.2f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetEggSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 1.6f, 
+			CampaignTime.Seasons.Summer => 1.2f, 
+			CampaignTime.Seasons.Autumn => 0.8f, 
+			CampaignTime.Seasons.Winter => 0.5f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetMilkSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 1.5f, 
+			CampaignTime.Seasons.Summer => 1.2f, 
+			CampaignTime.Seasons.Autumn => 0.7f, 
+			CampaignTime.Seasons.Winter => 0.5f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetHeavyCreamSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 1.5f, 
+			CampaignTime.Seasons.Summer => 1.1f, 
+			CampaignTime.Seasons.Autumn => 0.7f, 
+			CampaignTime.Seasons.Winter => 0.5f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetMushroomSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Autumn => 3f, 
+			CampaignTime.Seasons.Spring => 0.1f, 
+			CampaignTime.Seasons.Summer => 0.6f, 
+			CampaignTime.Seasons.Winter => 0.3f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetHoneySeasonalMultiplier(CampaignTime.Seasons season, ClimateZone climate)
+	{
+		if (climate == ClimateZone.Tropical || climate == ClimateZone.Desert)
+		{
+			return season switch
+			{
+				CampaignTime.Seasons.Spring => 1.5f, 
+				CampaignTime.Seasons.Summer => 1.2f, 
+				CampaignTime.Seasons.Autumn => 1f, 
+				CampaignTime.Seasons.Winter => 0.9f, 
+				_ => 1f, 
+			};
+		}
+		if (climate == ClimateZone.Cold)
+		{
+			return season switch
+			{
+				CampaignTime.Seasons.Spring => 2f, 
+				CampaignTime.Seasons.Summer => 2.5f, 
+				CampaignTime.Seasons.Autumn => 0f, 
+				CampaignTime.Seasons.Winter => 0f, 
+				_ => 1f, 
+			};
+		}
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 2.5f, 
+			CampaignTime.Seasons.Summer => 2f, 
+			CampaignTime.Seasons.Autumn => 0.5f, 
+			CampaignTime.Seasons.Winter => 0f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetBlackPepperSeasonalMultiplier(CampaignTime.Seasons season, ClimateZone climate)
+	{
+		if (climate == ClimateZone.Tropical || climate == ClimateZone.Desert)
+		{
+			return season switch
+			{
+				CampaignTime.Seasons.Spring => 1.2f, 
+				CampaignTime.Seasons.Summer => 1.5f, 
+				CampaignTime.Seasons.Autumn => 1.8f, 
+				CampaignTime.Seasons.Winter => 1f, 
+				_ => 1f, 
+			};
+		}
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 0f, 
+			CampaignTime.Seasons.Summer => 1f, 
+			CampaignTime.Seasons.Autumn => 2f, 
+			CampaignTime.Seasons.Winter => 0f, 
+			_ => 1f, 
+		};
+	}
+
+	priva

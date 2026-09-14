@@ -1,0 +1,700 @@
+﻿PART 55/75
+
+			});
+			List<(EquipmentElement, int)> list2 = new List<(EquipmentElement, int)>();
+			int num3 = 0;
+			foreach (var item4 in list)
+			{
+				if (town.Gold <= num2)
+				{
+					break;
+				}
+				ItemRosterElement item2 = item4.Item3;
+				ItemObject item3 = item2.EquipmentElement.Item;
+				int num4 = mobileParty.ItemRoster.GetItemNumber(item3);
+				if (num4 <= 0)
+				{
+					continue;
+				}
+				if (item4.Item1 == 3)
+				{
+					float num5 = (float)mobileParty.InventoryCapacity - mobileParty.TotalWeightCarried;
+					int num6 = (int)(num5 / 100f);
+					if (num6 <= 0)
+					{
+						continue;
+					}
+					num4 = Math.Min(num4, num6);
+				}
+				int itemPrice = town.GetItemPrice(item2.EquipmentElement, mobileParty, isSelling: true);
+				if (itemPrice > 0)
+				{
+					int val = (town.Gold - num2) / itemPrice;
+					int num7 = Math.Min(num4, val);
+					if (num7 > 0)
+					{
+						SellItemsAction.Apply(mobileParty.Party, town.Owner, item2, num7, town.Owner.Settlement);
+						list2.Add((item2.EquipmentElement, num7));
+						num3 += num7;
+						bool flag = false;
+					}
+				}
+			}
+			if (num3 > 0)
+			{
+				CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(mobileParty, town, list2);
+				bool flag2 = false;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[EmergencySale] ERROR in SellGoods prefix: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\CaravanHerdCapPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Reflection.Emit;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Extensions;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+public static class CaravanHerdCapPatch
+{
+	[HarmonyPatch(typeof(CaravansCampaignBehavior), "BuyCategory")]
+	public static class MountCapPatch
+	{
+		[HarmonyPrefix]
+		public static bool Prefix(MobileParty caravanParty, ItemCategory category)
+		{
+			try
+			{
+				if (caravanParty == null || category == null)
+				{
+					return true;
+				}
+				if (!caravanParty.HasLandNavigationCapability)
+				{
+					return true;
+				}
+				if (!category.IsAnimal || !IsMountCategory(category))
+				{
+					return true;
+				}
+				int numberOfAllMembers = caravanParty.Party.NumberOfAllMembers;
+				if (numberOfAllMembers <= 0)
+				{
+					return true;
+				}
+				int excessMounts = GetExcessMounts(caravanParty);
+				int num = (int)((float)numberOfAllMembers * 0.5f);
+				if (excessMounts < num)
+				{
+					return true;
+				}
+				bool flag = false;
+				return false;
+			}
+			catch (Exception ex)
+			{
+				Main.Log("[CaravanHerd] ERROR in BuyCategory prefix: " + ex.Message);
+				return true;
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(CaravansCampaignBehavior), "SellGoods", new Type[]
+	{
+		typeof(MobileParty),
+		typeof(Town),
+		typeof(float),
+		typeof(bool)
+	})]
+	public static class ExcessMountTrimPatch
+	{
+		[HarmonyPostfix]
+		public static void Postfix(MobileParty mobileParty, Town town)
+		{
+			try
+			{
+				if (mobileParty == null || town == null || town.Owner == null || !mobileParty.IsCaravan)
+				{
+					return;
+				}
+				int numberOfAllMembers = mobileParty.Party.NumberOfAllMembers;
+				if (numberOfAllMembers <= 0)
+				{
+					return;
+				}
+				bool flag = !mobileParty.HasLandNavigationCapability;
+				int num;
+				int num2;
+				if (flag)
+				{
+					num = (int)((float)numberOfAllMembers * 3f);
+					num2 = mobileParty.ItemRoster.NumberOfLivestockAnimals;
+				}
+				else
+				{
+					num = (int)((float)numberOfAllMembers * 0.5f);
+					num2 = GetExcessMounts(mobileParty);
+				}
+				if (num2 <= num)
+				{
+					return;
+				}
+				int num3 = num2 - num;
+				List<(int, ItemRosterElement)> list = new List<(int, ItemRosterElement)>();
+				for (int i = 0; i < mobileParty.ItemRoster.Count; i++)
+				{
+					ItemRosterElement elementCopyAtIndex = mobileParty.ItemRoster.GetElementCopyAtIndex(i);
+					ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+					if (item != null && item.HasHorseComponent && !(flag ? (!item.HorseComponent.IsLiveStock) : (!item.HorseComponent.IsMount)) && elementCopyAtIndex.EquipmentElement.ItemModifier == null && elementCopyAtIndex.Amount > 0)
+					{
+						list.Add((item.Value, elementCopyAtIndex));
+					}
+				}
+				if (list.Count == 0)
+				{
+					return;
+				}
+				list.Sort(((int, ItemRosterElement) a, (int, ItemRosterElement) b) => a.Item1.CompareTo(b.Item1));
+				List<(EquipmentElement, int)> list2 = new List<(EquipmentElement, int)>();
+				int num4 = 0;
+				foreach (var item3 in list)
+				{
+					if (num4 >= num3)
+					{
+						break;
+					}
+					ItemRosterElement item2 = item3.Item2;
+					int itemNumber = mobileParty.ItemRoster.GetItemNumber(item2.EquipmentElement.Item);
+					if (itemNumber <= 0)
+					{
+						continue;
+					}
+					int itemPrice = town.GetItemPrice(item2.EquipmentElement, mobileParty, isSelling: true);
+					if (itemPrice > 0)
+					{
+						int num5 = Math.Min(Math.Min(itemNumber, num3 - num4), town.Gold / itemPrice);
+						if (num5 > 0)
+						{
+							SellItemsAction.Apply(mobileParty.Party, town.Owner, item2, num5, town.Owner.Settlement);
+							list2.Add((item2.EquipmentElement, num5));
+							num4 += num5;
+						}
+					}
+				}
+				if (num4 > 0)
+				{
+					CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(mobileParty, town, list2);
+					bool flag2 = false;
+				}
+			}
+			catch (Exception ex)
+			{
+				Main.Log("[CaravanHerd] ERROR in SellGoods postfix: " + ex.Message);
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(CaravansCampaignBehavior), "BuyCategory")]
+	public static class NavalLivestockCapPatch
+	{
+		[HarmonyPrefix]
+		public static bool Prefix(MobileParty caravanParty, ItemCategory category)
+		{
+			try
+			{
+				if (caravanParty == null || category == null)
+				{
+					return true;
+				}
+				if (caravanParty.HasLandNavigationCapability)
+				{
+					return true;
+				}
+				if (!category.IsAnimal || !IsLivestockCategory(category))
+				{
+					return true;
+				}
+				int numberOfAllMembers = caravanParty.Party.NumberOfAllMembers;
+				if (numberOfAllMembers <= 0)
+				{
+					return true;
+				}
+				int numberOfLivestockAnimals = caravanParty.ItemRoster.NumberOfLivestockAnimals;
+				int num = (int)((float)numberOfAllMembers * 3f);
+				if (numberOfLivestockAnimals < num)
+				{
+					return true;
+				}
+				bool flag = false;
+				return false;
+			}
+			catch (Exception ex)
+			{
+				Main.Log("[CaravanHerd] ERROR in naval livestock prefix: " + ex.Message);
+				return true;
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(CaravansCampaignBehavior), "BuyCategory")]
+	public static class LivestockBuyCapPatch
+	{
+		[HarmonyTranspiler]
+		public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+		{
+			MethodInfo methodInfo = AccessTools.PropertyGetter(typeof(ItemObject), "Weight");
+			MethodInfo methodInfo2 = AccessTools.Method(typeof(CaravanHerdCapPatch), "GetEffectiveWeightForPurchase");
+			List<CodeInstruction> list = new List<CodeInstruction>();
+			foreach (CodeInstruction instruction in instructions)
+			{
+				if (instruction.opcode == OpCodes.Ldc_R4 && instruction.operand is float && Math.Abs((float)instruction.operand - 0.6f) < 0.0001f)
+				{
+					instruction.operand = 1f;
+					list.Add(instruction);
+				}
+				else if (methodInfo != null && methodInfo2 != null && instruction.Calls(methodInfo))
+				{
+					list.Add(new CodeInstruction(OpCodes.Ldarg_1).MoveLabelsFrom(instruction).MoveBlocksFrom(instruction));
+					list.Add(new CodeInstruction(OpCodes.Call, methodInfo2));
+				}
+				else
+				{
+					list.Add(instruction);
+				}
+			}
+			return list;
+		}
+	}
+
+	[HarmonyPatch(typeof(CaravansCampaignBehavior), "SellGoodsInternal", new Type[]
+	{
+		typeof(MobileParty),
+		typeof(Town),
+		typeof(bool),
+		typeof(List<ValueTuple<EquipmentElement, int>>),
+		typeof(float),
+		typeof(bool)
+	})]
+	public static class SellTrimThresholdPatch
+	{
+		[HarmonyTranspiler]
+		public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+		{
+			List<CodeInstruction> list = new List<CodeInstruction>(instructions);
+			foreach (CodeInstruction item in list)
+			{
+				if (!(item.opcode != OpCodes.Ldc_R4) && item.operand is float)
+				{
+					float num = (float)item.operand;
+					if (Math.Abs(num - 0.6f) < 0.0001f)
+					{
+						item.operand = 1f;
+					}
+					else if (Math.Abs(num - 3f) < 0.0001f)
+					{
+						item.operand = 6f;
+					}
+					else if (Math.Abs(num - 5f) < 0.0001f)
+					{
+						item.operand = 10f;
+					}
+				}
+			}
+			return list;
+		}
+	}
+
+	private const bool DEBUG_HERD_CAP = false;
+
+	public const float LIVESTOCK_PER_MAN = 1f;
+
+	public const float PACK_ANIMAL_PER_MAN = 1f;
+
+	public const float EXCESS_MOUNT_PER_MAN = 0.5f;
+
+	public const float NAVAL_LIVESTOCK_PER_CREW = 3f;
+
+	public const float SELL_VOLUME_LAND = 6f;
+
+	public const float SELL_VOLUME_NAVAL = 10f;
+
+	private static HashSet<ItemCategory> _mountCategories;
+
+	private static HashSet<ItemCategory> _livestockCategories;
+
+	public static void ClearCache()
+	{
+		_mountCategories = null;
+		_livestockCategories = null;
+	}
+
+	private static void EnsureMountCategories()
+	{
+		if (_mountCategories != null)
+		{
+			return;
+		}
+		HashSet<ItemCategory> hashSet = new HashSet<ItemCategory>();
+		HashSet<ItemCategory> hashSet2 = new HashSet<ItemCategory>();
+		foreach (ItemObject item in Items.All)
+		{
+			if (item == null || !item.HasHorseComponent)
+			{
+				continue;
+			}
+			ItemCategory itemCategory = item.GetItemCategory();
+			if (itemCategory != null)
+			{
+				if (item.HorseComponent.IsMount)
+				{
+					hashSet.Add(itemCategory);
+				}
+				else if (item.HorseComponent.IsLiveStock)
+				{
+					hashSet2.Add(itemCategory);
+				}
+			}
+		}
+		hashSet2.ExceptWith(hashSet);
+		_mountCategories = hashSet;
+		_livestockCategories = hashSet2;
+		Main.Log("[CaravanHerd] Built animal category cache: mount [" + string.Join(", ", hashSet.Select((ItemCategory c) => c.StringId)) + "] | livestock [" + string.Join(", ", hashSet2.Select((ItemCategory c) => c.StringId)) + "]");
+	}
+
+	private static bool IsMountCategory(ItemCategory category)
+	{
+		if (category == null)
+		{
+			return false;
+		}
+		EnsureMountCategories();
+		return _mountCategories.Contains(category);
+	}
+
+	private static bool IsLivestockCategory(ItemCategory category)
+	{
+		if (category == null)
+		{
+			return false;
+		}
+		EnsureMountCategories();
+		return _livestockCategories.Contains(category);
+	}
+
+	public static int GetExcessMounts(MobileParty party)
+	{
+		int numberOfMounts = party.ItemRoster.NumberOfMounts;
+		int numberOfMenWithoutHorse = party.Party.NumberOfMenWithoutHorse;
+		int num = Math.Min(numberOfMenWithoutHorse, numberOfMounts);
+		return Math.Max(0, numberOfMounts - num);
+	}
+
+	public static int GetHerdSize(MobileParty party)
+	{
+		return party.ItemRoster.NumberOfLivestockAnimals + party.ItemRoster.NumberOfPackAnimals + GetExcessMounts(party);
+	}
+
+	public static float GetEffectiveWeightForPurchase(ItemObject item, MobileParty party)
+	{
+		float num = item?.Weight ?? 1f;
+		if (num < 0.01f)
+		{
+			num = 0.01f;
+		}
+		if (item == null || party == null)
+		{
+			return num;
+		}
+		try
+		{
+			float itemEffectiveWeight = Campaign.Current.Models.InventoryCapacityModel.GetItemEffectiveWeight(new EquipmentElement(item), party, party.IsCurrentlyAtSea, out var _);
+			return (itemEffectiveWeight >= 0.01f) ? itemEffectiveWeight : num;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[CaravanHerd] ERROR in GetEffectiveWeightForPurchase: " + ex.Message);
+			return num;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\CaravanSurplusPurchasePatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Extensions;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(CaravansCampaignBehavior), "BuyGoods")]
+public static class CaravanSurplusPurchasePatch
+{
+	private const bool DEBUG_SURPLUS = false;
+
+	private const float SURPLUS_RATIO_THRESHOLD = 5f;
+
+	private const float SURPLUS_MAX_LOCAL_INDEX = 0.3f;
+
+	private const int SURPLUS_MIN_IN_STORE = 50;
+
+	private const int MAX_SURPLUS_CATEGORIES = 3;
+
+	private static MethodInfo _buyCategoryMethod;
+
+	private static MethodInfo _refreshTotalsMethod;
+
+	private static bool _reflectionInitialized;
+
+	private static bool _reflectionFailed;
+
+	private static Dictionary<ItemCategory, float> _worldAvgIndex;
+
+	private static Dictionary<ItemCategory, float> _worldAvgIndexCoastal;
+
+	private static int _indexCacheDay = -1;
+
+	private static void EnsureReflection()
+	{
+		if (!_reflectionInitialized)
+		{
+			_reflectionInitialized = true;
+			_buyCategoryMethod = AccessTools.Method(typeof(CaravansCampaignBehavior), "BuyCategory");
+			_refreshTotalsMethod = AccessTools.Method(typeof(CaravansCampaignBehavior), "RefreshTotalValueOfItemsAtCategoryForParty");
+			if (_buyCategoryMethod == null || _refreshTotalsMethod == null)
+			{
+				_reflectionFailed = true;
+				Main.Log("[CaravanSurplus] ERROR: could not resolve BuyCategory / RefreshTotalValueOfItemsAtCategoryForParty — surplus pass disabled");
+			}
+		}
+	}
+
+	public static void ClearCache()
+	{
+		_worldAvgIndex = null;
+		_worldAvgIndexCoastal = null;
+		_indexCacheDay = -1;
+	}
+
+	private static void EnsureIndexCache()
+	{
+		int num = (int)CampaignTime.Now.ToDays;
+		if (_worldAvgIndex != null && _indexCacheDay == num)
+		{
+			return;
+		}
+		int count = Town.AllTowns.Count;
+		if (count == 0)
+		{
+			return;
+		}
+		Dictionary<ItemCategory, float> dictionary = new Dictionary<ItemCategory, float>();
+		Dictionary<ItemCategory, float> dictionary2 = new Dictionary<ItemCategory, float>();
+		int num2 = 0;
+		foreach (Town allTown in Town.AllTowns)
+		{
+			if (allTown.Settlement.HasPort)
+			{
+				num2++;
+			}
+		}
+		foreach (ItemCategory item in ItemCategories.All)
+		{
+			if (item == null || !item.IsValid || (!item.IsAnimal && !item.IsTradeGood))
+			{
+				continue;
+			}
+			float num3 = 0f;
+			float num4 = 0f;
+			foreach (Town allTown2 in Town.AllTowns)
+			{
+				float itemCategoryPriceIndex = allTown2.GetItemCategoryPriceIndex(item);
+				num3 += itemCategoryPriceIndex;
+				if (allTown2.Settlement.HasPort)
+				{
+					num4 += itemCategoryPriceIndex;
+				}
+			}
+			dictionary[item] = num3 / (float)count;
+			dictionary2[item] = ((num2 > 0) ? (num4 / (float)num2) : 1f);
+		}
+		_worldAvgIndex = dictionary;
+		_worldAvgIndexCoastal = dictionary2;
+		_indexCacheDay = num;
+	}
+
+	private static float GetWorldAverageIndex(ItemCategory category, MobileParty party)
+	{
+		EnsureIndexCache();
+		Dictionary<ItemCategory, float> dictionary = ((party.IsCaravan && party.CaravanPartyComponent != null && party.CaravanPartyComponent.CanHaveNavalNavigationCapability) ? _worldAvgIndexCoastal : _worldAvgIndex);
+		if (dictionary == null || !dictionary.TryGetValue(category, out var value))
+		{
+			return 1f;
+		}
+		return value;
+	}
+
+	private static float CalculateBudgetFactor(MobileParty caravanParty)
+	{
+		return 0.1f + MathF.Clamp((float)caravanParty.PartyTradeGold / 5000f, 0f, 1f);
+	}
+
+	private static float CalculateCapacityFactor(MobileParty caravanParty)
+	{
+		float num = caravanParty.TotalWeightCarried / ((float)caravanParty.InventoryCapacity + 1f);
+		num *= 0.9f;
+		return 1.1f - MathF.Clamp(num, 0f, 1f);
+	}
+
+	[HarmonyPrefix]
+	public static void Prefix(CaravansCampaignBehavior __instance, MobileParty caravanParty, Town town)
+	{
+		if (__instance == null || caravanParty == null || town == null)
+		{
+			return;
+		}
+		EnsureReflection();
+		if (_reflectionFailed)
+		{
+			return;
+		}
+		try
+		{
+			List<ItemCategory> list = FindSurplusCategories(caravanParty, town);
+			if (list.Count == 0)
+			{
+				return;
+			}
+			_refreshTotalsMethod.Invoke(__instance, new object[1] { caravanParty });
+			float num = CalculateBudgetFactor(caravanParty);
+			float num2 = CalculateCapacityFactor(caravanParty);
+			List<(EquipmentElement, int)> list2 = new List<(EquipmentElement, int)>();
+			foreach (ItemCategory item in list)
+			{
+				_buyCategoryMethod.Invoke(__instance, new object[6] { caravanParty, town, item, num, num2, list2 });
+			}
+			if (list2.Count > 0)
+			{
+				CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(caravanParty, town, list2);
+				bool flag = false;
+			}
+			else
+			{
+				bool flag2 = false;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[CaravanSurplus] ERROR in BuyGoods postfix: " + ex.Message);
+		}
+	}
+
+	private static List<ItemCategory> FindSurplusCategories(MobileParty caravanParty, Town town)
+	{
+		List<(ItemCategory, float)> list = new List<(ItemCategory, float)>();
+		TownMarketData marketData = town.MarketData;
+		if (marketData == null)
+		{
+			return new List<ItemCategory>();
+		}
+		foreach (ItemCategory item in ItemCategories.All)
+		{
+			if (item == null || !item.IsValid || (!item.IsTradeGood && !item.IsAnimal) || marketData.GetCategoryData(item).InStore < 50)
+			{
+				continue;
+			}
+			float itemCategoryPriceIndex = town.GetItemCategoryPriceIndex(item);
+			if (!(itemCategoryPriceIndex <= 0f) && !(itemCategoryPriceIndex > 0.3f))
+			{
+				float worldAverageIndex = GetWorldAverageIndex(item, caravanParty);
+				float num = worldAverageIndex / itemCategoryPriceIndex;
+				if (!(num < 5f))
+				{
+					list.Add((item, num));
+				}
+			}
+		}
+		list.Sort(((ItemCategory, float) a, (ItemCategory, float) b) => b.Item2.CompareTo(a.Item2));
+		List<ItemCategory> list2 = new List<ItemCategory>();
+		for (int num2 = 0; num2 < list.Count && num2 < 3; num2++)
+		{
+			list2.Add(list[num2].Item1);
+		}
+		return list2;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\CaravanTradeScorePatch.cs =====
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(CaravansCampaignBehavior), "GetTradeScoreForTown")]
+public static class CaravanTradeScorePatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(MobileParty caravanParty, Town town, ref float __result)
+	{
+		if (!(__result <= 0f))
+		{
+			CaravanFoodTradeBehavior instance = CaravanFoodTradeBehavior.Instance;
+			if (instance != null)
+			{
+				float foodTradeScoreModifier = instance.GetFoodTradeScoreModifier(caravanParty, town);
+				__result *= foodTradeScoreModifier;
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\CastlePatrolBuildingPatch.cs =====
+using System;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Buildings;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(PatrolPartiesCampaignBehavior), "OnBuildingLevelChanged")]
+public static class CastlePatrolBuildingPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(Town town, Building building, int levelChange)
+	{
+		try
+		{
+			if (building.BuildingType ==

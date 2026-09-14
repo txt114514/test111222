@@ -1,0 +1,556 @@
+﻿PART 47/75
+se_ranch" },
+		["t2_battania_horse"] = new HashSet<string> { "battanian_horse_ranch" },
+		["t3_battania_horse"] = new HashSet<string> { "battanian_horse_ranch" },
+		["sturgia_horse"] = new HashSet<string> { "sturgian_horse_ranch" },
+		["t2_sturgia_horse"] = new HashSet<string> { "sturgian_horse_ranch" },
+		["t3_sturgia_horse"] = new HashSet<string> { "sturgian_horse_ranch" },
+		["khuzait_horse"] = new HashSet<string> { "steppe_horse_ranch" },
+		["t2_khuzait_horse"] = new HashSet<string> { "steppe_horse_ranch" },
+		["t3_khuzait_horse"] = new HashSet<string> { "steppe_horse_ranch" },
+		["aserai_horse"] = new HashSet<string> { "desert_horse_ranch" },
+		["t2_aserai_horse"] = new HashSet<string> { "desert_horse_ranch" },
+		["t3_aserai_horse"] = new HashSet<string> { "desert_horse_ranch" },
+		["camel"] = new HashSet<string> { "desert_horse_ranch" },
+		["war_camel"] = new HashSet<string> { "desert_horse_ranch" },
+		["pack_camel"] = new HashSet<string> { "desert_horse_ranch" },
+		["sumpter_horse"] = new HashSet<string> { "europe_horse_ranch", "battanian_horse_ranch", "sturgian_horse_ranch", "vlandian_horse_ranch", "steppe_horse_ranch", "desert_horse_ranch" },
+		["mule"] = new HashSet<string> { "europe_horse_ranch", "battanian_horse_ranch", "sturgian_horse_ranch", "vlandian_horse_ranch", "steppe_horse_ranch", "desert_horse_ranch" },
+		["saddle_horse"] = new HashSet<string> { "europe_horse_ranch", "battanian_horse_ranch", "sturgian_horse_ranch", "vlandian_horse_ranch" },
+		["old_horse"] = new HashSet<string> { "europe_horse_ranch", "battanian_horse_ranch", "sturgian_horse_ranch", "vlandian_horse_ranch" }
+	};
+
+	private static readonly Dictionary<string, Dictionary<CampaignTime.Seasons, float>> _nativeSeasonalMultipliers = new Dictionary<string, Dictionary<CampaignTime.Seasons, float>>
+	{
+		["grain"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 0.3f,
+			[CampaignTime.Seasons.Summer] = 1.8f,
+			[CampaignTime.Seasons.Autumn] = 3.2f,
+			[CampaignTime.Seasons.Winter] = 0f
+		},
+		["butter"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 1.4f,
+			[CampaignTime.Seasons.Summer] = 1.2f,
+			[CampaignTime.Seasons.Autumn] = 0.8f,
+			[CampaignTime.Seasons.Winter] = 0.6f
+		},
+		["cheese"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 1.3f,
+			[CampaignTime.Seasons.Summer] = 1.2f,
+			[CampaignTime.Seasons.Autumn] = 0.9f,
+			[CampaignTime.Seasons.Winter] = 0.7f
+		},
+		["cow"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 1.3f,
+			[CampaignTime.Seasons.Summer] = 0.8f,
+			[CampaignTime.Seasons.Autumn] = 1.2f,
+			[CampaignTime.Seasons.Winter] = 1.1f
+		},
+		["sheep"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 1.4f,
+			[CampaignTime.Seasons.Summer] = 0.9f,
+			[CampaignTime.Seasons.Autumn] = 1f,
+			[CampaignTime.Seasons.Winter] = 0.8f
+		},
+		["hog"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 1.1f,
+			[CampaignTime.Seasons.Summer] = 0.8f,
+			[CampaignTime.Seasons.Autumn] = 1.3f,
+			[CampaignTime.Seasons.Winter] = 1.2f
+		},
+		["wool"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 1.5f,
+			[CampaignTime.Seasons.Summer] = 1.5f,
+			[CampaignTime.Seasons.Autumn] = 0.5f,
+			[CampaignTime.Seasons.Winter] = 0.3f
+		},
+		["fish"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 1.1f,
+			[CampaignTime.Seasons.Summer] = 1f,
+			[CampaignTime.Seasons.Autumn] = 1.1f,
+			[CampaignTime.Seasons.Winter] = 0.9f
+		},
+		["fur"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 0.8f,
+			[CampaignTime.Seasons.Summer] = 0.5f,
+			[CampaignTime.Seasons.Autumn] = 1.2f,
+			[CampaignTime.Seasons.Winter] = 1.5f
+		},
+		["grape"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 0f,
+			[CampaignTime.Seasons.Summer] = 1.2f,
+			[CampaignTime.Seasons.Autumn] = 2.4f,
+			[CampaignTime.Seasons.Winter] = 0f
+		},
+		["date_fruit"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 0.8f,
+			[CampaignTime.Seasons.Summer] = 1.8f,
+			[CampaignTime.Seasons.Autumn] = 2.8f,
+			[CampaignTime.Seasons.Winter] = 0.4f
+		},
+		["olives"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 0f,
+			[CampaignTime.Seasons.Summer] = 1.8f,
+			[CampaignTime.Seasons.Autumn] = 2.6f,
+			[CampaignTime.Seasons.Winter] = 0f
+		},
+		["flax"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 0f,
+			[CampaignTime.Seasons.Summer] = 2f,
+			[CampaignTime.Seasons.Autumn] = 1.2f,
+			[CampaignTime.Seasons.Winter] = 0f
+		},
+		["cotton"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 0.5f,
+			[CampaignTime.Seasons.Summer] = 1.3f,
+			[CampaignTime.Seasons.Autumn] = 1.5f,
+			[CampaignTime.Seasons.Winter] = 0.5f
+		},
+		["hardwood"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 0.8f,
+			[CampaignTime.Seasons.Summer] = 1f,
+			[CampaignTime.Seasons.Autumn] = 1f,
+			[CampaignTime.Seasons.Winter] = 1.2f
+		},
+		["empire_horse"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 1.4f,
+			[CampaignTime.Seasons.Summer] = 1f,
+			[CampaignTime.Seasons.Autumn] = 1.2f,
+			[CampaignTime.Seasons.Winter] = 0.6f
+		},
+		["camel"] = new Dictionary<CampaignTime.Seasons, float>
+		{
+			[CampaignTime.Seasons.Spring] = 1f,
+			[CampaignTime.Seasons.Summer] = 0.7f,
+			[CampaignTime.Seasons.Autumn] = 1.3f,
+			[CampaignTime.Seasons.Winter] = 1.2f
+		}
+	};
+
+	private static readonly Dictionary<string, Dictionary<ClimateZone, float>> _nativeClimateMultipliers = new Dictionary<string, Dictionary<ClimateZone, float>>
+	{
+		["grain"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 1.2f,
+			[ClimateZone.Desert] = 0.7f,
+			[ClimateZone.Temperate] = 1.4f,
+			[ClimateZone.Cold] = 1.1f
+		},
+		["cow"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 0.8f,
+			[ClimateZone.Desert] = 0.6f,
+			[ClimateZone.Temperate] = 1.2f,
+			[ClimateZone.Cold] = 1.1f
+		},
+		["sheep"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 0.8f,
+			[ClimateZone.Desert] = 0.6f,
+			[ClimateZone.Temperate] = 1.2f,
+			[ClimateZone.Cold] = 1.1f
+		},
+		["hog"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 0f,
+			[ClimateZone.Desert] = 0f,
+			[ClimateZone.Temperate] = 1.2f,
+			[ClimateZone.Cold] = 1f
+		},
+		["butter"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 0.8f,
+			[ClimateZone.Desert] = 0.6f,
+			[ClimateZone.Temperate] = 1.3f,
+			[ClimateZone.Cold] = 1.1f
+		},
+		["cheese"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 0.8f,
+			[ClimateZone.Desert] = 0.6f,
+			[ClimateZone.Temperate] = 1.3f,
+			[ClimateZone.Cold] = 1.1f
+		},
+		["wool"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 0.7f,
+			[ClimateZone.Desert] = 0.4f,
+			[ClimateZone.Temperate] = 1.2f,
+			[ClimateZone.Cold] = 1.1f
+		},
+		["fish"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 1.2f,
+			[ClimateZone.Desert] = 1.3f,
+			[ClimateZone.Temperate] = 0.9f,
+			[ClimateZone.Cold] = 1.4f
+		},
+		["fur"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 0.3f,
+			[ClimateZone.Desert] = 0.2f,
+			[ClimateZone.Temperate] = 1f,
+			[ClimateZone.Cold] = 1.5f
+		},
+		["date_fruit"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 1.4f,
+			[ClimateZone.Desert] = 3f,
+			[ClimateZone.Temperate] = 0f,
+			[ClimateZone.Cold] = 0f
+		},
+		["olives"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 1.4f,
+			[ClimateZone.Desert] = 1.2f,
+			[ClimateZone.Temperate] = 1.3f,
+			[ClimateZone.Cold] = 0f
+		},
+		["grape"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 0.8f,
+			[ClimateZone.Desert] = 0.6f,
+			[ClimateZone.Temperate] = 1.2f,
+			[ClimateZone.Cold] = 0.4f
+		},
+		["cotton"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 1.4f,
+			[ClimateZone.Desert] = 1.3f,
+			[ClimateZone.Temperate] = 1f,
+			[ClimateZone.Cold] = 0.5f
+		},
+		["flax"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 0.8f,
+			[ClimateZone.Desert] = 0.4f,
+			[ClimateZone.Temperate] = 1.2f,
+			[ClimateZone.Cold] = 1f
+		},
+		["hardwood"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 0.4f,
+			[ClimateZone.Desert] = 0.4f,
+			[ClimateZone.Temperate] = 0.6f,
+			[ClimateZone.Cold] = 1f
+		},
+		["clay"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 1f,
+			[ClimateZone.Desert] = 1f,
+			[ClimateZone.Temperate] = 1f,
+			[ClimateZone.Cold] = 1f
+		},
+		["salt"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 1f,
+			[ClimateZone.Desert] = 1f,
+			[ClimateZone.Temperate] = 1f,
+			[ClimateZone.Cold] = 1f
+		},
+		["iron"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 1f,
+			[ClimateZone.Desert] = 1f,
+			[ClimateZone.Temperate] = 1f,
+			[ClimateZone.Cold] = 1f
+		},
+		["silver"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 1f,
+			[ClimateZone.Desert] = 1f,
+			[ClimateZone.Temperate] = 1f,
+			[ClimateZone.Cold] = 1f
+		},
+		["walrus_tusk"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 0f,
+			[ClimateZone.Desert] = 0f,
+			[ClimateZone.Temperate] = 0.3f,
+			[ClimateZone.Cold] = 1f
+		},
+		["whale_oil"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 0.3f,
+			[ClimateZone.Desert] = 0.3f,
+			[ClimateZone.Temperate] = 0.7f,
+			[ClimateZone.Cold] = 1f
+		},
+		["pack_camel"] = new Dictionary<ClimateZone, float>
+		{
+			[ClimateZone.Tropical] = 1f,
+			[ClimateZone.Desert] = 1f,
+			[ClimateZone.Temperate] = 0f,
+			[ClimateZone.Cold] = 0f
+		}
+	};
+
+	private static readonly Dictionary<SecondaryProductionType, HashSet<string>> _secondaryProductionItems = new Dictionary<SecondaryProductionType, HashSet<string>>
+	{
+		[SecondaryProductionType.Orchard] = new HashSet<string> { "apple_fruit", "orange_fruit", "melon_fruit", "black_pepper" },
+		[SecondaryProductionType.Garden] = new HashSet<string> { "cabbage_vegetable", "leek_vegetable", "carrot_vegetable", "black_pepper" },
+		[SecondaryProductionType.Poultry] = new HashSet<string> { "egg", "chicken_product", "goose_product" },
+		[SecondaryProductionType.Farmland] = new HashSet<string> { "grain", "straw" },
+		[SecondaryProductionType.Livestock] = new HashSet<string> { "milk", "heavy_cream", "cow", "sheep", "hog", "wool", "butter", "cheese", "straw" },
+		[SecondaryProductionType.Forester] = new HashSet<string> { "hardwood", "nuts", "mushroom_vegetable", "hare" },
+		[SecondaryProductionType.Apiary] = new HashSet<string> { "honey" },
+		[SecondaryProductionType.Herbalist] = new HashSet<string> { "herbs", "black_pepper" },
+		[SecondaryProductionType.Quarry] = new HashSet<string> { "cut_stone" },
+		[SecondaryProductionType.CharcoalBurner] = new HashSet<string> { "charcoal" },
+		[SecondaryProductionType.Paddock] = new HashSet<string> { "sumpter_horse", "mule", "saddle_horse", "old_horse", "pack_camel" }
+	};
+
+	private static readonly HashSet<string> _universalItems = new HashSet<string>();
+
+	private static readonly Dictionary<string, HashSet<string>> _primaryProductionOverrides = new Dictionary<string, HashSet<string>>
+	{
+		["fisherman"] = new HashSet<string> { "crab", "lobster" },
+		["trapper"] = new HashSet<string> { "hare" },
+		["steppe_horse_ranch"] = new HashSet<string> { "milk", "heavy_cream" },
+		["cattle_farm"] = new HashSet<string> { "milk", "heavy_cream" },
+		["sheep_farm"] = new HashSet<string> { "milk", "heavy_cream" },
+		["walrus_hunter"] = new HashSet<string> { "crab", "lobster" },
+		["whaler"] = new HashSet<string> { "crab", "lobster" },
+		["flax_plant"] = new HashSet<string> { "straw" },
+		["wheat_farm"] = new HashSet<string> { "straw" },
+		["silver_mine"] = new HashSet<string> { "gold_ore" },
+		["iron_mine"] = new HashSet<string> { "gold_ore" }
+	};
+
+	private static readonly Dictionary<string, float> _baseProductionAmounts = new Dictionary<string, float>
+	{
+		["chicken_product"] = 3.8f,
+		["goose_product"] = 2f,
+		["hare"] = 5.7f,
+		["crab"] = 7.5f,
+		["lobster"] = 2.6f,
+		["cabbage_vegetable"] = 4.7f,
+		["leek_vegetable"] = 3.8f,
+		["carrot_vegetable"] = 4.7f,
+		["mushroom_vegetable"] = 6.6f,
+		["apple_fruit"] = 3.4f,
+		["orange_fruit"] = 3.8f,
+		["melon_fruit"] = 5.7f,
+		["milk"] = 5.7f,
+		["heavy_cream"] = 2f,
+		["egg"] = 4.7f,
+		["honey"] = 4.5f,
+		["nuts"] = 4.7f,
+		["black_pepper"] = 1f,
+		["herbs"] = 2.2f,
+		["straw"] = 6f,
+		["charcoal"] = 4f,
+		["cut_stone"] = 2.4f,
+		["gold_ore"] = 0.01f
+	};
+
+	private static readonly Dictionary<string, Dictionary<string, float>> _specialProductionAmounts = new Dictionary<string, Dictionary<string, float>>
+	{
+		["cattle_farm"] = new Dictionary<string, float>
+		{
+			["milk"] = 8.4f,
+			["heavy_cream"] = 2.8f
+		},
+		["sheep_farm"] = new Dictionary<string, float>
+		{
+			["milk"] = 4f,
+			["heavy_cream"] = 1.2f
+		},
+		["swine_farm"] = new Dictionary<string, float>
+		{
+			["chicken_product"] = 4.7f,
+			["goose_product"] = 2.4f,
+			["egg"] = 6f
+		},
+		["fisherman"] = new Dictionary<string, float>
+		{
+			["goose_product"] = 2.6f,
+			["egg"] = 6f
+		},
+		["walrus_hunter"] = new Dictionary<string, float>
+		{
+			["goose_product"] = 2.6f,
+			["egg"] = 6.3f
+		},
+		["whaler"] = new Dictionary<string, float>
+		{
+			["goose_product"] = 2.8f,
+			["egg"] = 6.3f
+		},
+		["trapper"] = new Dictionary<string, float>
+		{
+			["mushroom_vegetable"] = 8.8f,
+			["nuts"] = 6f
+		},
+		["lumberjack"] = new Dictionary<string, float>
+		{
+			["mushroom_vegetable"] = 8.2f,
+			["nuts"] = 6f
+		},
+		["vineyard"] = new Dictionary<string, float>
+		{
+			["apple_fruit"] = 4.5f,
+			["honey"] = 5.8f
+		},
+		["olive_trees"] = new Dictionary<string, float> { ["honey"] = 5.4f },
+		["flax_plant"] = new Dictionary<string, float> { ["honey"] = 5.4f },
+		["silk_plant"] = new Dictionary<string, float>
+		{
+			["apple_fruit"] = 4.5f,
+			["nuts"] = 6.3f
+		},
+		["wheat_farm"] = new Dictionary<string, float>
+		{
+			["chicken_product"] = 5.1f,
+			["egg"] = 6.3f
+		},
+		["silver_mine"] = new Dictionary<string, float> { ["gold_ore"] = 0.1f }
+	};
+
+	private static readonly Dictionary<SecondaryProductionType, Dictionary<string, float>> _secondaryPrimaryOverrides = new Dictionary<SecondaryProductionType, Dictionary<string, float>> { [SecondaryProductionType.CharcoalBurner] = new Dictionary<string, float> { ["hardwood"] = 14f } };
+
+	private static readonly Dictionary<SecondaryProductionType, Dictionary<string, float>> _secondaryCustomItemAmounts = new Dictionary<SecondaryProductionType, Dictionary<string, float>> { [SecondaryProductionType.Livestock] = new Dictionary<string, float> { ["straw"] = 1.5f } };
+
+	private static readonly Dictionary<TerrainType, Dictionary<string, float>> _terrainProductionMultipliers = new Dictionary<TerrainType, Dictionary<string, float>> { [TerrainType.Steppe] = new Dictionary<string, float>
+	{
+		["hardwood"] = 0.375f,
+		["charcoal"] = 0.375f,
+		["cow"] = 1.1f,
+		["sheep"] = 1f,
+		["wool"] = 1.2f,
+		["milk"] = 1.3f,
+		["heavy_cream"] = 1.3f,
+		["butter"] = 1.3f,
+		["cheese"] = 1.3f
+	} };
+
+	private static readonly Dictionary<SecondaryProductionType, Dictionary<string, float>> _nativeSecondaryVillageBonuses = new Dictionary<SecondaryProductionType, Dictionary<string, float>> { [SecondaryProductionType.Paddock] = new Dictionary<string, float>
+	{
+		["wheat_farm"] = 1.33f,
+		["vineyard"] = 1.33f,
+		["olive_trees"] = 1.33f,
+		["date_farm"] = 1.33f
+	} };
+
+	private static readonly Dictionary<SecondaryProductionType, Dictionary<ClimateZone, Dictionary<string, float>>> _nativeSecondaryClimateItemMultipliers = new Dictionary<SecondaryProductionType, Dictionary<ClimateZone, Dictionary<string, float>>> { [SecondaryProductionType.Paddock] = new Dictionary<ClimateZone, Dictionary<string, float>>
+	{
+		[ClimateZone.Desert] = new Dictionary<string, float>
+		{
+			["sumpter_horse"] = 0.5f,
+			["saddle_horse"] = 0.5f,
+			["old_horse"] = 0.5f
+		},
+		[ClimateZone.Tropical] = new Dictionary<string, float> { ["pack_camel"] = 0f }
+	} };
+
+	private const float RANCH_SCALE_EXPONENT_BASE = 0.3f;
+
+	private const float RANCH_SCALE_EXPONENT_UPGRADE = 0.2f;
+
+	private static Dictionary<string, int> _ranchCounts;
+
+	private static readonly HashSet<string> _horseRanchTypeIds = new HashSet<string> { "europe_horse_ranch", "vlandian_horse_ranch", "battanian_horse_ranch", "sturgian_horse_ranch", "steppe_horse_ranch", "desert_horse_ranch" };
+
+	private static readonly Dictionary<string, int> _ranchTerritoryFactor = new Dictionary<string, int> { ["europe_horse_ranch"] = 3 };
+
+	private static readonly List<ExternalTooltipProvider> _externalProviders = new List<ExternalTooltipProvider>();
+
+	private static Dictionary<string, Dictionary<ItemCategory, float>> _annualProfileCache = new Dictionary<string, Dictionary<ItemCategory, float>>();
+
+	private static int _annualProfileCacheYear = -1;
+
+	private static readonly CampaignTime.Seasons[] AllSeasons = new CampaignTime.Seasons[4]
+	{
+		CampaignTime.Seasons.Spring,
+		CampaignTime.Seasons.Summer,
+		CampaignTime.Seasons.Autumn,
+		CampaignTime.Seasons.Winter
+	};
+
+	public static ClimateZone GetClimateZoneForVillage(Village village)
+	{
+		if (_climateCache.TryGetValue(village, out var value))
+		{
+			return value;
+		}
+		ClimateZone climateZone = CalculateClimateZoneInternal(village);
+		_climateCache[village] = climateZone;
+		return climateZone;
+	}
+
+	private static ClimateZone CalculateClimateZoneInternal(Village village)
+	{
+		try
+		{
+			if (Campaign.Current == null || Campaign.Current.MapSceneWrapper == null)
+			{
+				return ClimateZone.Temperate;
+			}
+			Vec2 getPosition2D = village.Settlement.GetPosition2D;
+			float num = Campaign.Current.MapSceneWrapper.GetTerrainSize().Y;
+			if (num <= 0f)
+			{
+				num = 1f;
+			}
+			float num2 = getPosition2D.Y / num;
+			float height = 0f;
+			Campaign.Current.MapSceneWrapper.GetHeightAtPoint(new CampaignVec2(getPosition2D, isOnLand: true), ref height);
+			PathFaceRecord faceIndex = Campaign.Current.MapSceneWrapper.GetFaceIndex(new CampaignVec2(getPosition2D, isOnLand: true));
+			TerrainType faceTerrainType = Campaign.Current.MapSceneWrapper.GetFaceTerrainType(faceIndex);
+			if (faceTerrainType == TerrainType.Desert || faceTerrainType == TerrainType.Dune)
+			{
+				return ClimateZone.Desert;
+			}
+			if (num2 < 0.32f)
+			{
+				return ClimateZone.Tropical;
+			}
+			if (num2 > 0.52f || height > 16f)
+			{
+				return ClimateZone.Cold;
+			}
+			return ClimateZone.Temperate;
+		}
+		catch (Exception ex)
+		{
+			Main.Log($"ERROR calculating climate zone for {village.Settlement.Name}: {ex.Message}");
+			return ClimateZone.Temperate;
+		}
+	}
+
+	public override ExplainedNumber CalculateDailyProductionAmount(Village village, ItemObject item)
+	{
+		if (!IsVillageValid(village))
+		{
+			return new ExplainedNumber(0f, false, null);
+		}
+		if (!_itemsInitialized)
+		{
+			InitializeCustomItems();
+		}
+		string text = item?.StringId ?? "";
+		if (_customItemIds.Contains(text))
+		{
+			if (!CanVillageProduceItem(village, text))
+			{
+				return new ExplainedNumber(0f, false, null);
+			}
+			float baseProductionAmount = GetBaseProductionAmount(village, text);
+			ClimateZone climateZone = GetClimateZone(village);
+		

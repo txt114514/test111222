@@ -1,0 +1,540 @@
+﻿PART 9/75
+	else
+					{
+						component.SetDestination(settlement2);
+					}
+					bool flag3 = false;
+				}
+				else
+				{
+					ForceDestroyParty(party, component);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in ProcessFleeing: " + ex.Message);
+			ForceDestroyParty(party, component);
+		}
+	}
+
+	private void FleeDisband(MobileParty party, CastleForagerPartyComponent component)
+	{
+		try
+		{
+			Settlement homeCastle = component.HomeCastle;
+			Settlement currentSettlement = party.CurrentSettlement;
+			ProcessDisbandAtCurrentLocation(party, component);
+			bool flag = currentSettlement != null && currentSettlement.Town != null && currentSettlement.MapFaction == party.MapFaction && !currentSettlement.IsUnderSiege;
+			if (homeCastle != null && _activeForagers.ContainsKey(homeCastle))
+			{
+				_activeForagers.Remove(homeCastle);
+			}
+			if (homeCastle != null)
+			{
+				_lastSpawnTime[homeCastle] = CampaignTime.Now - CampaignTime.Hours(24f);
+			}
+			if (party.IsActive && !_partiesToDestroy.Contains(party))
+			{
+				_partiesToDestroy.Add(party);
+				if (flag)
+				{
+					_partiesToReturnTroops[party] = currentSettlement;
+					bool flag2 = false;
+				}
+				else
+				{
+					bool flag3 = false;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in FleeDisband: " + ex.Message);
+		}
+	}
+
+	private void HandleTrappedInSiege(MobileParty party, CastleForagerPartyComponent component)
+	{
+		try
+		{
+			Settlement homeCastle = component.HomeCastle;
+			Settlement currentSettlement = party.CurrentSettlement;
+			bool flag = false;
+			ProcessDisbandAtCurrentLocation(party, component);
+			bool flag2 = currentSettlement != null && currentSettlement.Town != null && currentSettlement.Town.GarrisonParty != null && currentSettlement.MapFaction == party.MapFaction;
+			if (homeCastle != null && _activeForagers.ContainsKey(homeCastle))
+			{
+				_activeForagers.Remove(homeCastle);
+			}
+			if (homeCastle != null)
+			{
+				_lastSpawnTime[homeCastle] = CampaignTime.Now - CampaignTime.Hours(24f);
+			}
+			if (party.IsActive && !_partiesToDestroy.Contains(party))
+			{
+				_partiesToDestroy.Add(party);
+				if (flag2)
+				{
+					_partiesToReturnTroops[party] = currentSettlement;
+					bool flag3 = false;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in HandleTrappedInSiege: " + ex.Message);
+			ForceDestroyParty(party, component);
+		}
+	}
+
+	private void HandleTrappedInNeutralSiege(MobileParty party, CastleForagerPartyComponent component)
+	{
+		try
+		{
+			Settlement homeCastle = component.HomeCastle;
+			Settlement currentSettlement = party.CurrentSettlement;
+			bool flag = false;
+			ProcessDisbandAtCurrentLocation(party, component);
+			if (homeCastle != null && _activeForagers.ContainsKey(homeCastle))
+			{
+				_activeForagers.Remove(homeCastle);
+			}
+			if (homeCastle != null)
+			{
+				_lastSpawnTime[homeCastle] = CampaignTime.Now - CampaignTime.Hours(24f);
+			}
+			if (party.IsActive && !_partiesToDestroy.Contains(party))
+			{
+				_partiesToDestroy.Add(party);
+			}
+			bool flag2 = false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in HandleTrappedInNeutralSiege: " + ex.Message);
+			ForceDestroyParty(party, component);
+		}
+	}
+
+	private void ForceDestroyParty(MobileParty party, CastleForagerPartyComponent component)
+	{
+		try
+		{
+			Settlement homeCastle = component.HomeCastle;
+			Hero partyOwner = component.PartyOwner;
+			bool flag = false;
+			if (party.Party.PrisonRoster != null && party.Party.PrisonRoster.TotalManCount > 0)
+			{
+				List<Hero> list = new List<Hero>();
+				foreach (TroopRosterElement item in party.Party.PrisonRoster.GetTroopRoster())
+				{
+					if (item.Character?.HeroObject != null)
+					{
+						list.Add(item.Character.HeroObject);
+					}
+				}
+				foreach (Hero item2 in list)
+				{
+					EndCaptivityAction.ApplyByEscape(item2);
+				}
+				int totalManCount = party.Party.PrisonRoster.TotalManCount;
+				if (totalManCount > 0)
+				{
+					party.Party.PrisonRoster.Clear();
+				}
+				bool flag2 = false;
+			}
+			if (homeCastle != null && _activeForagers.ContainsKey(homeCastle))
+			{
+				_activeForagers.Remove(homeCastle);
+			}
+			if (homeCastle != null)
+			{
+				_lastSpawnTime[homeCastle] = CampaignTime.Now - CampaignTime.Hours(24f);
+			}
+			if (party.IsActive && !_partiesToDestroy.Contains(party))
+			{
+				_partiesToDestroy.Add(party);
+			}
+			bool flag3 = false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in ForceDestroyParty: " + ex.Message);
+		}
+	}
+
+	private Settlement FindNearestFriendlySettlement(MobileParty party)
+	{
+		if (party == null || party.MapFaction == null)
+		{
+			return null;
+		}
+		Settlement settlement = null;
+		float num = float.MaxValue;
+		Settlement settlement2 = null;
+		float num2 = float.MaxValue;
+		foreach (Settlement item in Settlement.All)
+		{
+			if (!IsSettlementSafeForFlee(party, item))
+			{
+				continue;
+			}
+			float num3 = item.GatePosition.DistanceSquared(party.GetPosition2D);
+			if (item.IsTown)
+			{
+				if (num3 < num)
+				{
+					num = num3;
+					settlement = item;
+				}
+			}
+			else if (item.IsVillage && num3 < num2)
+			{
+				num2 = num3;
+				settlement2 = item;
+			}
+		}
+		if (settlement != null && (settlement2 == null || num <= num2 * 2.25f))
+		{
+			return settlement;
+		}
+		return settlement2 ?? settlement;
+	}
+
+	private Settlement FindNearestFriendlyTown(MobileParty party)
+	{
+		if (party == null || party.MapFaction == null)
+		{
+			return null;
+		}
+		Settlement result = null;
+		float num = float.MaxValue;
+		foreach (Settlement item in Settlement.All)
+		{
+			if (item.IsTown && IsSettlementSafeForFlee(party, item))
+			{
+				float num2 = item.GatePosition.DistanceSquared(party.GetPosition2D);
+				if (num2 < num)
+				{
+					num = num2;
+					result = item;
+				}
+			}
+		}
+		return result;
+	}
+
+	private bool HasArrivedAtSettlement(MobileParty party, Settlement settlement)
+	{
+		if (party == null || settlement == null)
+		{
+			return false;
+		}
+		return party.CurrentSettlement == settlement;
+	}
+
+	private bool IsSettlementSafeForFlee(MobileParty party, Settlement settlement)
+	{
+		if (settlement == null)
+		{
+			return false;
+		}
+		if (!settlement.IsTown && !settlement.IsVillage)
+		{
+			return false;
+		}
+		if (settlement.MapFaction == null)
+		{
+			return false;
+		}
+		if (party.MapFaction == null)
+		{
+			return false;
+		}
+		if (FactionManager.IsAtWarAgainstFaction(party.MapFaction, settlement.MapFaction))
+		{
+			return false;
+		}
+		if (settlement.IsTown && settlement.IsUnderSiege)
+		{
+			return false;
+		}
+		if (settlement.IsVillage)
+		{
+			Village village = settlement.Village;
+			if (village == null)
+			{
+				return false;
+			}
+			if (village.VillageState != Village.VillageStates.Normal)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private void SellAllItems(MobileParty party, CastleForagerPartyComponent component, Settlement settlement)
+	{
+		Hero partyOwner = component.PartyOwner;
+		if (partyOwner == null || settlement == null || (!settlement.IsTown && !settlement.IsVillage))
+		{
+			return;
+		}
+		int num = 0;
+		ItemRoster itemRoster = party.ItemRoster;
+		for (int num2 = itemRoster.Count - 1; num2 >= 0; num2--)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num2);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0)
+			{
+				int num3 = (settlement.IsTown ? settlement.Town.GetItemPrice(elementCopyAtIndex.EquipmentElement, party, isSelling: true) : settlement.Village.GetItemPrice(elementCopyAtIndex.EquipmentElement, party, isSelling: true));
+				if (num3 <= 0)
+				{
+					num3 = 1;
+				}
+				int num4 = num3 * elementCopyAtIndex.Amount;
+				settlement.ItemRoster.AddToCounts(item, elementCopyAtIndex.Amount);
+				num += num4;
+				bool flag = false;
+			}
+		}
+		itemRoster.Clear();
+		if (num > 0)
+		{
+			GiveGoldAction.ApplyBetweenCharacters(null, partyOwner, num, disableNotification: true);
+			bool flag2 = false;
+		}
+		NotifyPlayerOfTransaction(party, component.HomeCastle, settlement, num, _saleMessageStr, _saleMessageNoLocationStr);
+	}
+
+	private int GetInventoryValue(MobileParty party)
+	{
+		int num = 0;
+		ItemRoster itemRoster = party.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.EquipmentElement.Item != null && elementCopyAtIndex.Amount > 0)
+			{
+				num += elementCopyAtIndex.EquipmentElement.Item.Value * elementCopyAtIndex.Amount;
+			}
+		}
+		return num;
+	}
+
+	private void ReturnTroopsToGarrison(MobileParty forager, MobileParty garrison)
+	{
+		int num = 0;
+		TroopRoster memberRoster = forager.MemberRoster;
+		TroopRoster troopRoster = TroopRoster.CreateDummyTroopRoster();
+		for (int num2 = memberRoster.Count - 1; num2 >= 0; num2--)
+		{
+			TroopRosterElement elementCopyAtIndex = memberRoster.GetElementCopyAtIndex(num2);
+			if (!elementCopyAtIndex.Character.IsHero && elementCopyAtIndex.Number > 0)
+			{
+				troopRoster.AddToCounts(elementCopyAtIndex.Character, elementCopyAtIndex.Number);
+				garrison.MemberRoster.AddToCounts(elementCopyAtIndex.Character, elementCopyAtIndex.Number, insertAtFront: false, elementCopyAtIndex.WoundedNumber);
+				num += elementCopyAtIndex.Number;
+			}
+		}
+		memberRoster.Clear();
+		if (num > 0 && garrison.CurrentSettlement != null)
+		{
+			Hero hero = garrison.CurrentSettlement.OwnerClan?.Leader;
+			if (hero != null)
+			{
+				string value = forager.Name?.ToString() ?? "Suppliers";
+				PendingForagerTroopNotifications[hero] = value;
+				CampaignEventDispatcher.Instance.OnTroopGivenToSettlement(hero, garrison.CurrentSettlement, troopRoster);
+				PendingForagerTroopNotifications.Remove(hero);
+			}
+		}
+		bool flag = false;
+	}
+
+	private void OnMobilePartyDestroyed(MobileParty party, PartyBase destroyer)
+	{
+		_interactedForagers.Remove(party);
+		try
+		{
+			if (!CastleForagerPartyComponent.IsForagerParty(party))
+			{
+				return;
+			}
+			CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(party);
+			if (foragerComponent != null)
+			{
+				Settlement homeCastle = foragerComponent.HomeCastle;
+				if (homeCastle != null && _activeForagers.ContainsKey(homeCastle))
+				{
+					_activeForagers.Remove(homeCastle);
+				}
+				string text = ((homeCastle != null) ? homeCastle.Name.ToString() : "Unknown");
+				if (homeCastle != null)
+				{
+					_lastSpawnTime[homeCastle] = CampaignTime.Now - CampaignTime.Hours(24f);
+				}
+				string text2 = ((destroyer != null) ? destroyer.Name.ToString() : "Unknown");
+				bool flag = false;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in OnMobilePartyDestroyed (Forager): " + ex.Message);
+		}
+	}
+
+	private void FireSuppliedNotification(MobileParty party, CastleForagerPartyComponent component, List<(EquipmentElement, int)> depositedItems)
+	{
+		try
+		{
+			Settlement homeCastle = component.HomeCastle;
+			if (homeCastle != null && homeCastle.Town != null && depositedItems != null && depositedItems.Count != 0 && homeCastle.Town != null)
+			{
+				CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(party, homeCastle.Town, depositedItems);
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in FireSuppliedNotification: " + ex.Message);
+		}
+	}
+
+	private void RebuildForagerTracking()
+	{
+		_activeForagers.Clear();
+		Dictionary<Settlement, List<MobileParty>> dictionary = new Dictionary<Settlement, List<MobileParty>>();
+		foreach (MobileParty item in MobileParty.All)
+		{
+			if (!CastleForagerPartyComponent.IsForagerParty(item))
+			{
+				continue;
+			}
+			CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(item);
+			if (foragerComponent?.HomeCastle != null)
+			{
+				Settlement homeCastle = foragerComponent.HomeCastle;
+				if (!dictionary.ContainsKey(homeCastle))
+				{
+					dictionary[homeCastle] = new List<MobileParty>();
+				}
+				dictionary[homeCastle].Add(item);
+			}
+		}
+		foreach (KeyValuePair<Settlement, List<MobileParty>> item2 in dictionary)
+		{
+			Settlement key = item2.Key;
+			List<MobileParty> value = item2.Value;
+			if (value.Count == 0)
+			{
+				continue;
+			}
+			MobileParty mobileParty = value[0];
+			CastleForagerPartyComponent foragerComponent2 = CastleForagerPartyComponent.GetForagerComponent(mobileParty);
+			if (mobileParty.ActualClan == null && foragerComponent2?.OriginalClan != null)
+			{
+				mobileParty.ActualClan = foragerComponent2.OriginalClan;
+			}
+			if (foragerComponent2 != null && foragerComponent2.OriginalClan != null && foragerComponent2.OriginalClan != key.OwnerClan)
+			{
+				bool flag = false;
+				foreach (MobileParty item3 in value)
+				{
+					if (item3.IsActive && !_partiesToDestroy.Contains(item3))
+					{
+						_partiesToDestroy.Add(item3);
+					}
+				}
+				continue;
+			}
+			_activeForagers[key] = mobileParty;
+			bool flag2 = false;
+			for (int i = 1; i < value.Count; i++)
+			{
+				MobileParty mobileParty2 = value[i];
+				bool flag3 = false;
+				if (mobileParty2.IsActive && !_partiesToDestroy.Contains(mobileParty2))
+				{
+					_partiesToDestroy.Add(mobileParty2);
+				}
+			}
+		}
+		foreach (MobileParty item4 in MobileParty.All)
+		{
+			if (item4 != null && item4.IsActive && CastleForagerPartyComponent.IsForagerParty(item4) && (item4.MemberRoster == null || item4.MemberRoster.TotalManCount <= 0) && !_partiesToDestroy.Contains(item4))
+			{
+				_partiesToDestroy.Add(item4);
+				Main.Log("[Forager] Re-queued zero-troop stray " + item4.StringId + " on load");
+			}
+		}
+		bool flag4 = false;
+	}
+
+	public bool HasActiveForager(Settlement castle)
+	{
+		return _activeForagers.ContainsKey(castle) && _activeForagers[castle] != null && _activeForagers[castle].IsActive;
+	}
+
+	public MobileParty GetActiveForager(Settlement castle)
+	{
+		if (_activeForagers.TryGetValue(castle, out var value) && value != null && value.IsActive)
+		{
+			return value;
+		}
+		return null;
+	}
+
+	private int GetForagerInteraction(MobileParty party)
+	{
+		if (_interactedForagers.TryGetValue(party, out var value))
+		{
+			return value;
+		}
+		return 0;
+	}
+
+	private void SetForagerInteraction(MobileParty party, int interaction)
+	{
+		if (_interactedForagers.ContainsKey(party))
+		{
+			_interactedForagers[party] = interaction;
+		}
+		else
+		{
+			_interactedForagers.Add(party, interaction);
+		}
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		AddDialogs(starter);
+	}
+
+	private void AddDialogs(CampaignGameStarter starter)
+	{
+		starter.AddDialogLine("forager_talk_friendly_return", "start", "forager_talk_player_options", "{=HAP_ForagerFriendlyReturn}It's you again. We're still gathering supplies for {CASTLE_LINK}.", forager_talk_friendly_return_on_condition, null, 110);
+		starter.AddDialogLine("forager_talk_hostile_return", "start", "forager_talk_player_options", "{=HAP_ForagerHostileReturn}You! Stay back... we remember what you did last time.[rf:idle_angry][ib:nervous]", forager_talk_hostile_return_on_condition, null, 110);
+		starter.AddDialogLine("forager_talk_start", "start", "forager_talk_player_options", "{=HAP_ForagerGreeting}Greetings. We're gathering supplies for {CASTLE_LINK}.", forager_talk_friendly_on_condition, null);
+		starter.AddPlayerLine("forager_talk_demand_friendly", "forager_talk_player_options", "forager_talk_demand_response", "{=HAP_ForagerDemand}Whatever you have, I'm taking it. Surrender or die!", forager_not_same_faction_on_condition, null, 120, forager_demand_clickable_condition);
+		starter.AddPlayerLine("forager_talk_ask_task", "forager_talk_player_options", "forager_talk_explain", "{=HAP_ForagerAskTask}What supplies are you gathering?", null, null, 90);
+		starter.AddPlayerLine("forager_talk_leave", "forager_talk_player_options", "close_window", "{=HAP_ForagerLeave}Carry on, then.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_talk_explain", "forager_talk_explain", "forager_talk_player_options", "{=HAP_ForagerExplain}Food, mostly. The garrison at {CASTLE_LINK} is running low. We buy what we can from nearby villages and towns.", forager_talk_set_castle_link_condition, null);
+		starter.AddDialogLine("forager_talk_demand_response_fight", "forager_talk_demand_response", "forager_talk_fight_or_leave", "{=HAP_ForagerDemandFight}You want our supplies? We're garrison soldiers, not peasants! You'll have to take them from us![rf:idle_angry][ib:aggressive]", forager_will_fight_on_condition, null);
+		starter.AddDialogLine("forager_talk_demand_response_surrender", "forager_talk_demand_response", "forager_talk_demand_options", "{=HAP_ForagerDemandSurrender}We're outnumbered... Please, take our goods if you must, but spare our lives![rf:idle_angry][ib:nervous]", forager_will_surrender_on_condition, null);
+		starter.AddPlayerLine("forager_fight_attack", "forager_talk_fight_or_leave", "close_window", "{=HAP_ForagerFightAttack}Then we'll take them by force. Attack!", forager_not_same_faction_on_condition, forager_attack_on_consequence, 120, forager_war_warning_condition);
+		starter.AddPlayerLine("forager_fight_leave", "forager_talk_fight_or_leave", "close_window", "{=HAP_ForagerFightLeave}On second thought, be on your way.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddPlayerLine("forager_demand_attack", "forager_talk_demand_options", "forager_talk_attack_warning", "{=HAP_ForagerAttackFriendly}Don't bother pleading. At them, lads!", forager_not_same_faction_on_condition, null, 120, forager_war_warning_condition);
+		starter.AddPlayerLine("forager_demand_take_goods", "forager_talk_demand_options", "forager_talk_goods_taken", "{=HAP_ForagerTakeGoods}Give me all your supplies!", forager_not_same_faction_on_condition, null, 110, forager_take_goods_warning_condition);
+		starter.AddPlayerLine("forager_demand_take_prisoner", "forager_talk_demand_options", "forager_talk_prisoner_warning", "{=HAP_ForagerTakePrisoner}You are my prisoners now.", forager_not_same_faction_on_condition, null, 100, forager_war_warning_condition);
+		starter.AddPlayerLine("forager_demand_nevermind", "forager_talk_demand_options", "close_window", "{=HAP_ForagerNevermind}Never mind. Go on your way.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_talk_goods_taken", "forager_talk_goods_taken", "close_window", "{=HAP_ForagerGoodsTaken}Take it all! Just let us go![rf:idle_angry][ib:nervous]", null, forager_goods_taken_on_consequence);
+		starter.AddDialogLine("forager_talk_prisoner_warning", "forager_talk_prisoner_warning", "forager_talk_prisoner_confirm", "{=HAP_ForagerPrisonerWarning}The lords of {FACTION_NAME} won't stand for this! You're making a grave mistake![rf:idle_angry][ib:nervous]", forager_set_faction_name_condition, null);
+		starter.AddPlayerLine("forager_prisoner_confirm_yes", "forager_talk_prisoner_confirm", "close_window", "{=HAP_ForagerPrisonerYes}Enough talking. Now march.", null, forager_take_prisoner_on_consequence, 120);
+		starter.AddPlayerLine("forager_prisoner_confirm_no", "forager_talk_prisoner_confirm", "forager_talk_demand_options", "{=HAP_ForagerPrisonerNo}Never mind. Go on your way.", null, null, 80);
+		starter.AddDialogLine("forager_talk_attack_warning", "forager_talk_attack_warning", "forager_talk_attack_confirm", "{=HAP_ForagerAttackWarning}Heaven will avenge us, you monster![rf:idle_angry][ib:nervous]", null, null);
+		starter.AddPlayerLine("forager_attack_confirm_yes", "forager_talk_attack_confirm", "close_window", "{=HAP_ForagerAttackYes}Your goods AND your freedom. Seize them!", null, forager_attack_on_consequence, 120);
+		starter.AddPlayerLine("forager_attack_confirm

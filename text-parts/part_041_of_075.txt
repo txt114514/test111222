@@ -1,0 +1,594 @@
+﻿PART 41/75
+plainedNumber(0f, includeDescriptions);
+		explainedNumber.AddFromExplainedNumber(bonuses, TextObject.GetEmpty());
+		explainedNumber.SubtractFromExplainedNumber(bonuses2, TextObject.GetEmpty());
+		GetSettlementFoodChangeDueToIssues(town, ref explainedNumber);
+		return explainedNumber;
+	}
+
+	private float CalculateDailySpoilage(Town town, bool includeDescriptions, ref ExplainedNumber consumption)
+	{
+		float foodStocks = town.FoodStocks;
+		if (foodStocks <= 0f)
+		{
+			return 0f;
+		}
+		float num = foodStocks * 0.03f;
+		int spoilageReductionBuildingLevel = GetSpoilageReductionBuildingLevel(town);
+		float num2 = (town.IsCastle ? 0.1f : 0.2f);
+		float num3 = (float)spoilageReductionBuildingLevel * num2;
+		float num4 = num * (1f - num3);
+		if (PerkHelper.GetPerkValueForTown(DefaultPerks.Medicine.CleanInfrastructure, town))
+		{
+			num4 *= 0.7f;
+		}
+		float num5 = GlobalSettings<HAPSettings>.Instance?.SettlementSpoilageMultiplier ?? 1f;
+		Kingdom kingdom = town.Settlement?.OwnerClan?.Kingdom;
+		if (kingdom != null)
+		{
+			if (HAPPolicies.GranaryWardens != null && kingdom.ActivePolicies.Contains(HAPPolicies.GranaryWardens))
+			{
+				num5 *= 0.9f;
+			}
+			if (HAPPolicies.SaltTax != null && kingdom.ActivePolicies.Contains(HAPPolicies.SaltTax))
+			{
+				num5 *= 1.05f;
+			}
+		}
+		num4 *= num5;
+		num4 = MathF.Max(0f, num4);
+		if (num4 > 0f)
+		{
+			consumption.Add(num4, _spoilageText);
+		}
+		return num4;
+	}
+
+	private int GetSpoilageReductionBuildingLevel(Town town)
+	{
+		if (town == null || town.Buildings == null)
+		{
+			return 0;
+		}
+		bool flag = GlobalSettings<HAPSettings>.Instance?.EnableArtificialFoodBonus ?? false;
+		foreach (Building building in town.Buildings)
+		{
+			if (town.IsCastle)
+			{
+				if (building.BuildingType == DefaultBuildingTypes.CastleGranary)
+				{
+					return building.CurrentLevel;
+				}
+			}
+			else if (!flag && building.BuildingType == DefaultBuildingTypes.SettlementWaterworks)
+			{
+				return building.CurrentLevel;
+			}
+		}
+		return 0;
+	}
+
+	private float CountMarketFood(Town town, bool isEmergency)
+	{
+		float num = 0f;
+		ItemRoster itemRoster = town.Settlement.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && IsClaimableFood(item, isEmergency, town.Settlement))
+			{
+				num += (float)elementCopyAtIndex.Amount;
+			}
+		}
+		return num;
+	}
+
+	private bool IsClaimableFood(ItemObject item, bool isEmergency, Settlement settlement)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		bool flag = item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores;
+		bool isFood = item.IsFood;
+		if (!isEmergency)
+		{
+			return flag && !RawMaterialRegistry.IsProtected(item.StringId, settlement, RawMaterialRegistry.ProtectionContext.TooltipPrediction);
+		}
+		return flag | isFood;
+	}
+
+	private float CountStashFood(Settlement castle)
+	{
+		if (castle == null || castle.Stash == null)
+		{
+			return 0f;
+		}
+		if (castle.OwnerClan != Clan.PlayerClan)
+		{
+			return 0f;
+		}
+		float num = 0f;
+		ItemRoster stash = castle.Stash;
+		for (int i = 0; i < stash.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = stash.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0)
+			{
+				int stashItemFoodValue = GetStashItemFoodValue(item);
+				if (stashItemFoodValue > 0)
+				{
+					num += (float)(elementCopyAtIndex.Amount * stashItemFoodValue);
+				}
+			}
+		}
+		return num;
+	}
+
+	private int GetStashItemFoodValue(ItemObject item)
+	{
+		if (item == null)
+		{
+			return 0;
+		}
+		if (item.IsFood || item.StringId.StartsWith("meat_"))
+		{
+			return 1;
+		}
+		string stringId = item.StringId;
+		if (stringId == "cow")
+		{
+			return 4;
+		}
+		if (stringId == "sheep" || stringId == "hog")
+		{
+			return 2;
+		}
+		if (stringId == "chicken_product" || stringId == "goose_product" || stringId == "hare")
+		{
+			return 1;
+		}
+		if (item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores)
+		{
+			return 1;
+		}
+		return 0;
+	}
+
+	private static void GetSettlementFoodChangeDueToIssues(Town town, ref ExplainedNumber explainedNumber)
+	{
+		Campaign.Current.Models.IssueModel.GetIssueEffectsOfSettlement(DefaultIssueEffects.SettlementFood, town.Settlement, ref explainedNumber);
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\CustomSettlementLoyaltyModel.cs =====
+using System.Linq;
+using HarvestAndProduction.Behaviors;
+using HarvestAndProduction.Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Models;
+
+public class CustomSettlementLoyaltyModel : DefaultSettlementLoyaltyModel
+{
+	private const float FOOD_DAYS_PENALTY_THRESHOLD = 7f;
+
+	private const float FOOD_PENALTY_MAX = -3f;
+
+	private const float STARVATION_BASE_PENALTY = -3f;
+
+	private const float STARVATION_PENALTY_PER_WEEK = -1f;
+
+	private const float STARVATION_MAX_PENALTY = -6f;
+
+	private const float SECURITY_MIDPOINT = 50f;
+
+	private const float SECURITY_BONUS_MAX = 3f;
+
+	private const float SECURITY_PENALTY_MAX = -3f;
+
+	private const float LOYALTY_PER_LUXURY_ITEM = 0.1f;
+
+	public override ExplainedNumber CalculateLoyaltyChange(Town town, bool includeDescriptions = false)
+	{
+		ExplainedNumber result = base.CalculateLoyaltyChange(town, includeDescriptions);
+		CalculateFoodEffectsOnLoyalty(town, ref result);
+		CalculateSecurityEffectsOnLoyalty(town, ref result);
+		CalculateLuxuryGoodsEffectsOnLoyalty(town, ref result);
+		float dailyStashLoyaltyBoost = TownFoodEconomyBehavior.GetDailyStashLoyaltyBoost(town.Settlement);
+		if (dailyStashLoyaltyBoost > 0f)
+		{
+			result.Add(dailyStashLoyaltyBoost, HAPTextObjects.LordsProvisions);
+		}
+		Kingdom kingdom = town.Settlement?.OwnerClan?.Kingdom;
+		if (kingdom != null && HAPPolicies.RationingDecree != null && kingdom.ActivePolicies.Contains(HAPPolicies.RationingDecree))
+		{
+			result.Add(-0.5f, HAPTextObjects.RationingDecree);
+		}
+		if (town.IsTown)
+		{
+			Kingdom kingdom2 = kingdom ?? town.Settlement?.OwnerClan?.Kingdom;
+			if (kingdom2 != null && HAPPolicies.SumptuaryLaws != null && kingdom2.ActivePolicies.Contains(HAPPolicies.SumptuaryLaws))
+			{
+				result.Add(-0.5f, HAPTextObjects.SumptuaryLaws);
+			}
+		}
+		CalculateVanillaPolicyLoyaltyEffects(town, ref result);
+		return result;
+	}
+
+	private void CalculateVanillaPolicyLoyaltyEffects(Town town, ref ExplainedNumber result)
+	{
+		Kingdom kingdom = town.Owner?.Settlement?.OwnerClan?.Kingdom;
+		if (kingdom != null)
+		{
+			if (kingdom.ActivePolicies.Contains(DefaultPolicies.Citizenship))
+			{
+				result.Add((town.Settlement.OwnerClan.Culture == town.Settlement.Culture) ? 0.5f : (-0.5f), DefaultPolicies.Citizenship.Name);
+			}
+			if (kingdom.ActivePolicies.Contains(DefaultPolicies.HuntingRights))
+			{
+				result.Add(-0.2f, DefaultPolicies.HuntingRights.Name);
+			}
+			if (kingdom.ActivePolicies.Contains(DefaultPolicies.GrazingRights))
+			{
+				result.Add(0.5f, DefaultPolicies.GrazingRights.Name);
+			}
+			if (kingdom.ActivePolicies.Contains(DefaultPolicies.TrialByJury))
+			{
+				result.Add(0.5f, DefaultPolicies.TrialByJury.Name);
+			}
+			if (town.IsTown && kingdom.ActivePolicies.Contains(DefaultPolicies.ImperialTowns))
+			{
+				result.Add((kingdom.RulingClan == town.Settlement.OwnerClan) ? 1f : (-0.3f), DefaultPolicies.ImperialTowns.Name);
+			}
+			if (kingdom.ActivePolicies.Contains(DefaultPolicies.ForgivenessOfDebts))
+			{
+				result.Add(2f, DefaultPolicies.ForgivenessOfDebts.Name);
+			}
+			if (kingdom.ActivePolicies.Contains(DefaultPolicies.TribunesOfThePeople) && town.IsTown)
+			{
+				result.Add(1f, DefaultPolicies.TribunesOfThePeople.Name);
+			}
+		}
+	}
+
+	private void CalculateFoodEffectsOnLoyalty(Town town, ref ExplainedNumber result)
+	{
+		if (town.Settlement.IsStarving)
+		{
+			float daysStarving = town.Settlement.Party.DaysStarving;
+			float num = daysStarving / 7f;
+			float a = -3f + num * -1f;
+			a = MathF.Max(a, -6f);
+			result.Add(a, HAPTextObjects.FoodShortage);
+			return;
+		}
+		float num2 = town.Prosperity / 80f + ((town.GarrisonParty != null) ? ((float)town.GarrisonParty.Party.NumberOfAllMembers / 40f) : 0f);
+		float num3 = ((num2 > 0f) ? (town.FoodStocks / num2) : 0f);
+		if (num3 < 7f)
+		{
+			float value = MBMath.Map(num3, 0f, 7f, -3f, 0f);
+			result.Add(value, HAPTextObjects.LowFoodStock);
+		}
+	}
+
+	private void CalculateSecurityEffectsOnLoyalty(Town town, ref ExplainedNumber result)
+	{
+		float security = town.Security;
+		if (security < 50f)
+		{
+			float value = MBMath.Map(security, 0f, 50f, -3f, 0f);
+			result.Add(value, HAPTextObjects.LowSecurity);
+			return;
+		}
+		float num = MBMath.Map(security, 50f, 100f, 0f, 3f);
+		if (num > 0.01f)
+		{
+			result.Add(num, HAPTextObjects.HighSecurity);
+		}
+	}
+
+	private void CalculateLuxuryGoodsEffectsOnLoyalty(Town town, ref ExplainedNumber result)
+	{
+		if (town.IsTown)
+		{
+			int num = town.SoldItems.Sum((Town.SellLog x) => (x.Category.Properties == ItemCategory.Property.BonusToLoyalty) ? x.Number : 0);
+			if (num > 0)
+			{
+				float value = (float)num * 0.1f;
+				result.Add(value, HAPTextObjects.LuxuryGoods);
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\CustomSettlementMilitiaModel.cs =====
+using HarvestAndProduction.Behaviors;
+using HarvestAndProduction.Helpers;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Models;
+
+public class CustomSettlementMilitiaModel : DefaultSettlementMilitiaModel
+{
+	private const float MILITIA_PENALTY_WEEK2 = -10f;
+
+	private const float MILITIA_PENALTY_WEEK3 = -15f;
+
+	private const float MILITIA_PENALTY_WEEK4 = -20f;
+
+	private const float MILITIA_PENALTY_MAX = -25f;
+
+	private const float MINIMUM_MILITIA = 0f;
+
+	public override ExplainedNumber CalculateMilitiaChange(Settlement settlement, bool includeDescriptions = false)
+	{
+		ExplainedNumber result = base.CalculateMilitiaChange(settlement, includeDescriptions);
+		HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+		if (instance != null && instance.StarvationEffects?.SelectedIndex == 0)
+		{
+			return result;
+		}
+		if (settlement.IsFortification && settlement.Town.InRebelliousState && !settlement.IsUnderSiege)
+		{
+			return result;
+		}
+		float starvationDays = StarvationDesertionBehavior.GetStarvationDays(settlement);
+		float num = 0f;
+		if (starvationDays >= 28f)
+		{
+			num = -25f;
+		}
+		else if (starvationDays >= 21f)
+		{
+			num = -20f;
+		}
+		else if (starvationDays >= 14f)
+		{
+			num = -15f;
+		}
+		else if (starvationDays >= 7f)
+		{
+			num = -10f;
+		}
+		if (num < 0f)
+		{
+			TextObject description = (settlement.IsUnderSiege ? HAPTextObjects.FoodShortage : HAPTextObjects.FoodShortageDesertion);
+			result.Add(num, description);
+		}
+		bool flag = false;
+		return result;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\CustomSettlementPatrolModel.cs =====
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Buildings;
+
+namespace HarvestAndProduction.Models;
+
+public class CustomSettlementPatrolModel : SettlementPatrolModel
+{
+	public override bool CanSettlementHavePatrolParties(Settlement settlement, bool naval)
+	{
+		if (naval)
+		{
+			return base.BaseModel.CanSettlementHavePatrolParties(settlement, naval);
+		}
+		if (settlement.IsTown)
+		{
+			return base.BaseModel.CanSettlementHavePatrolParties(settlement, naval);
+		}
+		if (settlement.IsCastle && settlement.OwnerClan != null && !settlement.OwnerClan.IsRebelClan && GetCastleGuardHouse(settlement) != null)
+		{
+			return true;
+		}
+		return false;
+	}
+
+	public override CampaignTime GetPatrolPartySpawnDuration(Settlement settlement, bool naval)
+	{
+		if (!naval && settlement.IsCastle)
+		{
+			Building castleGuardHouse = GetCastleGuardHouse(settlement);
+			if (castleGuardHouse != null)
+			{
+				return CampaignTime.Days(10f - ((float)castleGuardHouse.CurrentLevel - 1f) * 2f);
+			}
+		}
+		return base.BaseModel.GetPatrolPartySpawnDuration(settlement, naval);
+	}
+
+	public override PartyTemplateObject GetPartyTemplateForPatrolParty(Settlement settlement, bool naval)
+	{
+		if (!naval && settlement.IsCastle)
+		{
+			Building castleGuardHouse = GetCastleGuardHouse(settlement);
+			if (castleGuardHouse != null)
+			{
+				return (int)Campaign.Current.Models.BuildingEffectModel.GetBuildingEffect(castleGuardHouse, BuildingEffectEnum.PatrolPartyStrength).ResultNumber switch
+				{
+					1 => settlement.OwnerClan.Culture.SettlementPatrolPartyTemplateWeak, 
+					2 => settlement.OwnerClan.Culture.SettlementPatrolPartyTemplateModerate, 
+					3 => settlement.OwnerClan.Culture.SettlementPatrolPartyTemplateStrong, 
+					_ => settlement.OwnerClan.Culture.SettlementPatrolPartyTemplateWeak, 
+				};
+			}
+		}
+		return base.BaseModel.GetPartyTemplateForPatrolParty(settlement, naval);
+	}
+
+	private static Building GetCastleGuardHouse(Settlement settlement)
+	{
+		if (settlement.Town == null)
+		{
+			return null;
+		}
+		foreach (Building building in settlement.Town.Buildings)
+		{
+			if (building.BuildingType == DefaultBuildingTypes.CastleGuardHouse && building.CurrentLevel > 0)
+			{
+				return building;
+			}
+		}
+		return null;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Models\CustomSettlementProsperityModel.cs =====
+using System.Linq;
+using HarvestAndProduction.Behaviors;
+using HarvestAndProduction.Helpers;
+using Helpers;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Issues;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Buildings;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Models;
+
+public class CustomSettlementProsperityModel : DefaultSettlementProsperityModel
+{
+	private const float FOOD_DAYS_PENALTY_THRESHOLD = 7f;
+
+	private const float FOOD_PENALTY_MAX = -3f;
+
+	private const float SATISFACTION_BASE_MULTIPLIER = 0.5f;
+
+	private const float SATISFACTION_BUFFER_MULTIPLIER = 1.5f;
+
+	private const int COMFORTABLE_BUFFER_DAYS = 7;
+
+	private const float MAX_PROSPERITY_LOSS_FRACTION = 0.05f;
+
+	private static readonly TextObject _fedPopulationText = new TextObject("{=HAP_FedPopulation}Fed Population");
+
+	private static readonly TextObject _foodSecurityText = new TextObject("{=HAP_FoodReserves}Food Reserves");
+
+	private static readonly TextObject _surplusFoodText = GameTexts.FindText("str_surplus_food");
+
+	private static readonly TextObject _prosperityFromMarketText = new TextObject("{=RNT5hMVb}Goods From Market");
+
+	private static readonly TextObject _housingCostsText = new TextObject("{=ByRAgJy4}Housing Costs");
+
+	private static readonly TextObject _provisionerCorpsText = new TextObject("{=HAP_Policy_ProvisionerCorps}Provisioner Corps");
+
+	private static readonly TextObject _workshopProsperityText = new TextObject("{=HAP_WorkshopProsperity}Workshops");
+
+	public override ExplainedNumber CalculateProsperityChange(Town fortification, bool includeDescriptions = false)
+	{
+		ExplainedNumber explainedNumber = new ExplainedNumber(0f, includeDescriptions);
+		CalculateProsperityChangeInternal(fortification, ref explainedNumber);
+		return explainedNumber;
+	}
+
+	public override ExplainedNumber CalculateHearthChange(Village village, bool includeDescriptions = false)
+	{
+		ExplainedNumber result = base.CalculateHearthChange(village, includeDescriptions);
+		if (village.VillageState == Village.VillageStates.Normal && village.Bound != null && village.Bound.Town != null)
+		{
+			float prosperity = village.Bound.Town.Prosperity;
+			float num = GlobalSettings<HAPSettings>.Instance?.VillageHearthCap ?? 1000;
+			float num2 = 1f - village.Hearth / num;
+			if (num2 > 0f)
+			{
+				float value = prosperity / 2000f * num2;
+				result.Add(value, HAPTextObjects.BoundSettlement);
+			}
+		}
+		Kingdom kingdom = village.Settlement?.OwnerClan?.Kingdom;
+		if (kingdom != null && HAPPolicies.HarvestLevy != null && kingdom.ActivePolicies.Contains(HAPPolicies.HarvestLevy))
+		{
+			result.Add(-0.5f, HAPTextObjects.HarvestLevy);
+		}
+		return result;
+	}
+
+	private void CalculateProsperityChangeInternal(Town fortification, ref ExplainedNumber explainedNumber)
+	{
+		CalculateFoodEffectsOnProsperity(fortification, ref explainedNumber);
+		CalculateHousingCosts(fortification, ref explainedNumber);
+		if (fortification.IsTown)
+		{
+			int num = fortification.SoldItems.Sum((Town.SellLog x) => (x.Category.Properties == ItemCategory.Property.BonusToProsperity) ? x.Number : 0);
+			if (num > 0)
+			{
+				explainedNumber.Add((float)num * 0.1f, _prosperityFromMarketText);
+			}
+		}
+		if (fortification.IsTown && !fortification.Owner.IsStarving)
+		{
+			CalculateMarketFulfillmentEffect(fortification, ref explainedNumber);
+		}
+		if (fortification.IsTown)
+		{
+			CalculateWorkshopProsperityEffect(fortification, ref explainedNumber);
+		}
+		PerkHelper.AddPerkBonusForTown(DefaultPerks.Medicine.PristineStreets, fortification, ref explainedNumber);
+		if (PerkHelper.GetPerkValueForTown(DefaultPerks.Engineering.Apprenticeship, fortification))
+		{
+			float num2 = 0f;
+			foreach (Building item in fortification.Buildings.Where((Building x) => !x.BuildingType.IsDailyProject && x.CurrentLevel > 0))
+			{
+				num2 += DefaultPerks.Engineering.Apprenticeship.SecondaryBonus;
+			}
+			if (num2 > 0f && explainedNumber.ResultNumber > 0f)
+			{
+				explainedNumber.AddFactor(num2, DefaultPerks.Engineering.Apprenticeship.Name);
+			}
+		}
+		fortification.AddEffectOfBuildings(BuildingEffectEnum.Prosperity, ref explainedNumber);
+		if ((fortification.IsTown || fortification.IsCastle) && !fortification.CurrentBuilding.IsCurrentlyDefault && fortification.Governor != null && fortification.Governor.GetPerkValue(DefaultPerks.Trade.TrickleDown))
+		{
+			explainedNumber.Add(DefaultPerks.Trade.TrickleDown.SecondaryBonus, DefaultPerks.Trade.TrickleDown.Name);
+		}
+		if (fortification.Settlement.OwnerClan.Kingdom != null && fortification.IsTown)
+		{
+			Kingdom kingdom = fortification.Settlement.OwnerClan.Kingdom;
+			if (kingdom.ActivePolicies.Contains(DefaultPolicies.RoadTolls))
+			{
+				explainedNumber.Add(-0.2f, DefaultPolicies.RoadTolls.Name);
+			}
+			if (kingdom.RulingClan == fortification.Settlement.OwnerClan && kingdom.ActivePolicies.Contains(DefaultPolicies.ImperialTowns))
+			{
+				explainedNumber.Add(1f, DefaultPolicies.ImperialTowns.Name);
+			}
+			if (kingdom.ActivePolicies.Contains(DefaultPolicies.CrownDuty))
+			{
+				explainedNumber.Add(-1f, DefaultPolicies.CrownDuty.Name);
+			}
+			if (kingdom.ActivePolicies.Contains(DefaultPolicies.WarTax))
+			{
+				explainedNumber.Add(-1f, DefaultPolicies.WarTax.Name);
+			}
+		}
+		Kingdom kingdom2 = fortification.Settlement.OwnerClan?.Kingdo

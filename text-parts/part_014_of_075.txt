@@ -1,0 +1,633 @@
+﻿PART 14/75
+.MobileParty.MemberRoster.TotalManCount;
+		int totalManCount2 = MobileParty.MainParty.MemberRoster.TotalManCount;
+		if (totalManCount <= 0)
+		{
+			return true;
+		}
+		float num = (float)totalManCount2 / (float)totalManCount;
+		return num >= 2f;
+	}
+
+	private void CalculateFisherBribeAmount(PartyBase party, out int gold, out ItemRoster items)
+	{
+		gold = 0;
+		items = new ItemRoster();
+		if (party?.MobileParty == null)
+		{
+			return;
+		}
+		gold = party.MobileParty.PartyTradeGold / 2;
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = party.ItemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.EquipmentElement.Item != null && elementCopyAtIndex.EquipmentElement.Item.ItemCategory != DefaultItemCategories.PackAnimal)
+			{
+				int elementNumber = party.ItemRoster.GetElementNumber(i);
+				if (elementNumber > 0)
+				{
+					int number = MathF.Max(1, elementNumber / 2);
+					items.AddToCounts(elementCopyAtIndex.EquipmentElement, number);
+				}
+			}
+		}
+	}
+
+	private bool fisher_set_faction_name_condition()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty?.MapFaction != null)
+		{
+			MBTextManager.SetTextVariable("FACTION_NAME", encounteredParty.MapFaction.Name);
+		}
+		return true;
+	}
+
+	private bool fisher_crime_warning_clickable(out TextObject explanation)
+	{
+		explanation = new TextObject("{=FisherCrimeWarning}This will be considered a crime.");
+		return true;
+	}
+
+	private bool fisher_war_warning_clickable(out TextObject explanation)
+	{
+		explanation = new TextObject("{=1LlH1Jof}This action will start a war.");
+		return true;
+	}
+
+	private void fisher_accept_bribe_on_consequence()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty == null)
+		{
+			return;
+		}
+		int cachedBribeGold = _cachedBribeGold;
+		ItemRoster itemRoster = _cachedBribeItems ?? new ItemRoster();
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.Amount > 0)
+			{
+				PartyBase.MainParty.ItemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, elementCopyAtIndex.Amount);
+				encounteredParty.ItemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, -elementCopyAtIndex.Amount);
+			}
+		}
+		if (cachedBribeGold > 0)
+		{
+			GiveGoldAction.ApplyForPartyToCharacter(encounteredParty, Hero.MainHero, cachedBribeGold);
+		}
+		BeHostileAction.ApplyMinorCoercionHostileAction(PartyBase.MainParty, encounteredParty);
+		Hero hero = encounteredParty.MobileParty?.HomeSettlement?.Village?.Bound?.Owner;
+		if (hero != null && hero.Clan != Clan.PlayerClan)
+		{
+			ChangeRelationAction.ApplyPlayerRelation(hero, -3);
+		}
+		SkillLevelingManager.OnLoot(MobileParty.MainParty, encounteredParty.MobileParty, itemRoster, attacked: false);
+		_cachedBribeGold = 0;
+		_cachedBribeItems = null;
+		SetFisherInteraction(encounteredParty.MobileParty, 2);
+		PlayerEncounter.LeaveEncounter = true;
+	}
+
+	private void fisher_take_goods_on_consequence()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty != null)
+		{
+			ItemRoster itemRoster = new ItemRoster(encounteredParty.ItemRoster);
+			int partyTradeGold = encounteredParty.MobileParty.PartyTradeGold;
+			if (partyTradeGold > 0)
+			{
+				GiveGoldAction.ApplyForPartyToCharacter(encounteredParty, Hero.MainHero, partyTradeGold);
+			}
+			if (!FactionManager.IsAtWarAgainstFaction(encounteredParty.MapFaction, Hero.MainHero.MapFaction))
+			{
+				BeHostileAction.ApplyMajorCoercionHostileAction(PartyBase.MainParty, encounteredParty);
+			}
+			Hero hero = encounteredParty.MobileParty?.HomeSettlement?.Village?.Bound?.Owner;
+			if (hero != null && hero.Clan != Clan.PlayerClan)
+			{
+				ChangeRelationAction.ApplyPlayerRelation(hero, -5);
+			}
+			SkillLevelingManager.OnLoot(MobileParty.MainParty, encounteredParty.MobileParty, itemRoster, attacked: false);
+			SetFisherInteraction(encounteredParty.MobileParty, 2);
+			encounteredParty.ItemRoster.Clear();
+			if (itemRoster.Count > 0)
+			{
+				InventoryScreenHelper.OpenScreenAsLoot(new Dictionary<PartyBase, ItemRoster> { 
+				{
+					PartyBase.MainParty,
+					itemRoster
+				} });
+			}
+			else
+			{
+				PlayerEncounter.LeaveEncounter = true;
+			}
+		}
+	}
+
+	private void fisher_take_prisoners_on_consequence()
+	{
+		try
+		{
+			PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+			if (encounteredParty == null)
+			{
+				PlayerEncounter.LeaveEncounter = true;
+				return;
+			}
+			BeHostileAction.ApplyEncounterHostileAction(PartyBase.MainParty, encounteredParty);
+			if (PlayerEncounter.Battle == null)
+			{
+				PlayerEncounter.StartBattle();
+			}
+			PlayerEncounter.Battle.SetOverrideWinner(PlayerEncounter.Battle.PlayerSide);
+			PlayerEncounter.EnemySurrender = true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in fisher_take_prisoners_on_consequence: " + ex.Message);
+			PlayerEncounter.LeaveEncounter = true;
+		}
+	}
+
+	private void fisher_fight_on_consequence()
+	{
+		PartyBase encounteredParty = PlayerEncounter.EncounteredParty;
+		if (encounteredParty != null)
+		{
+			SetFisherInteraction(encounteredParty.MobileParty, 2);
+			BeHostileAction.ApplyEncounterHostileAction(PartyBase.MainParty, encounteredParty);
+		}
+	}
+
+	private void fisher_leave_on_consequence()
+	{
+		PlayerEncounter.LeaveEncounter = true;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\FoodConsumptionPriorityBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using HarvestAndProduction.Models;
+using HarvestAndProduction.PartyComponents;
+using HarvestAndProduction.Patches;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+using TaleWorlds.ObjectSystem;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class FoodConsumptionPriorityBehavior : CampaignBehaviorBase
+{
+	private class SlaughterResult
+	{
+		public Dictionary<string, int> AnimalCounts = new Dictionary<string, int>();
+
+		public Dictionary<string, int> MeatCounts = new Dictionary<string, int>();
+
+		public Dictionary<string, int> HideCounts = new Dictionary<string, int>();
+
+		public int TotalAnimals = 0;
+
+		public int TotalMeat = 0;
+
+		public int TotalHides = 0;
+	}
+
+	private class FoodItemWeight
+	{
+		public ItemObject Item { get; set; }
+
+		public int Count { get; set; }
+
+		public float Weight { get; set; }
+	}
+
+	private const float SPOILAGE_WEIGHT = 0.4f;
+
+	private const float DELICIOUSNESS_WEIGHT = 0.4f;
+
+	private const float VARIETY_WEIGHT = 0.2f;
+
+	private const float MAX_MORALE_BONUS = 5f;
+
+	private const bool ENABLE_DEBUG = false;
+
+	private readonly List<FoodItemWeight> _reusableFoodItems = new List<FoodItemWeight>(32);
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.DailyTickPartyEvent.AddNonSerializedListener(this, OnDailyTickParty);
+		CampaignEvents.MobilePartyDestroyed.AddNonSerializedListener(this, OnMobilePartyDestroyed);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		if (dataStore.IsSaving)
+		{
+			ReservedItemService.PrepareSave();
+		}
+		ReservedItemService.SyncData(dataStore);
+		if (dataStore.IsLoading)
+		{
+			ReservedItemService.AfterLoad();
+		}
+	}
+
+	private void OnMobilePartyDestroyed(MobileParty party, PartyBase destroyerParty)
+	{
+		StarvationWoundingPatch.ClearPartyStarvation(party);
+	}
+
+	private void OnDailyTickParty(MobileParty party)
+	{
+		if (party == null || Campaign.Current == null || Campaign.Current.Models == null || !(Campaign.Current.Models.MobilePartyFoodConsumptionModel is FoodConsumptionModel foodConsumptionModel))
+		{
+			return;
+		}
+		FoodConsumptionModel.ClearProcessedIfNewDay();
+		if (FoodConsumptionModel.IsPartyProcessedToday(party))
+		{
+			bool flag = false;
+		}
+		else
+		{
+			if (!ShouldPartyConsumeFood(party))
+			{
+				return;
+			}
+			if (!party.IsMainParty && party.LeaderHero != null)
+			{
+				ProactivelySlaughterExcessLivestock(party);
+			}
+			bool isStarving = party.Party.IsStarving;
+			float num = Math.Abs(foodConsumptionModel.CalculateDailyBaseFoodConsumptionf(party).ResultNumber);
+			FoodConsumptionModel.MarkPartyAsProcessed(party);
+			bool flag2 = false;
+			if (num <= 0f)
+			{
+				return;
+			}
+			bool flag3 = false;
+			int num2 = GetActualFoodCount(party.ItemRoster);
+			int remainingFoodPercentage = party.Party.RemainingFoodPercentage;
+			float num3 = (float)num2 + (float)remainingFoodPercentage / 100f;
+			int num4 = (int)Math.Round(num * 100f);
+			int num5 = remainingFoodPercentage - num4;
+			int num6 = 0;
+			while (num5 < 0 && num2 > 0)
+			{
+				num5 += 100;
+				num6++;
+				num2--;
+			}
+			bool flag4 = num2 == 0 && num5 < 0;
+			bool flag5 = false;
+			if (num6 > 0)
+			{
+				int actualFoodCount = GetActualFoodCount(party.ItemRoster);
+				while (actualFoodCount < num6 && TryAutoSlaughterLivestock(party))
+				{
+					actualFoodCount = GetActualFoodCount(party.ItemRoster);
+				}
+				if (actualFoodCount > 0)
+				{
+					int num7 = Math.Min(num6, actualFoodCount);
+					if (party.IsMainParty && ReservedItemService.HasAnyReserved())
+					{
+						float mainPartySpoilageFraction = FoodConsumptionModel.GetMainPartySpoilageFraction();
+						int num8 = (int)Math.Round((float)num7 * mainPartySpoilageFraction);
+						int num9 = num7 - num8;
+						bool flag6 = false;
+						int num10 = ((num9 > 0) ? RemoveFoodProportionally(party, num9) : 0);
+						int num11 = ((num8 > 0) ? RemoveFoodProportionally(party, num8, isSpoilagePass: true) : 0);
+						int num12 = num10 + num11;
+						int num13 = num7 - num12;
+						if (num13 > 0)
+						{
+							num5 += num13 * 100;
+							num6 -= num13;
+							bool flag7 = false;
+						}
+					}
+					else
+					{
+						RemoveFoodProportionally(party, num7);
+					}
+				}
+			}
+			if (num5 < 0 && GetActualFoodCount(party.ItemRoster) == 0)
+			{
+				int meatNeeded = (int)Math.Ceiling((float)(-num5) / 100f);
+				int num14 = TryAutoSlaughterLivestockBatch(party, meatNeeded);
+				if (num14 > 0)
+				{
+					num5 += num14 * 100;
+					int num15 = 0;
+					if (num5 >= 100)
+					{
+						num15 = num5 / 100;
+						num5 %= 100;
+					}
+					int num16 = num14 - num15;
+					if (num16 > 0)
+					{
+						RemoveFoodProportionally(party, num16);
+					}
+					flag4 = num5 < 0;
+				}
+			}
+			int num17 = -num4;
+			if (num5 < num17)
+			{
+				bool flag8 = false;
+				num5 = num17;
+			}
+			party.Party.RemainingFoodPercentage = num5;
+			if (party.Party.IsStarving && party.Army != null)
+			{
+				TryArmyFoodSharing(party);
+			}
+			bool flag9 = false;
+			party.Party.OnConsumedFood();
+			CampaignEventDispatcher.Instance.OnPartyConsumedFood(party);
+			bool isStarving2 = party.Party.IsStarving;
+			StarvationWoundingPatch.UpdatePartyStarvation(party, isStarving2);
+			if ((int)Campaign.Current.Models.CampaignTimeModel.CampaignStartTime.ToDays != (int)CampaignTime.Now.ToDays && (isStarving & isStarving2))
+			{
+				int dailyStarvationMoralePenalty = Campaign.Current.Models.PartyMoraleModel.GetDailyStarvationMoralePenalty(party.Party);
+				party.RecentEventsMorale += dailyStarvationMoralePenalty;
+				if (party.IsMainParty)
+				{
+					MBTextManager.SetTextVariable("MORALE_PENALTY", -dailyStarvationMoralePenalty);
+					MBInformationManager.AddQuickInformation(new TextObject("{=qhL5o55i}Your party is starving. You lose {MORALE_PENALTY} morale."));
+					CampaignEventDispatcher.Instance.OnMainPartyStarving();
+					if ((int)CampaignTime.Now.ToDays % 3 == 0 && party.MemberRoster.TotalManCount > 1)
+					{
+						TraitLevelingHelper.OnPartyStarved();
+					}
+				}
+			}
+			if (party.MemberRoster.TotalManCount > 1)
+			{
+				int foodVarietyMoraleBonus = GetFoodVarietyMoraleBonus(ReservedItemService.GetEffectiveFoodVariety(party));
+				if (!isStarving2 && foodVarietyMoraleBonus > 0 && party.EffectiveQuartermaster != null)
+				{
+					float val = (float)party.MemberRoster.TotalManCount * 0.05f;
+					float num18 = Math.Min(num, val);
+					float xpAmount = (float)MathF.Round(num18 * 100f) * (float)foodVarietyMoraleBonus / 6f;
+					party.EffectiveQuartermaster.AddSkillXp(DefaultSkills.Steward, xpAmount);
+					bool flag10 = false;
+				}
+				if (!isStarving2 && party.IsMainParty && party.Morale >= 90f && party.MemberRoster.TotalRegulars >= 20 && (int)CampaignTime.Now.ToDays % 10 == 0)
+				{
+					TraitLevelingHelper.OnPartyTreatedWell();
+				}
+			}
+			bool flag11 = false;
+			bool flag12 = false;
+		}
+	}
+
+	private void TryArmyFoodSharing(MobileParty starvingParty)
+	{
+		if (starvingParty == null || starvingParty.Army == null || !starvingParty.Party.IsStarving || (starvingParty.AttachedTo != starvingParty.Army.LeaderParty && starvingParty.Army.LeaderParty != starvingParty))
+		{
+			return;
+		}
+		Dictionary<Hero, float> dictionary = new Dictionary<Hero, float>();
+		Hero leaderHero = starvingParty.LeaderHero;
+		int num = starvingParty.Party.RemainingFoodPercentage;
+		while (num < 0)
+		{
+			MobileParty mobileParty = null;
+			float num2 = 1f;
+			MobileParty leaderParty = starvingParty.Army.LeaderParty;
+			if (leaderParty != starvingParty && !leaderParty.Party.IsStarving && leaderParty.ItemRoster.TotalFood > 0)
+			{
+				float num3 = (float)leaderParty.ItemRoster.TotalFood / Math.Abs(leaderParty.FoodChange);
+				if (num3 > num2)
+				{
+					num2 = num3;
+					mobileParty = leaderParty;
+				}
+			}
+			foreach (MobileParty attachedParty in leaderParty.AttachedParties)
+			{
+				if (attachedParty != starvingParty && !attachedParty.Party.IsStarving && attachedParty.ItemRoster.TotalFood > 0)
+				{
+					float num4 = (float)attachedParty.ItemRoster.TotalFood / Math.Abs(attachedParty.FoodChange);
+					if (num4 > num2)
+					{
+						num2 = num4;
+						mobileParty = attachedParty;
+					}
+				}
+			}
+			if (mobileParty == null)
+			{
+				break;
+			}
+			ItemRosterElement itemRosterElement = default(ItemRosterElement);
+			int num5 = int.MaxValue;
+			bool flag = false;
+			foreach (ItemRosterElement item in mobileParty.ItemRoster)
+			{
+				if (item.EquipmentElement.Item.IsFood && item.EquipmentElement.Item.Value < num5)
+				{
+					itemRosterElement = item;
+					num5 = item.EquipmentElement.Item.Value;
+					flag = true;
+				}
+			}
+			if (!flag)
+			{
+				foreach (ItemRosterElement item2 in mobileParty.ItemRoster)
+				{
+					if (item2.EquipmentElement.Item.HasHorseComponent && item2.EquipmentElement.Item.HorseComponent.IsLiveStock && item2.EquipmentElement.Item.Value < num5)
+					{
+						itemRosterElement = item2;
+						num5 = item2.EquipmentElement.Item.Value;
+						flag = true;
+					}
+				}
+			}
+			if (!flag)
+			{
+				break;
+			}
+			mobileParty.ItemRoster.AddToCounts(itemRosterElement.EquipmentElement, -1);
+			num += 100;
+			if (itemRosterElement.EquipmentElement.Item.HasHorseComponent && itemRosterElement.EquipmentElement.Item.HorseComponent.IsLiveStock)
+			{
+				int meatCount = itemRosterElement.EquipmentElement.Item.HorseComponent.MeatCount;
+				mobileParty.ItemRoster.AddToCounts(DefaultItems.Meat, meatCount - 1);
+			}
+			Hero leaderHero2 = mobileParty.LeaderHero;
+			if (leaderHero != null && leaderHero2 != null)
+			{
+				float num6 = 0.2f;
+				GainKingdomInfluenceAction.ApplyForGivingFood(leaderHero2, leaderHero, num6);
+				if (dictionary.ContainsKey(leaderHero2))
+				{
+					dictionary[leaderHero2] += num6;
+				}
+				else
+				{
+					dictionary[leaderHero2] = num6;
+				}
+			}
+		}
+		starvingParty.Party.RemainingFoodPercentage = num;
+		foreach (KeyValuePair<Hero, float> item3 in dictionary)
+		{
+			CampaignEventDispatcher.Instance.OnHeroSharedFoodWithAnother(item3.Key, leaderHero, item3.Value);
+		}
+	}
+
+	private bool ShouldPartyConsumeFood(MobileParty party)
+	{
+		if (party == null)
+		{
+			return false;
+		}
+		if (CastleForagerPartyComponent.IsForagerParty(party))
+		{
+			return false;
+		}
+		if (TownSupplyLinePartyComponent.IsSupplyLineParty(party))
+		{
+			return false;
+		}
+		if (NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(party))
+		{
+			return false;
+		}
+		return party.IsActive && (party.LeaderHero == null || party.LeaderHero.IsLord || party.LeaderHero.Clan == Clan.PlayerClan || party.LeaderHero.IsMinorFactionHero) && !party.IsGarrison && !party.IsCaravan && !party.IsBandit && !party.IsMilitia && !party.IsPatrolParty && !party.IsVillager;
+	}
+
+	private void ProactivelySlaughterExcessLivestock(MobileParty party)
+	{
+		int totalManCount = party.MemberRoster.TotalManCount;
+		if (totalManCount <= 0)
+		{
+			return;
+		}
+		int num = 0;
+		int num2 = 0;
+		ItemRoster itemRoster = party.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0)
+			{
+				if (item.IsFood)
+				{
+					num2 += elementCopyAtIndex.Amount;
+				}
+				if (((item.HasHorseComponent && item.HorseComponent.IsLiveStock) || item.Type == ItemObject.ItemTypeEnum.Animal) && (!party.IsMainParty || !ReservedItemService.IsReserved(item)))
+				{
+					num += elementCopyAtIndex.Amount;
+				}
+			}
+		}
+		int num3 = Math.Max(2, totalManCount / 10);
+		if (num <= num3)
+		{
+			return;
+		}
+		float num4 = Math.Max(0.1f, Math.Abs(party.FoodChange));
+		float num5 = (float)num2 / num4;
+		if (!(num5 >= 5f))
+		{
+			int val = num - num3;
+			int val2 = Math.Max(1, totalManCount / 20);
+			int num6 = Math.Min(val, val2);
+			if (num6 > 0)
+			{
+				TryAutoSlaughterLivestockBatch(party, num6);
+			}
+		}
+	}
+
+	private static int GetActualFoodCount(ItemRoster roster)
+	{
+		if (roster == null)
+		{
+			return 0;
+		}
+		int num = 0;
+		for (int i = 0; i < roster.Count; i++)
+		{
+			ItemObject itemAtIndex = roster.GetItemAtIndex(i);
+			int elementNumber = roster.GetElementNumber(i);
+			if (itemAtIndex.IsFood)
+			{
+				num += elementNumber;
+			}
+		}
+		return num;
+	}
+
+	private int TryAutoSlaughterLivestockBatch(MobileParty party, int meatNeeded)
+	{
+		if (party == null || party.ItemRoster == null || meatNeeded <= 0)
+		{
+			return 0;
+		}
+		ItemRoster itemRoster = party.ItemRoster;
+		SlaughterResult slaughterResult = new SlaughterResult();
+		int num = 0;
+		string[] array = new string[6] { "chicken_product", "goose_product", "hare", "sheep", "hog", "cow" };
+		string[] array2 = array;
+		foreach (string text in array2)
+		{
+			if (num >= meatNeeded)
+			{
+				break;
+			}
+			for (int j = 0; j < itemRoster.Count; j++)
+			{
+				ItemObject itemAtIndex = itemRoster.GetItemAtIndex(j);
+				if (itemAtIndex.StringId.ToLower() != text)
+				{
+					continue;
+				}
+				int elementNumber = itemRoster.GetElementNumber(j);
+				if (elementNumber <= 0 || (party.IsMainParty && ReservedItemService.IsReserved(itemAtIndex) && !ReservedItemService.ShouldUseReservedFood(party)))
+				{
+					continue;
+				}
+				ItemObject itemObject = null;
+				ItemObject itemObject2 = null;
+				int num2 = 0;
+				int num3 = 0;
+				switch (text)
+				{
+				case "chicken_product":
+				case "goose_product":
+					itemObject = MBObjectManager.Instance.GetObject<ItemObject>("meat_poultry");
+					num2 = 1;
+					num3 = 0;
+					break;
+				case "hare":
+					itemObject = MBObjectManager.Instance.GetObject<ItemObject>("meat_hare");
+					itemObject2 = MBObjectManager.Instance.GetObject<ItemObject>("small_hides");
+					num2 = 1;
+					num3 = 1;
+					break;
+				case "sheep":
+					itemObject = MBObjectManager

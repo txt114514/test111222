@@ -1,0 +1,529 @@
+﻿PART 66/75
+t.Add(batchAnimal.Value + " " + batchAnimal.Key);
+		}
+		string variable = string.Join(", ", list);
+		List<string> list2 = new List<string>();
+		foreach (KeyValuePair<string, int> item in _batchMeat)
+		{
+			list2.Add(item.Value + " " + item.Key);
+		}
+		string variable2 = string.Join(", ", list2);
+		if (_batchTotalHides > 0)
+		{
+			List<string> list3 = new List<string>();
+			foreach (KeyValuePair<string, int> batchHide in _batchHides)
+			{
+				list3.Add(batchHide.Value + " " + batchHide.Key);
+			}
+			string variable3 = string.Join(", ", list3);
+			TextObject textObject = new TextObject("{=HAP_ManualSlaughterBatchWithHide}Slaughtered {ANIMAL_TEXT} for {MEAT_TEXT} and {HIDE_TEXT}.");
+			textObject.SetTextVariable("ANIMAL_TEXT", variable);
+			textObject.SetTextVariable("MEAT_TEXT", variable2);
+			textObject.SetTextVariable("HIDE_TEXT", variable3);
+			InformationManager.DisplayMessage(new InformationMessage(textObject.ToString(), color));
+		}
+		else
+		{
+			TextObject textObject2 = new TextObject("{=HAP_ManualSlaughterBatchNoHide}Slaughtered {ANIMAL_TEXT} for {MEAT_TEXT}.");
+			textObject2.SetTextVariable("ANIMAL_TEXT", variable);
+			textObject2.SetTextVariable("MEAT_TEXT", variable2);
+			InformationManager.DisplayMessage(new InformationMessage(textObject2.ToString(), color));
+		}
+		_batchAnimals.Clear();
+		_batchMeat.Clear();
+		_batchHides.Clear();
+		_batchTotalHides = 0;
+	}
+
+	private static bool Prefix(InventoryLogic __instance, ItemRosterElement itemRosterElement)
+	{
+		ItemObject item = itemRosterElement.EquipmentElement.Item;
+		if (item.StringId == "sheep" || item.StringId == "hog" || item.StringId == "cow" || item.StringId == "chicken_product" || item.StringId == "goose_product" || item.StringId == "hare")
+		{
+			int num = item.HorseComponent?.MeatCount ?? 1;
+			int num2 = item.HorseComponent?.HideCount ?? 1;
+			switch (item.StringId)
+			{
+			case "cow":
+				num = 4;
+				num2 = 2;
+				break;
+			case "sheep":
+			case "hog":
+				num = 2;
+				num2 = 1;
+				break;
+			case "chicken_product":
+			case "goose_product":
+				num = 1;
+				num2 = 0;
+				break;
+			case "hare":
+				num = 1;
+				num2 = 1;
+				break;
+			}
+			FieldInfo fieldInfo = AccessTools.Field(typeof(InventoryLogic), "_rosters");
+			ItemRoster[] array = (ItemRoster[])fieldInfo.GetValue(__instance);
+			ItemRoster itemRoster = array[1];
+			List<TransferCommandResult> list = new List<TransferCommandResult>();
+			int num3 = itemRoster.AddToCounts(itemRosterElement.EquipmentElement, -1);
+			int num4 = itemRoster.FindIndexOfElement(itemRosterElement.EquipmentElement);
+			if (num4 < 0)
+			{
+				list.Add(new TransferCommandResult(InventoryLogic.InventorySide.PlayerInventory, new ItemRosterElement(itemRosterElement.EquipmentElement, 0), -1, 0, EquipmentIndex.None, null));
+			}
+			else
+			{
+				ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num4);
+				list.Add(new TransferCommandResult(InventoryLogic.InventorySide.PlayerInventory, elementCopyAtIndex, -1, elementCopyAtIndex.Amount, EquipmentIndex.None, null));
+			}
+			ItemObject itemObject = null;
+			switch (item.StringId)
+			{
+			case "sheep":
+				itemObject = Game.Current.ObjectManager.GetObject<ItemObject>("meat_mutton");
+				break;
+			case "hog":
+				itemObject = Game.Current.ObjectManager.GetObject<ItemObject>("meat_pork");
+				break;
+			case "cow":
+				itemObject = Game.Current.ObjectManager.GetObject<ItemObject>("meat_beef");
+				break;
+			case "chicken_product":
+			case "goose_product":
+				itemObject = Game.Current.ObjectManager.GetObject<ItemObject>("meat_poultry");
+				break;
+			case "hare":
+				itemObject = Game.Current.ObjectManager.GetObject<ItemObject>("meat_hare");
+				break;
+			}
+			if (itemObject == null)
+			{
+				itemObject = DefaultItems.Meat;
+			}
+			int index = itemRoster.AddToCounts(itemObject, num);
+			ItemRosterElement elementCopyAtIndex2 = itemRoster.GetElementCopyAtIndex(index);
+			list.Add(new TransferCommandResult(InventoryLogic.InventorySide.PlayerInventory, elementCopyAtIndex2, num, elementCopyAtIndex2.Amount, EquipmentIndex.None, null));
+			ItemObject itemObject2 = null;
+			switch (item.StringId)
+			{
+			case "sheep":
+				itemObject2 = Game.Current.ObjectManager.GetObject<ItemObject>("medium_hides");
+				break;
+			case "hog":
+				itemObject2 = Game.Current.ObjectManager.GetObject<ItemObject>("medium_hides");
+				break;
+			case "cow":
+				itemObject2 = Game.Current.ObjectManager.GetObject<ItemObject>("hides");
+				break;
+			case "hare":
+				itemObject2 = Game.Current.ObjectManager.GetObject<ItemObject>("small_hides");
+				break;
+			case "chicken_product":
+			case "goose_product":
+				itemObject2 = null;
+				break;
+			}
+			if (num2 > 0 && itemObject2 != null)
+			{
+				int index2 = itemRoster.AddToCounts(itemObject2, num2);
+				ItemRosterElement elementCopyAtIndex3 = itemRoster.GetElementCopyAtIndex(index2);
+				list.Add(new TransferCommandResult(InventoryLogic.InventorySide.PlayerInventory, elementCopyAtIndex3, num2, elementCopyAtIndex3.Amount, EquipmentIndex.None, null));
+			}
+			string animalName = item.Name.ToString();
+			string meatName = itemObject.Name.ToString();
+			string hideName = ((num2 > 0 && itemObject2 != null) ? itemObject2.Name.ToString() : null);
+			AccumulateBatch(animalName, meatName, num, hideName, num2);
+			if (!_batching)
+			{
+				FlushBatch();
+			}
+			if (_skipStateUpdate)
+			{
+				_batchTransferResults.AddRange(list);
+			}
+			else
+			{
+				MethodInfo methodInfo = AccessTools.Method(typeof(InventoryLogic), "SetCurrentStateAsInitial");
+				MethodInfo methodInfo2 = AccessTools.Method(typeof(InventoryLogic), "OnAfterTransfer");
+				methodInfo.Invoke(__instance, null);
+				methodInfo2.Invoke(__instance, new object[1] { list });
+			}
+			return false;
+		}
+		if (item.HorseComponent != null)
+		{
+			int meatCount = item.HorseComponent.MeatCount;
+			int hideCount = item.HorseComponent.HideCount;
+			FieldInfo fieldInfo2 = AccessTools.Field(typeof(InventoryLogic), "_rosters");
+			ItemRoster[] array2 = (ItemRoster[])fieldInfo2.GetValue(__instance);
+			ItemRoster itemRoster2 = array2[1];
+			List<TransferCommandResult> list2 = new List<TransferCommandResult>();
+			int num5 = itemRoster2.AddToCounts(itemRosterElement.EquipmentElement, -1);
+			int num6 = itemRoster2.FindIndexOfElement(itemRosterElement.EquipmentElement);
+			if (num6 < 0)
+			{
+				list2.Add(new TransferCommandResult(InventoryLogic.InventorySide.PlayerInventory, new ItemRosterElement(itemRosterElement.EquipmentElement, 0), -1, 0, EquipmentIndex.None, null));
+			}
+			else
+			{
+				ItemRosterElement elementCopyAtIndex4 = itemRoster2.GetElementCopyAtIndex(num6);
+				list2.Add(new TransferCommandResult(InventoryLogic.InventorySide.PlayerInventory, elementCopyAtIndex4, -1, elementCopyAtIndex4.Amount, EquipmentIndex.None, null));
+			}
+			ItemObject meat = DefaultItems.Meat;
+			int index3 = itemRoster2.AddToCounts(meat, meatCount);
+			ItemRosterElement elementCopyAtIndex5 = itemRoster2.GetElementCopyAtIndex(index3);
+			list2.Add(new TransferCommandResult(InventoryLogic.InventorySide.PlayerInventory, elementCopyAtIndex5, meatCount, elementCopyAtIndex5.Amount, EquipmentIndex.None, null));
+			ItemObject itemObject3 = Game.Current.ObjectManager.GetObject<ItemObject>("hides");
+			if (hideCount > 0 && itemObject3 != null)
+			{
+				int index4 = itemRoster2.AddToCounts(itemObject3, hideCount);
+				ItemRosterElement elementCopyAtIndex6 = itemRoster2.GetElementCopyAtIndex(index4);
+				list2.Add(new TransferCommandResult(InventoryLogic.InventorySide.PlayerInventory, elementCopyAtIndex6, hideCount, elementCopyAtIndex6.Amount, EquipmentIndex.None, null));
+			}
+			string animalName2 = item.Name.ToString();
+			string meatName2 = meat.Name.ToString();
+			string hideName2 = ((hideCount > 0 && itemObject3 != null) ? itemObject3.Name.ToString() : null);
+			AccumulateBatch(animalName2, meatName2, meatCount, hideName2, hideCount);
+			if (!_batching)
+			{
+				FlushBatch();
+			}
+			if (_skipStateUpdate)
+			{
+				_batchTransferResults.AddRange(list2);
+			}
+			else
+			{
+				MethodInfo methodInfo3 = AccessTools.Method(typeof(InventoryLogic), "SetCurrentStateAsInitial");
+				MethodInfo methodInfo4 = AccessTools.Method(typeof(InventoryLogic), "OnAfterTransfer");
+				methodInfo3.Invoke(__instance, null);
+				methodInfo4.Invoke(__instance, new object[1] { list2 });
+			}
+			return false;
+		}
+		return true;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\RightOfBilletingInfluencePatch.cs =====
+using System.Linq;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultClanPoliticsModel), "CalculateInfluenceChange")]
+public static class RightOfBilletingInfluencePatch
+{
+	private static readonly TextObject _rightOfBilletingText = new TextObject("{=HAP_Policy_RightOfBilleting}Right of Billeting");
+
+	[HarmonyPostfix]
+	public static void Postfix(Clan clan, ref ExplainedNumber __result)
+	{
+		if (clan?.Kingdom != null && !clan.IsUnderMercenaryService && HAPPolicies.RightOfBilleting != null && clan.Kingdom.ActivePolicies.Contains(HAPPolicies.RightOfBilleting))
+		{
+			int num = clan.Fiefs.Count((Town f) => f.IsCastle);
+			if (num > 0)
+			{
+				__result.Add(-0.2f * (float)num, _rightOfBilletingText);
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\SecurityTooltipPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.Core.ViewModelCollection.Information;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+public static class SecurityTooltipPatch
+{
+	private static bool _patchApplied = false;
+
+	private static readonly TextObject _anarchyText = new TextObject("{=HAP_SecAnarchy}Anarchy");
+
+	private static readonly TextObject _lawlessText = new TextObject("{=HAP_SecLawless}Lawless");
+
+	private static readonly TextObject _weakText = new TextObject("{=HAP_SecWeak}Weak");
+
+	private static readonly TextObject _vulnerableText = new TextObject("{=HAP_SecVulnerable}Vulnerable");
+
+	private static readonly TextObject _normalText = new TextObject("{=HAP_SecNormal}Normal");
+
+	private static readonly TextObject _wellDefendedText = new TextObject("{=HAP_SecWellDefended}Well-Defended");
+
+	private static readonly Color _lawlessColor = Color.ConvertStringToColor("#CD5C5CFF");
+
+	private static readonly Color _weakColor = Color.ConvertStringToColor("#D4A017FF");
+
+	private static readonly Color _vulnerableColor = Color.ConvertStringToColor("#CCCC00FF");
+
+	private static readonly Color _normalColor = Color.ConvertStringToColor("#8FBC8FFF");
+
+	public static void ApplyPatch(Harmony harmony)
+	{
+		if (_patchApplied)
+		{
+			return;
+		}
+		try
+		{
+			MethodInfo method = typeof(CampaignUIHelper).GetMethod("GetTownSecurityTooltip", BindingFlags.Static | BindingFlags.Public);
+			MethodInfo method2 = typeof(SecurityTooltipPatch).GetMethod("Postfix", BindingFlags.Static | BindingFlags.Public);
+			if (method != null && method2 != null)
+			{
+				harmony.Patch(method, null, new HarmonyMethod(method2));
+				_patchApplied = true;
+				Main.Log("SecurityTooltipPatch: Patched GetTownSecurityTooltip");
+			}
+			else
+			{
+				Main.Log($"SecurityTooltipPatch: Method not found (original={method != null}, postfix={method2 != null})");
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("SecurityTooltipPatch ERROR: " + ex.Message);
+		}
+	}
+
+	public static void Postfix(ref List<TooltipProperty> __result, Town town)
+	{
+		if (town == null || __result == null)
+		{
+			return;
+		}
+		HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+		if (instance != null && !instance.SecurityAffectsBanditSpawns)
+		{
+			return;
+		}
+		try
+		{
+			float security = town.Security;
+			TextObject textObject;
+			Color color;
+			if (security < 5f)
+			{
+				textObject = _anarchyText;
+				color = UIColors.NegativeIndicator;
+			}
+			else if (security < 20f)
+			{
+				textObject = _lawlessText;
+				color = _lawlessColor;
+			}
+			else if (security < 40f)
+			{
+				textObject = _weakText;
+				color = _weakColor;
+			}
+			else if (security < 60f)
+			{
+				textObject = _vulnerableText;
+				color = _vulnerableColor;
+			}
+			else if (security < 80f)
+			{
+				textObject = _normalText;
+				color = _normalColor;
+			}
+			else
+			{
+				textObject = _wellDefendedText;
+				color = UIColors.PositiveIndicator;
+			}
+			__result.Add(new TooltipProperty(string.Empty, string.Empty, 0, onlyShowWhenExtended: false, TooltipProperty.TooltipPropertyFlags.DefaultSeperator));
+			__result.Add(new TooltipProperty(" ", textObject.ToString(), 1, color));
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in SecurityTooltipPatch.Postfix: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\SellItemsVillageTaxPatch.cs =====
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(SellItemsAction), "Apply")]
+public static class SellItemsVillageTaxPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(PartyBase receiverParty, PartyBase payerParty, ItemRosterElement subject, int number)
+	{
+		if (receiverParty == null || !receiverParty.IsSettlement)
+		{
+			return;
+		}
+		Settlement settlement = receiverParty.Settlement;
+		if (!settlement.IsVillage)
+		{
+			return;
+		}
+		Village village = settlement.Village;
+		if (village == null)
+		{
+			return;
+		}
+		Town town = ((village.TradeBound != null) ? village.TradeBound.Town : village.Bound?.Town);
+		if (town == null)
+		{
+			return;
+		}
+		MobileParty mobileParty = payerParty?.MobileParty;
+		bool isSelling = false;
+		if (mobileParty == null)
+		{
+			mobileParty = receiverParty?.MobileParty;
+			isSelling = true;
+		}
+		if (mobileParty == null)
+		{
+			return;
+		}
+		int itemPrice = town.GetItemPrice(subject.EquipmentElement, mobileParty, isSelling);
+		int num = itemPrice * number;
+		if (num > 0)
+		{
+			float villageTaxRatio = Campaign.Current.Models.SettlementTaxModel.GetVillageTaxRatio(village);
+			int num2 = MathF.Round((float)num * villageTaxRatio);
+			if (num2 > 0)
+			{
+				village.TradeTaxAccumulated += num2;
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\SettlementHelper_GetGarrisonChangeExplainedNumber_Patch.cs =====
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using HarvestAndProduction.Helpers;
+using Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(SettlementHelper), "GetGarrisonChangeExplainedNumber")]
+public static class SettlementHelper_GetGarrisonChangeExplainedNumber_Patch
+{
+	[HarmonyPostfix]
+	public static void Postfix(Town town, ref ExplainedNumber __result)
+	{
+		if (town?.Settlement != null)
+		{
+			int supplyPressureCount = GarrisonSupplyPressureBehavior.GetSupplyPressureCount(town.Settlement);
+			if (supplyPressureCount > 0)
+			{
+				__result.Add(-supplyPressureCount, HAPTextObjects.RationCuts);
+			}
+			int num = (town.Settlement.IsUnderSiege ? StarvationDesertionBehavior.GetDeterministicDesertionCount(town.Settlement) : StarvationDesertionBehavior.GetMoraleScaledDesertionCount(town.Settlement));
+			if (num > 0)
+			{
+				TextObject description = (town.Settlement.IsUnderSiege ? HAPTextObjects.Starvation : HAPTextObjects.FoodShortageDesertion);
+				__result.Add(-num, description);
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\SettlementNameplatePartyMarkerItemVMPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using SandBox.ViewModelCollection.Nameplate;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Core.ViewModelCollection.ImageIdentifiers;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(SettlementNameplatePartyMarkerItemVM))]
+[HarmonyPatch(MethodType.Constructor)]
+[HarmonyPatch(new Type[] { typeof(MobileParty) })]
+public static class SettlementNameplatePartyMarkerItemVMPatch
+{
+	public static void Postfix(SettlementNameplatePartyMarkerItemVM __instance, MobileParty mobileParty)
+	{
+		if (mobileParty.PartyComponent is CastleForagerPartyComponent || mobileParty.PartyComponent is TownSupplyLinePartyComponent || mobileParty.PartyComponent is NavalSupplyConvoyPartyComponent)
+		{
+			__instance.IsDefault = false;
+			__instance.IsLord = true;
+			__instance.Visual = new BannerImageIdentifierVM(mobileParty.ActualClan?.Banner, nineGrid: true);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\SettlementOverlayPrefabExtension.cs =====
+using System.Xml;
+using Bannerlord.UIExtenderEx.Attributes;
+using Bannerlord.UIExtenderEx.Prefabs2;
+
+namespace HarvestAndProduction.Patches;
+
+[PrefabExtension("SettlementOverlay", "descendant::ListPanel[@DataSource='{LoyaltyHint}']")]
+internal sealed class SettlementOverlayPrefabExtension : PrefabExtensionInsertPatch
+{
+	private readonly XmlDocument _document;
+
+	public override InsertType Type => InsertType.Append;
+
+	public SettlementOverlayPrefabExtension()
+	{
+		_document = new XmlDocument();
+		_document.LoadXml("<Widget Id=\"ProductionEfficiencyLabel\" WidthSizePolicy=\"CoverChildren\" HeightSizePolicy=\"CoverChildren\" IsVisible=\"@IsVillage\" MarginTop=\"5\" MarginLeft=\"20\">  <Children>    <ListPanel DataSource=\"{ProductionEfficiencyHint}\" DoNotPassEventsToChildren=\"true\" WidthSizePolicy=\"CoverChildren\" HeightSizePolicy=\"CoverChildren\" HorizontalAlignment=\"Center\" StackLayout.LayoutMethod=\"VerticalTopToBottom\" Command.HoverBegin=\"ExecuteBeginHint\" Command.HoverEnd=\"ExecuteEndHint\">      <Children>        <Widget DataSource=\"{..}\" WidthSizePolicy=\"Fixed\" HeightSizePolicy=\"Fixed\" SuggestedWidth=\"40\" SuggestedHeight=\"40\" HorizontalAlignment=\"Center\" Sprite=\"General\\Icons\\Food\" ExtendLeft=\"-4\" ExtendRight=\"-4\" ExtendTop=\"-8\" ExtendBottom=\"-2\" GamepadNavigationIndex=\"9\" />        <ListPanel DataSource=\"{..}\" WidthSizePolicy=\"CoverChildren\" HeightSizePolicy=\"CoverChildren\" HorizontalAlignment=\"Center\" StackLayout.LayoutMethod=\"VerticalTopToBottom\">          <Children>            <TextWidget WidthSizePolicy=\"CoverChildren\" HeightSizePolicy=\"CoverChildren\" HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\" Brush=\"SettlementValuesTextBrush\" Brush.TextHorizontalAlignment=\"Center\" Text=\"@ProductionEfficiencyLbl\" MinWidth=\"50\" />          </Children>        </ListPanel>      </Children>    </ListPanel>  </Children></Widget>");
+	}
+
+	[PrefabExtensionXmlDocument(false)]
+	public XmlDocument GetPrefabExtension()
+	{
+		return _document;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\SettlementOverlayTooltipHelper.cs =====
+using System;
+using System.Collections.Generic;
+using HarvestAndProduction.Behaviors;
+using HarvestAndProduction.Models;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
+us

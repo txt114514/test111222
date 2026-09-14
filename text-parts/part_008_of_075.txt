@@ -1,0 +1,620 @@
+﻿PART 8/75
+y.StringId == "sumpter_horse";
+			if (!isLiveStock && !flag2)
+			{
+				continue;
+			}
+			if (!dictionary.TryGetValue(item.StringId, out var value))
+			{
+				if (!flag2)
+				{
+					continue;
+				}
+				value = ("meat", 3);
+			}
+			ItemObject meatItem = MBObjectManager.Instance.GetObject<ItemObject>(value.Item1);
+			if (meatItem == null)
+			{
+				continue;
+			}
+			int num5 = ((!flag) ? (targetSettlement.IsTown ? targetSettlement.Town.GetItemPrice(elementCopyAtIndex.EquipmentElement) : targetSettlement.Village.GetItemPrice(elementCopyAtIndex.EquipmentElement)) : 0);
+			int num6 = num5 / Math.Max(1, value.Item2);
+			if (!flag && (num5 <= 0 || num6 > 160 || num5 > num - num2))
+			{
+				continue;
+			}
+			int val2 = (flag ? int.MaxValue : ((num - num2) / Math.Max(1, num5)));
+			int num7 = Math.Min(elementCopyAtIndex.Amount, val2);
+			if (num7 > 0)
+			{
+				int num8 = num7 * num5;
+				if (num8 > 0)
+				{
+					GiveGoldAction.ApplyForCharacterToSettlement(partyOwner, targetSettlement, num8, disableNotification: true);
+				}
+				itemRoster.AddToCounts(item, -num7);
+				int num9 = num7 * value.Item2;
+				party.ItemRoster.AddToCounts(meatItem, num9);
+				num2 += num8;
+				num3 += num9;
+				component.FoodPurchasedThisTrip += num9;
+				int num10 = list.FindIndex(((EquipmentElement, int) m) => m.Item1.Item?.StringId == meatItem.StringId);
+				if (num10 >= 0)
+				{
+					(EquipmentElement, int) tuple = list[num10];
+					list[num10] = (tuple.Item1, tuple.Item2 + num9);
+				}
+				else
+				{
+					list.Add((new EquipmentElement(meatItem), num9));
+				}
+				bool flag3 = false;
+			}
+		}
+		if (num2 > 0)
+		{
+			component.TotalGoldSpent += num2;
+		}
+		if (num3 > 0)
+		{
+			bool flag4 = false;
+			if (list.Count > 0)
+			{
+				FireForagerPurchaseNotification(party, targetSettlement, list);
+			}
+		}
+	}
+
+	private void FireForagerPurchaseNotification(MobileParty party, Settlement settlement, List<(EquipmentElement, int)> purchasedItems)
+	{
+		try
+		{
+			if (settlement.IsVillage)
+			{
+				foreach (var purchasedItem in purchasedItems)
+				{
+					ItemRosterElement itemRosterElement = new ItemRosterElement(purchasedItem.Item1, purchasedItem.Item2);
+					CampaignEventDispatcher.Instance.OnItemSold(settlement.Party, party.Party, itemRosterElement, purchasedItem.Item2, settlement);
+				}
+				return;
+			}
+			if (!settlement.IsTown)
+			{
+				return;
+			}
+			List<(EquipmentElement, int)> list = new List<(EquipmentElement, int)>();
+			foreach (var purchasedItem2 in purchasedItems)
+			{
+				list.Add((purchasedItem2.Item1, -purchasedItem2.Item2));
+			}
+			CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(party, settlement.Town, list);
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in FireForagerPurchaseNotification: " + ex.Message);
+		}
+	}
+
+	private void TakePackAnimalsFromStash(MobileParty party, CastleForagerPartyComponent component)
+	{
+		Settlement homeCastle = component.HomeCastle;
+		if (homeCastle == null || homeCastle.Stash == null || homeCastle.OwnerClan != Clan.PlayerClan)
+		{
+			return;
+		}
+		int maxPackAnimals = GetMaxPackAnimals(party.MemberRoster.TotalManCount);
+		int num = CountPackAnimals(party);
+		int num2 = maxPackAnimals - num;
+		if (num2 <= 0)
+		{
+			return;
+		}
+		int num3 = 0;
+		int num4 = homeCastle.Stash.Count - 1;
+		while (num4 >= 0 && num3 < num2)
+		{
+			ItemRosterElement elementCopyAtIndex = homeCastle.Stash.GetElementCopyAtIndex(num4);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && item.HasHorseComponent && item.HorseComponent.IsPackAnimal)
+			{
+				int num5 = Math.Min(elementCopyAtIndex.Amount, num2 - num3);
+				party.ItemRoster.AddToCounts(item, num5);
+				homeCastle.Stash.AddToCounts(item, -num5);
+				num3 += num5;
+				bool flag = false;
+			}
+			num4--;
+		}
+		if (num3 > 0 && false)
+		{
+			Main.Log("[Forager] " + party.Name?.ToString() + " took " + num3 + " pack animals from stash (now has " + CountPackAnimals(party) + ")");
+		}
+	}
+
+	private void BuyPackAnimals(MobileParty party, CastleForagerPartyComponent component)
+	{
+		Settlement targetSettlement = component.TargetSettlement;
+		Settlement homeCastle = component.HomeCastle;
+		if (targetSettlement == null)
+		{
+			return;
+		}
+		bool flag = targetSettlement.IsVillage && targetSettlement.Village?.Bound == homeCastle;
+		if (targetSettlement.IsVillage)
+		{
+			bool flag2 = false;
+			foreach (ItemRosterElement item2 in targetSettlement.ItemRoster)
+			{
+				ItemObject item = item2.EquipmentElement.Item;
+				if (item != null && item.HasHorseComponent)
+				{
+					flag2 = true;
+					break;
+				}
+			}
+			if (!flag2)
+			{
+				return;
+			}
+		}
+		Hero partyOwner = component.PartyOwner;
+		if (partyOwner == null || (partyOwner.Gold < 100 && !flag))
+		{
+			return;
+		}
+		int num = CountPackAnimals(party);
+		int maxPackAnimals = GetMaxPackAnimals(party.MemberRoster.TotalManCount);
+		int num2 = maxPackAnimals - num;
+		if (num2 <= 0)
+		{
+			return;
+		}
+		int foragerBudget = GetForagerBudget(component);
+		int num3 = Math.Max(0, foragerBudget - component.TotalGoldSpent);
+		if (!flag && num3 <= 0)
+		{
+			return;
+		}
+		for (int i = 0; i < num2; i++)
+		{
+			ItemObject itemObject = FindCheapestPackAnimal(targetSettlement, 100, IsDesertSettlement(homeCastle));
+			if (itemObject == null)
+			{
+				break;
+			}
+			int num4 = ((!flag) ? (targetSettlement.IsTown ? targetSettlement.Town.GetItemPrice(new EquipmentElement(itemObject)) : targetSettlement.Village.GetItemPrice(new EquipmentElement(itemObject))) : 0);
+			if ((!flag && (num4 > partyOwner.Gold || num4 > 100)) || (!flag && num4 > foragerBudget - component.TotalGoldSpent))
+			{
+				break;
+			}
+			if (num4 > 0)
+			{
+				GiveGoldAction.ApplyForCharacterToSettlement(partyOwner, targetSettlement, num4, disableNotification: true);
+			}
+			party.ItemRoster.AddToCounts(itemObject, 1);
+			targetSettlement.ItemRoster.AddToCounts(itemObject, -1);
+			component.PackAnimalGoldSpent += num4;
+			component.TotalGoldSpent += num4;
+			bool flag3 = false;
+		}
+	}
+
+	private bool IsDesertSettlement(Settlement settlement)
+	{
+		if (settlement == null || Campaign.Current?.MapSceneWrapper == null)
+		{
+			return false;
+		}
+		Vec2 getPosition2D = settlement.GetPosition2D;
+		PathFaceRecord faceIndex = Campaign.Current.MapSceneWrapper.GetFaceIndex(new CampaignVec2(getPosition2D, isOnLand: true));
+		TerrainType faceTerrainType = Campaign.Current.MapSceneWrapper.GetFaceTerrainType(faceIndex);
+		return faceTerrainType == TerrainType.Desert || faceTerrainType == TerrainType.Dune;
+	}
+
+	private int CountPackAnimals(MobileParty party)
+	{
+		int num = 0;
+		foreach (ItemRosterElement item2 in party.ItemRoster)
+		{
+			ItemObject item = item2.EquipmentElement.Item;
+			if (item != null && item.HasHorseComponent && item.HorseComponent.IsPackAnimal)
+			{
+				num += item2.Amount;
+			}
+		}
+		return num;
+	}
+
+	private ItemObject FindCheapestPackAnimal(Settlement settlement, int maxPrice, bool preferCamels = false)
+	{
+		ItemObject result = null;
+		int num = int.MaxValue;
+		foreach (ItemRosterElement item2 in settlement.ItemRoster)
+		{
+			ItemObject item = item2.EquipmentElement.Item;
+			if (item == null || item2.Amount <= 0 || !item.HasHorseComponent || !item.HorseComponent.IsPackAnimal)
+			{
+				continue;
+			}
+			int num2 = (settlement.IsTown ? settlement.Town.GetItemPrice(item2.EquipmentElement) : settlement.Village.GetItemPrice(item2.EquipmentElement));
+			if (num2 <= maxPrice)
+			{
+				int num3 = ((preferCamels && item.StringId.Contains("camel")) ? ((int)((float)num2 * 0.5f)) : num2);
+				if (num3 < num)
+				{
+					num = num3;
+					result = item;
+				}
+			}
+		}
+		return result;
+	}
+
+	private void AccumulateTariff(Settlement settlement, int goldSpent)
+	{
+		if (goldSpent <= 0)
+		{
+			return;
+		}
+		if (settlement.IsTown)
+		{
+			Town town = settlement.Town;
+			float townTaxRatio = Campaign.Current.Models.SettlementTaxModel.GetTownTaxRatio(town);
+			int num = MBRandom.RoundRandomized((float)goldSpent * townTaxRatio);
+			settlement.SettlementComponent.ChangeGold(-num);
+			float townCommissionChangeBasedOnSecurity = Campaign.Current.Models.SettlementTaxModel.GetTownCommissionChangeBasedOnSecurity(town, num);
+			town.TradeTaxAccumulated += (int)townCommissionChangeBasedOnSecurity;
+		}
+		else if (settlement.IsVillage)
+		{
+			Village village = settlement.Village;
+			float villageTaxRatio = Campaign.Current.Models.SettlementTaxModel.GetVillageTaxRatio(village);
+			int num2 = MBRandom.RoundRandomized((float)goldSpent * villageTaxRatio);
+			if (num2 > 0)
+			{
+				village.ChangeGold(-num2);
+				village.TradeTaxAccumulated += num2;
+			}
+		}
+	}
+
+	private List<(EquipmentElement, int)> DepositFoodToCastle(MobileParty party, CastleForagerPartyComponent component, out int totalDeposited)
+	{
+		totalDeposited = 0;
+		List<(EquipmentElement, int)> list = new List<(EquipmentElement, int)>();
+		Settlement homeCastle = component.HomeCastle;
+		if (homeCastle == null || homeCastle.Town == null)
+		{
+			return list;
+		}
+		Hero partyOwner = component.PartyOwner;
+		if (partyOwner == null || homeCastle.OwnerClan != partyOwner.Clan)
+		{
+			bool flag = false;
+			return list;
+		}
+		Town town = homeCastle.Town;
+		int num = town.FoodStocksUpperLimit();
+		float num2 = (float)num - town.FoodStocks;
+		if (num2 <= 0f)
+		{
+			return list;
+		}
+		ItemRoster itemRoster = party.ItemRoster;
+		int num3 = itemRoster.Count - 1;
+		while (num3 >= 0 && (float)totalDeposited < num2)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num3);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && (item.IsFood || item.StringId.StartsWith("meat_")))
+			{
+				int num4 = Math.Min(elementCopyAtIndex.Amount, (int)(num2 - (float)totalDeposited));
+				if (num4 > 0)
+				{
+					itemRoster.AddToCounts(item, -num4);
+					town.FoodStocks += num4;
+					totalDeposited += num4;
+					list.Add((elementCopyAtIndex.EquipmentElement, num4));
+					bool flag2 = false;
+				}
+			}
+			num3--;
+		}
+		if (town.FoodStocks > (float)num)
+		{
+			town.FoodStocks = num;
+		}
+		if (totalDeposited > 0)
+		{
+			RecordDailyForagerSupply(homeCastle, totalDeposited);
+		}
+		return list;
+	}
+
+	private void ProcessDisbandAtCurrentLocation(MobileParty party, CastleForagerPartyComponent component)
+	{
+		Settlement homeCastle = component.HomeCastle;
+		Hero partyOwner = component.PartyOwner;
+		Settlement currentSettlement = party.CurrentSettlement;
+		if (currentSettlement != null && currentSettlement == homeCastle && IsCastleStillValid(component) && homeCastle.Town != null)
+		{
+			List<(EquipmentElement, int)> list = DepositFoodToCastle(party, component, out var totalDeposited);
+			if (totalDeposited > 0 && false)
+			{
+				Main.Log("[Forager] " + party.Name?.ToString() + " deposited " + totalDeposited + " food during disband");
+			}
+		}
+		if (partyOwner != null && party.ItemRoster.Count > 0)
+		{
+			HandleDisbandItems(party, component, homeCastle, partyOwner);
+		}
+		if (party.Party.PrisonRoster != null && party.Party.PrisonRoster.TotalManCount > 0)
+		{
+			HandleDisbandPrisoners(party, component, homeCastle);
+		}
+	}
+
+	private void DisbandForagerParty(MobileParty party, CastleForagerPartyComponent component)
+	{
+		try
+		{
+			Settlement homeCastle = component.HomeCastle;
+			ProcessDisbandAtCurrentLocation(party, component);
+			bool flag = homeCastle != null && homeCastle.Town != null && !homeCastle.IsUnderSiege && IsCastleStillValid(component) && party.CurrentSettlement == homeCastle;
+			if (homeCastle != null && _activeForagers.ContainsKey(homeCastle))
+			{
+				_activeForagers.Remove(homeCastle);
+			}
+			if (party.IsActive && !_partiesToDestroy.Contains(party))
+			{
+				_partiesToDestroy.Add(party);
+				if (flag)
+				{
+					_partiesToReturnTroops[party] = homeCastle;
+					bool flag2 = false;
+				}
+				else
+				{
+					bool flag3 = false;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in DisbandForagerParty: " + ex.Message);
+		}
+	}
+
+	private void HandleDisbandItems(MobileParty party, CastleForagerPartyComponent component, Settlement homeCastle, Hero owner)
+	{
+		Settlement currentSettlement = party.CurrentSettlement;
+		bool flag = currentSettlement != null && currentSettlement == homeCastle;
+		bool flag2 = currentSettlement?.IsTown ?? false;
+		bool flag3 = flag && homeCastle.OwnerClan == Clan.PlayerClan;
+		int num = 0;
+		ItemRoster itemRoster = party.ItemRoster;
+		for (int num2 = itemRoster.Count - 1; num2 >= 0; num2--)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num2);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0)
+			{
+				bool flag4 = item.HasHorseComponent && item.HorseComponent.IsPackAnimal;
+				if (flag)
+				{
+					if (((homeCastle.OwnerClan == Clan.PlayerClan) & flag4) && homeCastle.Stash != null)
+					{
+						homeCastle.Stash.AddToCounts(item, elementCopyAtIndex.Amount);
+						itemRoster.AddToCounts(item, -elementCopyAtIndex.Amount);
+						bool flag5 = false;
+					}
+					else
+					{
+						itemRoster.AddToCounts(item, -elementCopyAtIndex.Amount);
+						bool flag6 = false;
+					}
+				}
+				else if (flag2 || (currentSettlement != null && currentSettlement.IsVillage))
+				{
+					int num3 = (currentSettlement.IsTown ? currentSettlement.Town.GetItemPrice(elementCopyAtIndex.EquipmentElement, party, isSelling: true) : currentSettlement.Village.GetItemPrice(elementCopyAtIndex.EquipmentElement, party, isSelling: true));
+					if (num3 <= 0)
+					{
+						num3 = 1;
+					}
+					int num4 = num3 * elementCopyAtIndex.Amount;
+					currentSettlement.ItemRoster.AddToCounts(item, elementCopyAtIndex.Amount);
+					itemRoster.AddToCounts(item, -elementCopyAtIndex.Amount);
+					num += num4;
+					bool flag7 = false;
+				}
+				else
+				{
+					itemRoster.AddToCounts(item, -elementCopyAtIndex.Amount);
+					bool flag8 = false;
+				}
+			}
+		}
+		if (num > 0)
+		{
+			GiveGoldAction.ApplyBetweenCharacters(null, owner, num, disableNotification: true);
+			bool flag9 = false;
+		}
+		NotifyPlayerOfTransaction(party, homeCastle, party.CurrentSettlement, num, _saleMessageStr, _saleMessageNoLocationStr);
+	}
+
+	private void HandleDisbandPrisoners(MobileParty party, CastleForagerPartyComponent component, Settlement castle)
+	{
+		TroopRoster prisonRoster = party.Party.PrisonRoster;
+		if (prisonRoster == null || prisonRoster.TotalManCount == 0)
+		{
+			return;
+		}
+		Settlement currentSettlement = party.CurrentSettlement;
+		if (currentSettlement != null && currentSettlement == castle && IsCastleStillValid(component))
+		{
+			List<CharacterObject> list = new List<CharacterObject>();
+			foreach (TroopRosterElement item in prisonRoster.GetTroopRoster())
+			{
+				if (item.Character?.HeroObject != null)
+				{
+					list.Add(item.Character);
+				}
+			}
+			foreach (CharacterObject item2 in list)
+			{
+				TransferPrisonerAction.Apply(item2, party.Party, castle.Party);
+			}
+			TroopRoster prisonRoster2 = castle.Party.PrisonRoster;
+			TroopRoster troopRoster = TroopRoster.CreateDummyTroopRoster();
+			int num = 0;
+			for (int num2 = prisonRoster.Count - 1; num2 >= 0; num2--)
+			{
+				TroopRosterElement elementCopyAtIndex = prisonRoster.GetElementCopyAtIndex(num2);
+				if (elementCopyAtIndex.Number > 0)
+				{
+					troopRoster.AddToCounts(elementCopyAtIndex.Character, elementCopyAtIndex.Number);
+					prisonRoster2.AddToCounts(elementCopyAtIndex.Character, elementCopyAtIndex.Number);
+					prisonRoster.AddToCounts(elementCopyAtIndex.Character, -elementCopyAtIndex.Number);
+					num += elementCopyAtIndex.Number;
+				}
+			}
+			int num3 = num + list.Count;
+			if (num3 > 0)
+			{
+				bool flag = false;
+				if (num > 0)
+				{
+					CampaignEventDispatcher.Instance.OnPrisonerSold(party.Party, castle.Party, troopRoster);
+				}
+			}
+			return;
+		}
+		if (currentSettlement != null && currentSettlement.IsTown && !FactionManager.IsAtWarAgainstFaction(party.MapFaction, currentSettlement.MapFaction))
+		{
+			List<CharacterObject> list2 = new List<CharacterObject>();
+			foreach (TroopRosterElement item3 in prisonRoster.GetTroopRoster())
+			{
+				if (item3.Character?.HeroObject != null)
+				{
+					list2.Add(item3.Character);
+				}
+			}
+			foreach (CharacterObject item4 in list2)
+			{
+				TransferPrisonerAction.Apply(item4, party.Party, currentSettlement.Party);
+			}
+			int totalManCount = prisonRoster.TotalManCount;
+			int partyTradeGold = party.PartyTradeGold;
+			if (totalManCount > 0)
+			{
+				SellPrisonersAction.ApplyForAllPrisoners(party.Party, currentSettlement.Party);
+			}
+			int num4 = party.PartyTradeGold - partyTradeGold;
+			if (num4 > 0)
+			{
+				Hero partyOwner = component.PartyOwner;
+				if (partyOwner != null)
+				{
+					GiveGoldAction.ApplyBetweenCharacters(null, partyOwner, num4, disableNotification: true);
+					party.PartyTradeGold -= num4;
+				}
+			}
+			NotifyPlayerOfTransaction(party, component.HomeCastle, currentSettlement, num4, _prisonerSaleMessageStr);
+			bool flag2 = false;
+			return;
+		}
+		List<Hero> list3 = new List<Hero>();
+		foreach (TroopRosterElement item5 in prisonRoster.GetTroopRoster())
+		{
+			if (item5.Character?.HeroObject != null)
+			{
+				list3.Add(item5.Character.HeroObject);
+			}
+		}
+		foreach (Hero item6 in list3)
+		{
+			EndCaptivityAction.ApplyByEscape(item6);
+		}
+		int totalManCount2 = prisonRoster.TotalManCount;
+		if (totalManCount2 > 0)
+		{
+			prisonRoster.Clear();
+			bool flag3 = false;
+		}
+	}
+
+	private void InitiateFlee(MobileParty party, CastleForagerPartyComponent component)
+	{
+		try
+		{
+			if (party.CurrentSettlement != null)
+			{
+				bool flag = false;
+				FleeDisband(party, component);
+				return;
+			}
+			Settlement settlement = FindNearestFriendlyTown(party);
+			if (settlement != null)
+			{
+				component.State = CastleForagerPartyComponent.ForagerState.Fleeing;
+				component.TargetSettlement = settlement;
+				if (component.ThreatParty != null && component.ThreatParty.IsActive)
+				{
+					SetFleeFromParty(party, component.ThreatParty, settlement);
+				}
+				else
+				{
+					component.SetDestination(settlement);
+				}
+				party.Party.SetVisualAsDirty();
+				bool flag2 = false;
+			}
+			else
+			{
+				bool flag3 = false;
+				ForceDestroyParty(party, component);
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in InitiateFlee: " + ex.Message);
+			ForceDestroyParty(party, component);
+		}
+	}
+
+	private void ProcessFleeing(MobileParty party, CastleForagerPartyComponent component)
+	{
+		try
+		{
+			Settlement targetSettlement = component.TargetSettlement;
+			if (targetSettlement != null && HasArrivedAtSettlement(party, targetSettlement))
+			{
+				if (IsSettlementUnderAttack(targetSettlement))
+				{
+					Settlement settlement = FindNearestFriendlyTown(party);
+					if (settlement != null)
+					{
+						component.TargetSettlement = settlement;
+						component.SetDestination(settlement);
+						bool flag = false;
+						return;
+					}
+				}
+				bool flag2 = false;
+				FleeDisband(party, component);
+			}
+			else
+			{
+				if (targetSettlement != null && !IsSettlementUnderAttack(targetSettlement) && IsSettlementSafeForFlee(party, targetSettlement))
+				{
+					return;
+				}
+				Settlement settlement2 = FindNearestFriendlyTown(party);
+				if (settlement2 != null)
+				{
+					component.TargetSettlement = settlement2;
+					if (component.ThreatParty != null && component.ThreatParty.IsActive)
+					{
+						SetFleeFromParty(party, component.ThreatParty, settlement2);
+					}
+				

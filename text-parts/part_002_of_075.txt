@@ -1,0 +1,633 @@
+﻿PART 2/75
+lds.Engine.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.MountAndBlade.Launcher.Library">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.MountAndBlade.Launcher.Library.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.Core.ViewModelCollection">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.Core.ViewModelCollection.dll</HintPath>
+    </Reference>
+    <Reference Include="SandBox">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\SandBox\bin\Win64_Shipping_Client\SandBox.dll</HintPath>
+    </Reference>
+    <Reference Include="SandBox.ViewModelCollection">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\Modules\SandBox\bin\Win64_Shipping_Client\SandBox.ViewModelCollection.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Xml" />
+    <Reference Include="TaleWorlds.GauntletUI">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.GauntletUI.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.MountAndBlade.GauntletUI.Widgets">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.MountAndBlade.GauntletUI.Widgets.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.ObjectSystem">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.ObjectSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.DotNet">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.DotNet.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.InputSystem">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.InputSystem.dll</HintPath>
+    </Reference>
+    <Reference Include="TaleWorlds.LinQuick">
+      <HintPath>..\..\..\..\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord\bin\Win64_Shipping_Client\TaleWorlds.LinQuick.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\AiFoodPriorityBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class AiFoodPriorityBehavior : CampaignBehaviorBase
+{
+	private struct SettlementFoodData
+	{
+		public int CurrentFood;
+
+		public int CurrentFoodStarving;
+
+		public bool IsAccessibleTown;
+
+		public bool IsAccessibleVillage;
+
+		public float Hearth;
+
+		public int PartiesTargeting;
+
+		public int PartiesAt;
+
+		public Vec2 Position;
+	}
+
+	private struct DebugSettlementScore
+	{
+		public Settlement Settlement;
+
+		public float Score;
+
+		public int CurrentFood;
+
+		public float PredictedFood;
+
+		public float TravelDays;
+
+		public string Reason;
+	}
+
+	private struct FoodSituation
+	{
+		public float TotalFood;
+
+		public float DailyConsumption;
+
+		public float DaysOfFood;
+
+		public float FoodNeeded;
+
+		public float UrgencyMultiplier;
+
+		public int TotalPartySize;
+
+		public bool IsStarving;
+
+		public bool NeedsFood;
+
+		public float PartySpeed;
+	}
+
+	private const bool DEBUG_ENABLED = false;
+
+	private const bool DEBUG_ALL_HUNGRY = false;
+
+	private const string TARGET_LORD_ID = "lord_3_1";
+
+	private const int DEBUG_TOP_SETTLEMENTS = 5;
+
+	private const float CASTLE_RESUPPLY_BASE_SCORE = 8f;
+
+	private const float CASTLE_MIN_FOODSTOCKS_PERCENT = 0.3f;
+
+	private const float CASTLE_MAX_DRAIN_PERCENT = 0.2f;
+
+	private const float CASTLE_FOOD_PER_PARTY_MEMBER = 0.3f;
+
+	private const float CASTLE_ARMY_FOOD_PER_PARTY_MEMBER = 0.15f;
+
+	private const float CASTLE_FREE_FOOD_BONUS = 2f;
+
+	private const float TARGET_DAYS_OF_FOOD = 10f;
+
+	private const float LOW_FOOD_DAYS_THRESHOLD = 5f;
+
+	private const float CRITICAL_FOOD_DAYS_THRESHOLD = 2f;
+
+	private const float MIN_FOOD_RATIO = 0.1f;
+
+	private const float MIN_FOOD_DAYS_WORTH = 0.5f;
+
+	private const int ABSOLUTE_MIN_FOOD_FLOOR = 5;
+
+	private const float MIN_VILLAGE_HEARTH = 100f;
+
+	private const float MAX_TRAVEL_DAYS = 3f;
+
+	private const float IDEAL_TRAVEL_DAYS = 1f;
+
+	private const int AFFORDABLE_FOOD_PRICE_CAP = 140;
+
+	private const int STARVING_FOOD_PRICE_CAP = 200;
+
+	private const float BASE_FOOD_SCORE = 5f;
+
+	private const float MAX_FOOD_SCORE = 30f;
+
+	private const float MAX_STARVING_SCORE = 60f;
+
+	private const float CRITICAL_MULTIPLIER = 3f;
+
+	private const float STARVING_MULTIPLIER = 9f;
+
+	private const float CURRENT_TARGET_BONUS = 2f;
+
+	private const float ESTIMATED_FOOD_PER_VISITING_PARTY = 40f;
+
+	private const float TOWN_DAILY_FOOD_PRODUCTION = 15f;
+
+	private const float VILLAGE_DAILY_FOOD_PRODUCTION = 5f;
+
+	private Dictionary<Settlement, SettlementFoodData> _settlementCache;
+
+	private long _lastCacheRefreshHour = -1L;
+
+	private List<Settlement> _castleCache = new List<Settlement>(200);
+
+	private List<DebugSettlementScore> _debugScoredSettlements;
+
+	private void EnsureCacheInitialized()
+	{
+		if (_settlementCache == null)
+		{
+			_settlementCache = new Dictionary<Settlement, SettlementFoodData>(400);
+		}
+	}
+
+	private void RefreshSettlementCacheIfNeeded()
+	{
+		long num = (long)CampaignTime.Now.ToHours;
+		if (num == _lastCacheRefreshHour)
+		{
+			return;
+		}
+		_lastCacheRefreshHour = num;
+		EnsureCacheInitialized();
+		_settlementCache.Clear();
+		Dictionary<Settlement, int> dictionary = new Dictionary<Settlement, int>(200);
+		foreach (MobileParty allLordParty in MobileParty.AllLordParties)
+		{
+			if (allLordParty.TargetSettlement != null)
+			{
+				if (dictionary.TryGetValue(allLordParty.TargetSettlement, out var value))
+				{
+					dictionary[allLordParty.TargetSettlement] = value + 1;
+				}
+				else
+				{
+					dictionary[allLordParty.TargetSettlement] = 1;
+				}
+			}
+		}
+		foreach (Settlement item in Settlement.All)
+		{
+			if ((item.IsTown || item.IsVillage) && item.Party != null)
+			{
+				bool isUnderSiege = item.IsUnderSiege;
+				bool flag = item.Party.MapEvent != null;
+				CountAffordableFoodDual(item, 140, 200, out var normalFood, out var starvingFood);
+				SettlementFoodData settlementFoodData = new SettlementFoodData
+				{
+					CurrentFood = normalFood,
+					CurrentFoodStarving = starvingFood,
+					IsAccessibleTown = (item.IsTown && !isUnderSiege && !flag)
+				};
+				int isAccessibleVillage;
+				if (item.IsVillage)
+				{
+					Village village = item.Village;
+					isAccessibleVillage = ((village != null && village.VillageState == Village.VillageStates.Normal) ? 1 : 0);
+				}
+				else
+				{
+					isAccessibleVillage = 0;
+				}
+				settlementFoodData.IsAccessibleVillage = (byte)isAccessibleVillage != 0;
+				settlementFoodData.Hearth = ((!item.IsVillage) ? 0f : (item.Village?.Hearth ?? 0f));
+				settlementFoodData.PartiesTargeting = (dictionary.TryGetValue(item, out var value2) ? value2 : 0);
+				settlementFoodData.PartiesAt = CountLordPartiesAt(item);
+				settlementFoodData.Position = item.Position.ToVec2();
+				SettlementFoodData value3 = settlementFoodData;
+				_settlementCache[item] = value3;
+			}
+		}
+		_castleCache.Clear();
+		foreach (Settlement item2 in Settlement.All)
+		{
+			if (item2.IsCastle)
+			{
+				_castleCache.Add(item2);
+			}
+		}
+	}
+
+	private void ClearCache()
+	{
+		_settlementCache?.Clear();
+		_castleCache.Clear();
+		_lastCacheRefreshHour = -1L;
+	}
+
+	private int CountAffordableFood(Settlement settlement, int priceCap)
+	{
+		if (settlement?.ItemRoster == null)
+		{
+			return 0;
+		}
+		int num = 0;
+		ItemRoster itemRoster = settlement.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item == null)
+			{
+				continue;
+			}
+			bool flag = item.HasHorseComponent && item.HorseComponent.IsLiveStock;
+			if (!item.IsFood && !flag)
+			{
+				continue;
+			}
+			int num2 = (settlement.IsTown ? settlement.Town.GetItemPrice(item) : settlement.Village.GetItemPrice(item));
+			if (flag)
+			{
+				int meatCount = item.HorseComponent.MeatCount;
+				int num3 = ((meatCount > 0) ? (num2 / meatCount) : num2);
+				if (num3 <= priceCap)
+				{
+					num += elementCopyAtIndex.Amount * meatCount;
+				}
+			}
+			else if (num2 <= priceCap)
+			{
+				num += elementCopyAtIndex.Amount;
+			}
+		}
+		return num;
+	}
+
+	private void CountAffordableFoodDual(Settlement settlement, int normalCap, int starvingCap, out int normalFood, out int starvingFood)
+	{
+		normalFood = 0;
+		starvingFood = 0;
+		if (settlement?.ItemRoster == null)
+		{
+			return;
+		}
+		ItemRoster itemRoster = settlement.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item == null)
+			{
+				continue;
+			}
+			bool flag = item.HasHorseComponent && item.HorseComponent.IsLiveStock;
+			if (!item.IsFood && !flag)
+			{
+				continue;
+			}
+			int num = (settlement.IsTown ? settlement.Town.GetItemPrice(item) : settlement.Village.GetItemPrice(item));
+			if (flag)
+			{
+				int meatCount = item.HorseComponent.MeatCount;
+				int num2 = ((meatCount > 0) ? (num / meatCount) : num);
+				int num3 = elementCopyAtIndex.Amount * meatCount;
+				if (num2 <= normalCap)
+				{
+					normalFood += num3;
+				}
+				if (num2 <= starvingCap)
+				{
+					starvingFood += num3;
+				}
+			}
+			else
+			{
+				if (num <= normalCap)
+				{
+					normalFood += elementCopyAtIndex.Amount;
+				}
+				if (num <= starvingCap)
+				{
+					starvingFood += elementCopyAtIndex.Amount;
+				}
+			}
+		}
+	}
+
+	private bool ShouldDebugParty(MobileParty party)
+	{
+		bool flag = true;
+		return false;
+	}
+
+	private void DebugLogFoodSituation(MobileParty party, FoodSituation sit)
+	{
+		string arg = (sit.IsStarving ? "STARVING" : ((sit.DaysOfFood < 2f) ? "CRITICAL" : ((sit.DaysOfFood < 5f) ? "LOW" : "NORMAL")));
+		string arg2 = "";
+		if (party.Army != null && party.Army.LeaderParty == party)
+		{
+			arg2 = $" [ARMY LEADER, {party.AttachedParties.Count} attached]";
+		}
+		Main.Log($"[AI FOOD DEBUG] === {party.Name}{arg2} ===");
+		Main.Log($"[AI FOOD DEBUG]   Food: {sit.TotalFood:F1} | Consumption: {sit.DailyConsumption:F1}/day | Days: {sit.DaysOfFood:F1}");
+		Main.Log($"[AI FOOD DEBUG]   Urgency: {arg} (×{sit.UrgencyMultiplier:F1}) | Needs: {sit.FoodNeeded:F0} food");
+		Main.Log($"[AI FOOD DEBUG]   Party Size: {sit.TotalPartySize} | Speed: {sit.PartySpeed:F1}");
+	}
+
+	private void DebugLogTopSettlements(MobileParty party)
+	{
+		if (_debugScoredSettlements == null || _debugScoredSettlements.Count == 0)
+		{
+			Main.Log("[AI FOOD DEBUG]   No settlements scored (all filtered out or no food)");
+			return;
+		}
+		_debugScoredSettlements.Sort((DebugSettlementScore a, DebugSettlementScore b) => b.Score.CompareTo(a.Score));
+		Main.Log($"[AI FOOD DEBUG]   Top {Math.Min(5, _debugScoredSettlements.Count)} settlements:");
+		for (int num = 0; num < Math.Min(5, _debugScoredSettlements.Count); num++)
+		{
+			DebugSettlementScore debugSettlementScore = _debugScoredSettlements[num];
+			string text = (debugSettlementScore.Settlement.IsCastle ? "Castle" : (debugSettlementScore.Settlement.IsTown ? "Town" : "Village"));
+			Main.Log($"[AI FOOD DEBUG]     {num + 1}. {debugSettlementScore.Settlement.Name} ({text}): Score={debugSettlementScore.Score:F1} | Food={debugSettlementScore.CurrentFood}→{debugSettlementScore.PredictedFood:F0} | Travel={debugSettlementScore.TravelDays:F1}d");
+		}
+		if (party.TargetSettlement == null)
+		{
+			return;
+		}
+		if (_debugScoredSettlements.Exists((DebugSettlementScore s) => s.Settlement == party.TargetSettlement))
+		{
+			DebugSettlementScore debugSettlementScore2 = _debugScoredSettlements.Find((DebugSettlementScore s) => s.Settlement == party.TargetSettlement);
+			Main.Log($"[AI FOOD DEBUG]   Current target: {party.TargetSettlement.Name} (in list, Score={debugSettlementScore2.Score:F1}, has {2f:F1}x stability bonus)");
+		}
+		else
+		{
+			Main.Log($"[AI FOOD DEBUG]   Current target: {party.TargetSettlement.Name} (NOT in our scored list - vanilla behavior)");
+		}
+	}
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.AiHourlyTickEvent.AddNonSerializedListener(this, OnAiHourlyTick);
+		CampaignEvents.OnGameLoadedEvent.AddNonSerializedListener(this, OnGameLoaded);
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+	}
+
+	private void OnGameLoaded(CampaignGameStarter starter)
+	{
+		ClearCache();
+		RefreshSettlementCacheIfNeeded();
+		Main.Log($"AiFoodPriorityBehavior: Settlement cache pre-warmed on load ({_settlementCache?.Count ?? 0} entries)");
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		ClearCache();
+		RefreshSettlementCacheIfNeeded();
+		Main.Log($"AiFoodPriorityBehavior: Settlement cache pre-warmed ({_settlementCache?.Count ?? 0} entries)");
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		if (dataStore.IsLoading)
+		{
+			ClearCache();
+		}
+	}
+
+	private void OnAiHourlyTick(MobileParty party, PartyThinkParams p)
+	{
+		try
+		{
+			if (party == null || p == null || !ShouldProcessParty(party))
+			{
+				return;
+			}
+			RefreshSettlementCacheIfNeeded();
+			bool flag = ShouldDebugParty(party);
+			FoodSituation foodSituation = AnalyzeFoodSituation(party);
+			if (!foodSituation.NeedsFood)
+			{
+				if (flag)
+				{
+					Main.Log($"[AI FOOD DEBUG] === {party.Name} ===");
+					Main.Log($"[AI FOOD DEBUG]   SKIPPED: Has {foodSituation.DaysOfFood:F1} days of food (threshold: {5f} days)");
+					Main.Log($"[AI FOOD DEBUG]   Food: {foodSituation.TotalFood:F1} | Consumption: {foodSituation.DailyConsumption:F1}/day");
+				}
+				return;
+			}
+			if (flag)
+			{
+				DebugLogFoodSituation(party, foodSituation);
+				_debugScoredSettlements = new List<DebugSettlementScore>();
+			}
+			EvaluateAndScoreSettlements(party, p, foodSituation, flag);
+			EvaluateCastlesForResupply(party, p, foodSituation, flag);
+			if (flag)
+			{
+				DebugLogTopSettlements(party);
+				_debugScoredSettlements = null;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[AI FOOD] Error in OnAiHourlyTick: " + ex.Message);
+		}
+	}
+
+	private FoodSituation AnalyzeFoodSituation(MobileParty party)
+	{
+		FoodSituation result = new FoodSituation
+		{
+			TotalFood = party.Food,
+			DailyConsumption = Math.Max(0.1f, 0f - party.FoodChange),
+			TotalPartySize = (party.MemberRoster?.TotalManCount ?? 0),
+			PartySpeed = Math.Max(1f, party.Speed),
+			IsStarving = (party.Party?.IsStarving ?? false)
+		};
+		if (party.Army != null && party.Army.LeaderParty == party)
+		{
+			foreach (MobileParty attachedParty in party.AttachedParties)
+			{
+				if (attachedParty != null)
+				{
+					result.TotalFood += attachedParty.Food;
+					result.DailyConsumption += Math.Max(0f, 0f - attachedParty.FoodChange);
+					result.TotalPartySize += attachedParty.MemberRoster?.TotalManCount ?? 0;
+					PartyBase party2 = attachedParty.Party;
+					if (party2 != null && party2.IsStarving)
+					{
+						result.IsStarving = true;
+					}
+				}
+			}
+		}
+		result.DaysOfFood = ((result.DailyConsumption > 0f) ? (result.TotalFood / result.DailyConsumption) : float.MaxValue);
+		float num = 10f - result.DaysOfFood;
+		result.FoodNeeded = Math.Max(0f, num * result.DailyConsumption);
+		if (result.IsStarving)
+		{
+			result.UrgencyMultiplier = 9f;
+			result.NeedsFood = true;
+		}
+		else if (result.DaysOfFood < 2f)
+		{
+			result.UrgencyMultiplier = 3f;
+			result.NeedsFood = true;
+		}
+		else if (result.DaysOfFood < 5f)
+		{
+			float num2 = (5f - result.DaysOfFood) / 3f;
+			result.UrgencyMultiplier = 1f + num2 * 2f;
+			result.NeedsFood = true;
+		}
+		else
+		{
+			result.UrgencyMultiplier = 1f;
+			result.NeedsFood = false;
+		}
+		return result;
+	}
+
+	private void EvaluateAndScoreSettlements(MobileParty party, PartyThinkParams p, FoodSituation foodSit, bool debugThisParty = false)
+	{
+		if (_settlementCache == null || _settlementCache.Count == 0)
+		{
+			return;
+		}
+		Vec2 getPosition2D;
+		try
+		{
+			getPosition2D = party.GetPosition2D;
+		}
+		catch
+		{
+			return;
+		}
+		int num = ((!foodSit.IsStarving) ? Math.Max(5, (int)(foodSit.DailyConsumption * 0.5f)) : 5);
+		float num2 = (foodSit.IsStarving ? 5f : Math.Max(num, foodSit.FoodNeeded * 0.1f));
+		float num3 = 3f * foodSit.PartySpeed * (float)CampaignTime.HoursInDay * 1.5f;
+		float num4 = num3 * num3;
+		IFaction mapFaction = party.MapFaction;
+		bool flag = foodSit.IsStarving || foodSit.DaysOfFood < 2f;
+		Settlement targetSettlement = party.TargetSettlement;
+		int num5 = 0;
+		int num6 = 0;
+		int num7 = 0;
+		int num8 = 0;
+		int num9 = 0;
+		int num10 = 0;
+		int num11 = 0;
+		int num12 = 0;
+		int num13 = 0;
+		foreach (KeyValuePair<Settlement, SettlementFoodData> item in _settlementCache)
+		{
+			Settlement key = item.Key;
+			SettlementFoodData value = item.Value;
+			if (key == null)
+			{
+				continue;
+			}
+			int num14 = (flag ? value.CurrentFoodStarving : value.CurrentFood);
+			if (num14 < num)
+			{
+				num6++;
+				continue;
+			}
+			float num15 = getPosition2D.X - value.Position.X;
+			float num16 = getPosition2D.Y - value.Position.Y;
+			float num17 = num15 * num15 + num16 * num16;
+			if (num17 > num4)
+			{
+				num7++;
+				continue;
+			}
+			if (key.IsTown)
+			{
+				if (!value.IsAccessibleTown)
+				{
+					num8++;
+					continue;
+				}
+				if (mapFaction != null && key.MapFaction != null && FactionManager.IsAtWarAgainstFaction(mapFaction, key.MapFaction))
+				{
+					num9++;
+					continue;
+				}
+			}
+			else
+			{
+				if (!key.IsVillage)
+				{
+					continue;
+				}
+				if (!value.IsAccessibleVillage)
+				{
+					num8++;
+					continue;
+				}
+				if (value.Hearth < 100f)
+				{
+					num10++;
+					continue;
+				}
+				if (mapFaction != null && key.MapFaction != null && FactionManager.IsAtWarAgainstFaction(mapFaction, key.MapFaction))
+				{
+					num9++;
+					continue;
+				}
+			}
+			MobileParty.NavigationType navigationType;
+			bool isFromPort;
+			bool flag2;
+			float num19;
+			try
+			{
+				navigationType = MobileParty.NavigationType.None;
+				float num18 = float.MaxValue;
+				isFromPort = false;
+				flag2 = false;
+				if (!key.HasPort || key.SiegeEvent == null || key.SiegeEvent.IsBlockadeActive || !party.HasNavalNavigationCapability)
+				{
+					AiHelper.GetBestNavigationTypeAndAdjustedDistanceOfSettlementForMobileParty(party, key, isTargetingPort: false, out var bestNavigationType, out var bestNavigationDistance, out var isFromPort2);
+					if (bestNavigationType != MobileParty.NavigationType.None && bestNavigationDistance < num18)
+					{
+						navigationType = bestNavigationType;
+						num18 = bestNavigationDistance;
+						isFromPort = isFromPort2;
+						flag2 = false;
+					}
+				}
+				if (party.HasNavalNavigationCapability && key.HasPort)
+				{
+					AiHelper.GetBestNavigationTypeAndAdjustedDistanceOfSettlementFor

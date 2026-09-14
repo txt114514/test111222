@@ -1,0 +1,624 @@
+﻿PART 24/75
+pter_horse")
+			{
+				return 1;
+			}
+			if (stringId == "horse" || stringId == "workshop_horse")
+			{
+				return 2;
+			}
+			if (stringId == "war_horse" || stringId == "workshop_war_horse")
+			{
+				return 3;
+			}
+			if (stringId == "noble_horse")
+			{
+				return 4;
+			}
+		}
+		return -1;
+	}
+
+	private void ProcessCastleStashFood(Town castle)
+	{
+		if (castle == null || castle.Settlement == null || castle.Settlement.OwnerClan != Clan.PlayerClan)
+		{
+			return;
+		}
+		ItemRoster stash = castle.Settlement.Stash;
+		if (stash == null || stash.Count == 0)
+		{
+			return;
+		}
+		int num = castle.FoodStocksUpperLimit();
+		float num2 = MathF.Max(0f, (float)num - castle.FoodStocks);
+		if (num2 <= 0f)
+		{
+			return;
+		}
+		ResetStashTotalsIfNeeded();
+		List<StashClaimableItem> list = new List<StashClaimableItem>();
+		for (int i = 0; i < stash.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = stash.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0)
+			{
+				int stashItemFoodValue = GetStashItemFoodValue(item);
+				if (stashItemFoodValue > 0)
+				{
+					float spoilageRate = GetSpoilageRate(item);
+					list.Add(new StashClaimableItem
+					{
+						Item = item,
+						Amount = elementCopyAtIndex.Amount,
+						FoodValue = stashItemFoodValue,
+						SpoilageRate = spoilageRate
+					});
+				}
+			}
+		}
+		if (list.Count == 0)
+		{
+			return;
+		}
+		list.Sort((StashClaimableItem stashClaimableItem, StashClaimableItem b) => b.SpoilageRate.CompareTo(stashClaimableItem.SpoilageRate));
+		float num3 = 0f;
+		foreach (StashClaimableItem item2 in list)
+		{
+			if (num3 >= num2)
+			{
+				break;
+			}
+			float a = item2.Amount * item2.FoodValue;
+			float num4 = MathF.Min(a, num2 - num3);
+			int num5 = (int)(num4 / (float)item2.FoodValue);
+			if (num5 > 0)
+			{
+				num5 = Math.Min(num5, item2.Amount);
+				float num6 = num5 * item2.FoodValue;
+				stash.AddToCounts(item2.Item, -num5);
+				castle.FoodStocks += num6;
+				num3 += num6;
+			}
+		}
+		if (castle.FoodStocks > (float)num)
+		{
+			castle.FoodStocks = num;
+		}
+		if (num3 > 0f)
+		{
+			string stringId = castle.Settlement.StringId;
+			if (_dailyStashClaimed.ContainsKey(stringId))
+			{
+				_dailyStashClaimed[stringId] += (int)num3;
+			}
+			else
+			{
+				_dailyStashClaimed[stringId] = (int)num3;
+			}
+			float num7 = MathF.Min(5f, num3 / 100f);
+			castle.Loyalty += num7;
+			if (_dailyStashLoyaltyBoost.ContainsKey(stringId))
+			{
+				_dailyStashLoyaltyBoost[stringId] += num7;
+			}
+			else
+			{
+				_dailyStashLoyaltyBoost[stringId] = num7;
+			}
+			InformationManager.DisplayMessage(new InformationMessage($"{castle.Name}: {(int)num3} food claimed from stash (+{num7:F1} loyalty)", Colors.Cyan));
+		}
+	}
+
+	private int GetStashItemFoodValue(ItemObject item)
+	{
+		if (item == null)
+		{
+			return 0;
+		}
+		if (item.IsFood || item.StringId.StartsWith("meat_"))
+		{
+			return 1;
+		}
+		string stringId = item.StringId;
+		if (stringId == "cow")
+		{
+			return 4;
+		}
+		if (stringId == "sheep" || stringId == "hog")
+		{
+			return 2;
+		}
+		if (stringId == "chicken_product" || stringId == "goose_product" || stringId == "hare")
+		{
+			return 1;
+		}
+		if (item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores)
+		{
+			return 1;
+		}
+		return 0;
+	}
+
+	private List<ClaimableItem> GetClaimableFoodItems(Town town, bool isEmergency)
+	{
+		List<ClaimableItem> list = new List<ClaimableItem>();
+		ItemRoster itemRoster = town.Settlement.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && IsClaimableFood(item, isEmergency, town.Settlement))
+			{
+				float spoilageRate = GetSpoilageRate(item);
+				list.Add(new ClaimableItem
+				{
+					Item = item,
+					Count = elementCopyAtIndex.Amount,
+					SpoilageRate = spoilageRate
+				});
+			}
+		}
+		return list;
+	}
+
+	private bool IsClaimableFood(ItemObject item, bool isEmergency, Settlement settlement)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		bool flag = item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores;
+		bool isFood = item.IsFood;
+		if (!isEmergency)
+		{
+			return flag && !RawMaterialRegistry.IsProtected(item.StringId, settlement, RawMaterialRegistry.ProtectionContext.MarketClaiming);
+		}
+		return flag | isFood;
+	}
+
+	private bool IsProlongedStarvation(Town town)
+	{
+		if (town == null || town.Settlement == null)
+		{
+			return false;
+		}
+		float starvationDays = StarvationDesertionBehavior.GetStarvationDays(town.Settlement);
+		return starvationDays >= 7f;
+	}
+
+	private float GetSpoilageRate(ItemObject item)
+	{
+		if (item == null)
+		{
+			return 1f;
+		}
+		if (SpoilageRates.TryGetValue(item.StringId, out var value))
+		{
+			return value;
+		}
+		return 1f;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\TownSackBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using HarmonyLib;
+using Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
+using TaleWorlds.CampaignSystem.GameMenus;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Buildings;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.LinQuick;
+using TaleWorlds.Localization;
+using TaleWorlds.ObjectSystem;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class TownSackBehavior : CampaignBehaviorBase
+{
+	[HarmonyPatch(typeof(SiegeAftermathCampaignBehavior), "DetermineAISiegeAftermath")]
+	public static class AISackPatch
+	{
+		[HarmonyPostfix]
+		private static void Postfix(ref SiegeAftermathAction.SiegeAftermath __result, MobileParty attackerParty, Settlement settlement)
+		{
+			try
+			{
+				if (settlement?.Town == null || attackerParty.MapFaction?.Culture == settlement.Culture)
+				{
+					return;
+				}
+				Hero leaderHero = attackerParty.LeaderHero;
+				if (leaderHero == null || !leaderHero.IsAlive)
+				{
+					return;
+				}
+				int traitLevel = leaderHero.GetTraitLevel(DefaultTraits.Mercy);
+				if (traitLevel > 0)
+				{
+					return;
+				}
+				if (attackerParty.Army != null)
+				{
+					int num = attackerParty.Army.Parties.Count((MobileParty t) => t != attackerParty && t.LeaderHero != null && t.LeaderHero.GetTraitLevel(DefaultTraits.Mercy) > 0);
+					float num2 = (3000f + settlement.Town.Prosperity) / 400f * (float)num * 1.25f;
+					Clan actualClan = attackerParty.ActualClan;
+					if (actualClan == null || actualClan.Influence < 2f * num2)
+					{
+						return;
+					}
+				}
+				float num3 = ((traitLevel <= -2) ? 0.2f : ((traitLevel != -1) ? 0.05f : 0.15f));
+				float num4;
+				float b;
+				if (attackerParty.Army != null)
+				{
+					num4 = attackerParty.Army.Parties.Sum((MobileParty p) => p.Food);
+					b = attackerParty.Army.Parties.Count;
+				}
+				else
+				{
+					num4 = attackerParty.Food;
+					b = 1f;
+				}
+				float num5 = num4 / MathF.Max(1f, b);
+				if (num5 < 2f)
+				{
+					num3 *= 5f;
+				}
+				else if (num5 < 5f)
+				{
+					num3 *= 3f;
+				}
+				else if (num5 < 10f)
+				{
+					num3 *= 1.5f;
+				}
+				int num6 = settlement.Town.FoodStocksUpperLimit();
+				float num7 = ((num6 > 0) ? (settlement.Town.FoodStocks / (float)num6) : 0f);
+				if (num7 >= 0.9f)
+				{
+					num3 *= 2.5f;
+				}
+				else if (num7 >= 0.6f)
+				{
+					num3 *= 2f;
+				}
+				else if (num7 >= 0.3f)
+				{
+					num3 *= 1.5f;
+				}
+				if (MBRandom.RandomFloat < num3)
+				{
+					bool flag = false;
+					_aiSackProsperityCache = settlement.Town.Prosperity;
+					_aiSackAttackerParty = attackerParty;
+					_aiSackPending = true;
+					__result = SiegeAftermathAction.SiegeAftermath.Devastate;
+				}
+			}
+			catch (Exception ex)
+			{
+				Main.Log("[Sack AI] ERROR in DetermineAISiegeAftermath postfix: " + ex.Message);
+				_aiSackPending = false;
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(SiegeAftermathCampaignBehavior), "OnMapEventEnded")]
+	public static class SiegeAftermathProsperityCacheResetPatch
+	{
+		private static readonly FieldInfo _cacheField = AccessTools.Field(typeof(SiegeAftermathCampaignBehavior), "_settlementProsperityCache");
+
+		[HarmonyPostfix]
+		private static void Postfix(SiegeAftermathCampaignBehavior __instance)
+		{
+			try
+			{
+				if (_cacheField != null)
+				{
+					_cacheField.SetValue(__instance, -1f);
+				}
+			}
+			catch (Exception ex)
+			{
+				Main.Log("[Sack] ERROR resetting native prosperity cache: " + ex.Message);
+			}
+		}
+	}
+
+	private const int WEIGHT_PER_FOOD_UNIT = 10;
+
+	private const int TROOPS_PER_PACK_ANIMAL = 5;
+
+	private const float PROSPERITY_MULTIPLIER = 3f;
+
+	private const float BUILDING_LOSS_MULTIPLIER = 3f;
+
+	private const float LOYALTY_PENALTY = -50f;
+
+	private const float NOTABLE_POWER_MODIFIER = -1f;
+
+	private const int RELATION_PENALTY_OWNER = -50;
+
+	private const float MORALE_BONUS = 30f;
+
+	private const float INFLUENCE_COST_MULTIPLIER = 1.25f;
+
+	private const float AI_SACK_GRANARY_THRESHOLD = 0.3f;
+
+	private const float NATIVE_DEVASTATE_PROSPERITY_MULT = 1.5f;
+
+	private const float NATIVE_DEVASTATE_BUILDING_MULT = 1.5f;
+
+	private const float NATIVE_DEVASTATE_LOYALTY = -30f;
+
+	private const float NATIVE_DEVASTATE_MORALE = 20f;
+
+	private const int NATIVE_DEVASTATE_RELATION_OWNER = -30;
+
+	private const bool DEBUG_SACK = false;
+
+	private MobileParty _sackBesiegerParty;
+
+	private Clan _sackPrevOwnerClan;
+
+	private Dictionary<MobileParty, float> _sackPartyContributions = new Dictionary<MobileParty, float>();
+
+	private float _sackProsperityCache = -1f;
+
+	private int _summaryPackAnimalsSeized;
+
+	private int _summaryLivestockSeized;
+
+	private int _summaryMarketFoodSeized;
+
+	private int _summaryGranaryFoodSeized;
+
+	private int _summaryGoldGained;
+
+	private static bool _aiSackPending;
+
+	private static float _aiSackProsperityCache;
+
+	private static MobileParty _aiSackAttackerParty;
+
+	private static readonly Dictionary<string, int> _dailySackFood = new Dictionary<string, int>();
+
+	private static int _sackLastResetDay = -1;
+
+	private static void ResetSackTotalsIfNeeded()
+	{
+		int num = (int)CampaignTime.Now.ToDays;
+		if (num != _sackLastResetDay)
+		{
+			_dailySackFood.Clear();
+			_sackLastResetDay = num;
+		}
+	}
+
+	private static void RecordSackFood(Settlement settlement, int amount)
+	{
+		if (settlement != null && amount > 0)
+		{
+			ResetSackTotalsIfNeeded();
+			string stringId = settlement.StringId;
+			if (_dailySackFood.ContainsKey(stringId))
+			{
+				_dailySackFood[stringId] += amount;
+			}
+			else
+			{
+				_dailySackFood[stringId] = amount;
+			}
+		}
+	}
+
+	public static int GetDailySackFood(Settlement settlement)
+	{
+		if (settlement == null)
+		{
+			return 0;
+		}
+		ResetSackTotalsIfNeeded();
+		int value;
+		return _dailySackFood.TryGetValue(settlement.StringId, out value) ? value : 0;
+	}
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.MapEventEnded.AddNonSerializedListener(this, OnMapEventEnded);
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+		CampaignEvents.OnSiegeAftermathAppliedEvent.AddNonSerializedListener(this, OnSiegeAftermathApplied);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		dataStore.SyncData("_sackBesiegerParty", ref _sackBesiegerParty);
+		dataStore.SyncData("_sackPrevOwnerClan", ref _sackPrevOwnerClan);
+		dataStore.SyncData("_sackPartyContributions", ref _sackPartyContributions);
+		if (dataStore.IsLoading)
+		{
+			_dailySackFood.Clear();
+			_sackLastResetDay = -1;
+		}
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		AddGameMenus(starter);
+	}
+
+	private void OnMapEventEnded(MapEvent mapEvent)
+	{
+		try
+		{
+			BattleSideEnum battleSideEnum = ((!mapEvent.IsSallyOut && !mapEvent.IsBlockadeSallyOut) ? BattleSideEnum.Attacker : BattleSideEnum.Defender);
+			if ((!mapEvent.IsSiegeAssault && !mapEvent.IsSiegeOutside && !mapEvent.IsSallyOut && !mapEvent.IsBlockadeSallyOut) || mapEvent.WinningSide != battleSideEnum || mapEvent.MapEventSettlement == null || !mapEvent.GetMapEventSide(battleSideEnum).IsMainPartyAmongParties())
+			{
+				return;
+			}
+			MobileParty mobileParty = mapEvent.GetMapEventSide(battleSideEnum).LeaderParty.MobileParty;
+			if (mobileParty != MobileParty.MainParty)
+			{
+				return;
+			}
+			_sackBesiegerParty = mobileParty;
+			_sackPrevOwnerClan = mapEvent.MapEventSettlement.OwnerClan;
+			_sackProsperityCache = mapEvent.MapEventSettlement.Town?.Prosperity ?? 0f;
+			_sackPartyContributions.Clear();
+			float num = 0f;
+			foreach (MapEventParty item in mapEvent.PartiesOnSide(battleSideEnum))
+			{
+				if (item.Party.IsMobile)
+				{
+					num += item.Party.EstimatedStrength;
+				}
+			}
+			foreach (MapEventParty item2 in mapEvent.PartiesOnSide(battleSideEnum))
+			{
+				if (item2.Party.IsMobile && !_sackPartyContributions.ContainsKey(item2.Party.MobileParty))
+				{
+					float value = ((num > 0f) ? (item2.Party.EstimatedStrength / num * 100f) : 0f);
+					_sackPartyContributions.Add(item2.Party.MobileParty, value);
+				}
+			}
+			bool flag = false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[Sack] ERROR in OnMapEventEnded: " + ex.Message);
+		}
+	}
+
+	private void AddGameMenus(CampaignGameStarter starter)
+	{
+		starter.AddGameMenuOption("menu_settlement_taken_player_leader", "menu_settlement_taken_sack", "{=HAP_SACK_OPTION}Sack {SACK_INFLUENCE_COST_TEXT}", SackOnCondition, SackOnConsequence, isLeave: false, 0);
+		starter.AddGameMenu("sack_aftermath_summary", "{=!}{SACK_START_TEXT}{newline} {newline}{SACK_SUMMARY_TEXT}{newline} {newline}{SACK_END_TEXT}", SackSummaryOnInit);
+		starter.AddGameMenuOption("sack_aftermath_summary", "sack_aftermath_continue", "{=veWOovVv}Continue...", ContinueOnCondition, ContinueOnConsequence);
+	}
+
+	private bool SackOnCondition(MenuCallbackArgs args)
+	{
+		try
+		{
+			Settlement currentSettlement = Settlement.CurrentSettlement;
+			if (currentSettlement == null || currentSettlement.Town == null)
+			{
+				return false;
+			}
+			MobileParty sackBesiegerParty = _sackBesiegerParty;
+			if (sackBesiegerParty == null)
+			{
+				return false;
+			}
+			CultureObject culture = currentSettlement.Culture;
+			bool flag = culture == Hero.MainHero.MapFaction?.Culture;
+			int num = (int)GetInfluenceCost(sackBesiegerParty, currentSettlement);
+			bool flag2 = true;
+			Clan actualClan = sackBesiegerParty.ActualClan;
+			if (actualClan != null)
+			{
+				flag2 = actualClan.Influence >= (float)num;
+			}
+			bool flag3 = num > 0;
+			TextObject textObject = new TextObject("{=FPPb7ur6}({INFLUENCE_AMOUNT}{INFLUENCE_ICON})");
+			textObject.SetTextVariable("INFLUENCE_AMOUNT", num);
+			textObject.SetTextVariable("INFLUENCE_ICON", "{=!}<img src=\"General\\Icons\\Influence@2x\" extend=\"7\">");
+			MBTextManager.SetTextVariable("SACK_INFLUENCE_COST_TEXT", flag3 ? textObject : TextObject.GetEmpty());
+			TextObject tooltip = BuildSackTooltip(sackBesiegerParty, currentSettlement, flag, flag3, num);
+			args.Tooltip = tooltip;
+			args.IsEnabled = !flag & flag2;
+			args.optionLeaveType = GameMenuOption.LeaveType.Raid;
+			return true;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[Sack] ERROR in SackOnCondition: " + ex.Message);
+			return false;
+		}
+	}
+
+	private TextObject BuildSackTooltip(MobileParty attackerParty, Settlement settlement, bool isSameCulture, bool showInfluenceCost, int influenceCost)
+	{
+		float prosperity = ((_sackProsperityCache >= 0f) ? _sackProsperityCache : settlement.Town.Prosperity);
+		TextObject textObject = new TextObject("{=!}{CULTURE_TEXT}{PENALTY_TEXT}{INFLUENCE_TEXT}{SEIZURE_TEXT}");
+		if (isSameCulture)
+		{
+			textObject.SetTextVariable("CULTURE_TEXT", new TextObject("{=HAP_SACK_CULTURE}You cannot sack a settlement that has your faction culture.{newline}"));
+		}
+		else
+		{
+			textObject.SetTextVariable("CULTURE_TEXT", TextObject.GetEmpty());
+		}
+		int variable = (int)(-1f * GetProsperityPenalty(attackerParty, settlement, prosperity));
+		int buildingLevelsLost = GetBuildingLevelsLost(attackerParty);
+		int armyGoldGain = GetArmyGoldGain(attackerParty, settlement, prosperity);
+		_sackPartyContributions.TryGetValue(attackerParty, out var value);
+		int partyGoldGain = GetPartyGoldGain(armyGoldGain, value);
+		TextObject textObject2 = new TextObject("{=!} • Prosperity Lost: {PROSPERITY_LOST}{newline} • Building Levels Reduced: {BUILDING_LEVELS}{newline} • Loyalty in {SETTLEMENT} : {LOYALTY}{NOTABLE_POWER_LINE}{newline} • Party Morale Change : {MORALE}{ARMY_GOLD_LINE}{newline} • Party Gold Gain : {PARTY_GOLD}{newline} • Relation with Settlement Owner : {OWNER.LINK} : {OWNER_RELATION}");
+		textObject2.SetTextVariable("PROSPERITY_LOST", variable);
+		textObject2.SetTextVariable("BUILDING_LEVELS", buildingLevelsLost);
+		textObject2.SetTextVariable("SETTLEMENT", settlement.GetName());
+		textObject2.SetTextVariable("LOYALTY", -50f);
+		if (settlement.Notables.Count > 0)
+		{
+			TextObject textObject3 = new TextObject("{=!}{newline} • Notable Powers: {NOTABLE_POWER}%");
+			textObject3.SetTextVariable("NOTABLE_POWER", -100);
+			textObject2.SetTextVariable("NOTABLE_POWER_LINE", textObject3);
+		}
+		else
+		{
+			textObject2.SetTextVariable("NOTABLE_POWER_LINE", TextObject.GetEmpty());
+		}
+		textObject2.SetTextVariable("MORALE", 30f);
+		if (attackerParty.Army != null)
+		{
+			TextObject textObject4 = new TextObject("{=!}{newline} • Army Gold Gain : {ARMY_GOLD}");
+			textObject4.SetTextVariable("ARMY_GOLD", armyGoldGain);
+			textObject2.SetTextVariable("ARMY_GOLD_LINE", textObject4);
+		}
+		else
+		{
+			textObject2.SetTextVariable("ARMY_GOLD_LINE", TextObject.GetEmpty());
+		}
+		textObject2.SetTextVariable("PARTY_GOLD", partyGoldGain);
+		StringHelpers.SetCharacterProperties("OWNER", _sackPrevOwnerClan?.Leader?.CharacterObject, textObject2);
+		textObject2.SetTextVariable("OWNER_RELATION", -50);
+		textObject.SetTextVariable("PENALTY_TEXT", textObject2);
+		if (showInfluenceCost)
+		{
+			Army army = attackerParty.Army;
+			MBList<MobileParty> mBList = ((army != null) ? army.Parties.WhereQ((MobileParty t) => t != attackerParty && t.LeaderHero != null && t.LeaderHero.GetTraitLevel(DefaultTraits.Mercy) > 0).ToMBList() : new MBList<MobileParty>());
+			TextObject textObject5 = new TextObject("{=!}{newline} • {HERO.NAME} must use {INFLUENCE_AMOUNT} influence to convince {COUNT} merciful leaders.");
+			StringHelpers.SetCharacterProperties("HERO", attackerParty.LeaderHero?.CharacterObject, textObject5);
+			textObject5.SetTextVariable("INFLUENCE_AMOUNT", influenceCost);
+			textObject5.SetTextVariable("COUNT", mBList.Count);
+			textObject.SetTextVariable("INFLUENCE_TEXT", textObject5);
+		}
+		else
+		{
+			textObject.SetTextVariable("INFLUENCE_TEXT", TextObject.GetEmpty());
+		}
+		TextObject variable2 = ((!settlement.IsTown) ? new TextObject("{=HAP_SACK_SEIZURE_CASTLE}{newline}{newline}All food stores will be seized.") : new TextObject("{=HAP_SACK_SEIZURE_TOWN}{newline}{newline}All food stores, market food, and pack animals will be seized."));
+		textObject.SetTextVariable("SEIZURE_TEXT", variable2);
+		return textObject;
+	}
+
+	private void SackOnConsequence(MenuCa

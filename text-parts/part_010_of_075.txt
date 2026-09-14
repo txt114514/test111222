@@ -1,0 +1,179 @@
+﻿PART 10/75
+_no", "forager_talk_attack_confirm", "close_window", "{=HAP_ForagerAttackNo}Fine. Get out of my sight.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_talk_defending_start", "start", "forager_defending_options", "{=HAP_ForagerDefending}Stand aside! We're reinforcing {CASTLE_LINK} against a siege. You'll find no easy prey here!", forager_talk_defending_on_condition, null, 200);
+		starter.AddPlayerLine("forager_defending_attack", "forager_defending_options", "forager_defending_attack_confirm", "{=HAP_ForagerDefendingAttack}Your supplies will serve my army. Surrender!", null, null, 120);
+		starter.AddPlayerLine("forager_defending_take_goods", "forager_defending_options", "forager_defending_goods_confirm", "{=HAP_ForagerFleeingTakeGoods}Your supplies. Hand them over and you can go.", null, null, 110);
+		starter.AddPlayerLine("forager_defending_leave", "forager_defending_options", "close_window", "{=HAP_ForagerDefendingLeave}I have bigger concerns than a supply party. Move along.", null, forager_defending_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_defending_attack_fight", "forager_defending_attack_confirm", "forager_defending_fight_or_leave", "{=HAP_ForagerDefendingFight}We're garrison soldiers defending our home! You'll have to take them from us![rf:idle_angry][ib:aggressive]", forager_will_fight_on_condition, null);
+		starter.AddDialogLine("forager_defending_attack_surrender", "forager_defending_attack_confirm", "forager_defending_surrender_options", "{=HAP_ForagerDefendingSurrender}We're hopelessly outnumbered... The garrison will suffer, but we have no choice.[rf:idle_angry][ib:nervous]", forager_will_surrender_on_condition, null);
+		starter.AddPlayerLine("forager_defending_fight_attack", "forager_defending_fight_or_leave", "close_window", "{=HAP_ForagerFightAttack}Then we'll take them by force. Attack!", null, forager_defending_attack_on_consequence, 120);
+		starter.AddPlayerLine("forager_defending_fight_leave", "forager_defending_fight_or_leave", "close_window", "{=HAP_ForagerFightLeave}On second thought, be on your way.", null, forager_defending_leave_on_consequence, 80);
+		starter.AddPlayerLine("forager_defending_surrender_prisoner", "forager_defending_surrender_options", "close_window", "{=HAP_ForagerAttackYes}Your goods AND your freedom. Seize them!", null, forager_take_prisoner_on_consequence, 120);
+		starter.AddPlayerLine("forager_defending_surrender_goods", "forager_defending_surrender_options", "close_window", "{=HAP_ForagerEnemyTakeGoods}Just the supplies. Get out of here.", null, forager_enemy_goods_taken_on_consequence, 110, forager_enemy_has_goods_on_condition);
+		starter.AddPlayerLine("forager_defending_surrender_let_go", "forager_defending_surrender_options", "close_window", "{=HAP_ForagerAttackNo}Fine. Get out of my sight.", null, forager_defending_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_defending_goods_response", "forager_defending_goods_confirm", "close_window", "{=HAP_ForagerFleeingGoodsResponse}Take it! Take it all! Just let us live![rf:idle_angry][ib:nervous]", null, forager_enemy_goods_taken_on_consequence);
+		starter.AddDialogLine("forager_talk_defending_friendly_start", "start", "forager_defending_friendly_options", "{=HAP_ForagerDefendingFriendly}No time to talk! {CASTLE_LINK} is under siege - we're rushing supplies to the garrison![rf:idle_angry][ib:nervous]", forager_talk_defending_friendly_on_condition, null, 150);
+		starter.AddPlayerLine("forager_defending_friendly_help", "forager_defending_friendly_options", "close_window", "{=HAP_ForagerDefendingHelp}I'll ride with you. Let's break that siege!", forager_same_faction_on_condition, forager_defending_friendly_help_on_consequence, 120);
+		starter.AddPlayerLine("forager_defending_friendly_godspeed", "forager_defending_friendly_options", "close_window", "{=HAP_ForagerDefendingGodspeed}Godspeed! I hope you make it in time.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddPlayerLine("forager_defending_friendly_attack", "forager_defending_friendly_options", "forager_defending_friendly_attack_warning", "{=HAP_ForagerDefendingFriendlyAttack}Your supplies will serve MY army. Surrender!", forager_not_same_faction_on_condition, null, 120, forager_war_warning_condition);
+		starter.AddPlayerLine("forager_defending_friendly_take_goods", "forager_defending_friendly_options", "forager_defending_friendly_demand_response", "{=HAP_ForagerDefendingFriendlyGoods}Hand over your supplies. You can keep your lives.", forager_not_same_faction_on_condition, null, 110, forager_defending_friendly_take_goods_clickable_condition);
+		starter.AddDialogLine("forager_defending_friendly_demand_fight", "forager_defending_friendly_demand_response", "forager_defending_friendly_fight_or_leave", "{=HAP_ForagerDefendingFriendlyFight}You want our supplies while our castle burns? We'll die before we let that happen![rf:idle_angry][ib:aggressive]", forager_will_fight_on_condition, null);
+		starter.AddDialogLine("forager_defending_friendly_demand_surrender", "forager_defending_friendly_demand_response", "forager_defending_friendly_goods_warning", "{=HAP_ForagerDefendingFriendlySurrender}We're outnumbered... The garrison will suffer, but we have no choice.[rf:idle_angry][ib:nervous]", forager_will_surrender_on_condition, null);
+		starter.AddPlayerLine("forager_defending_friendly_fight_attack", "forager_defending_friendly_fight_or_leave", "close_window", "{=HAP_ForagerFightAttack}Then we'll take them by force. Attack!", null, forager_attack_on_consequence, 120, forager_war_warning_condition);
+		starter.AddPlayerLine("forager_defending_friendly_fight_leave", "forager_defending_friendly_fight_or_leave", "close_window", "{=HAP_ForagerFightLeave}On second thought, be on your way.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_defending_friendly_attack_warning_response", "forager_defending_friendly_attack_warning", "forager_defending_friendly_attack_confirm", "{=HAP_ForagerDefendingAttackWarning}You'd attack us while our castle burns?! You'll make an enemy of {FACTION_NAME}!", forager_set_faction_name_on_condition, null);
+		starter.AddPlayerLine("forager_defending_friendly_attack_yes", "forager_defending_friendly_attack_confirm", "close_window", "{=HAP_ForagerAttackYes}Your goods AND your freedom. Seize them!", null, forager_attack_on_consequence, 120);
+		starter.AddPlayerLine("forager_defending_friendly_attack_no", "forager_defending_friendly_attack_confirm", "close_window", "{=HAP_ForagerAttackNo}Fine. Get out of my sight.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_defending_friendly_goods_warning_response", "forager_defending_friendly_goods_warning", "forager_defending_friendly_goods_confirm", "{=HAP_ForagerDefendingGoodsWarning}These supplies are for the garrison! Without them, the castle may fall!", null, null);
+		starter.AddPlayerLine("forager_defending_friendly_goods_yes", "forager_defending_friendly_goods_confirm", "forager_defending_friendly_goods_taken", "{=HAP_ForagerTakeGoods}Give me all your supplies!", null, null, 120, forager_take_goods_warning_condition);
+		starter.AddPlayerLine("forager_defending_friendly_goods_no", "forager_defending_friendly_goods_confirm", "close_window", "{=HAP_ForagerNevermind}Never mind. Go on your way.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_defending_friendly_goods_taken_response", "forager_defending_friendly_goods_taken", "close_window", "{=HAP_ForagerGoodsTaken}Take them then... may you be judged you for this.", null, forager_enemy_goods_taken_on_consequence);
+		starter.AddDialogLine("forager_talk_start_enemy", "start", "forager_talk_enemy_options", "{=HAP_ForagerGreetingEnemy}You! We're just supply runners. Let us pass![rf:idle_angry][ib:nervous]", forager_talk_enemy_on_condition, null);
+		starter.AddPlayerLine("forager_talk_enemy_attack", "forager_talk_enemy_options", "forager_talk_enemy_attack_confirm", "{=HAP_ForagerAttack}Your supplies will serve my army well. Surrender!", null, null, 120);
+		starter.AddPlayerLine("forager_talk_enemy_leave", "forager_talk_enemy_options", "close_window", "{=HAP_ForagerEnemyLeave}I have no quarrel with supply runners. Go.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_talk_enemy_attack_confirm_fight", "forager_talk_enemy_attack_confirm", "forager_talk_enemy_fight_or_leave", "{=HAP_ForagerEnemyFight}You want our supplies? We're garrison soldiers, not peasants! You'll have to take them![rf:idle_angry][ib:aggressive]", forager_will_fight_on_condition, null);
+		starter.AddDialogLine("forager_talk_enemy_attack_confirm_surrender", "forager_talk_enemy_attack_confirm", "forager_talk_enemy_attack_final", "{=HAP_ForagerSurrender}Please! We're not warriors. Take our goods, but spare our lives![rf:idle_angry][ib:nervous]", forager_will_surrender_on_condition, null);
+		starter.AddPlayerLine("forager_enemy_attack_yes", "forager_talk_enemy_attack_final", "close_window", "{=HAP_ForagerAttackYes}Your goods AND your freedom. Seize them!", null, forager_take_prisoner_on_consequence, 120);
+		starter.AddPlayerLine("forager_enemy_take_goods", "forager_talk_enemy_attack_final", "close_window", "{=HAP_ForagerEnemyTakeGoods}Just the supplies. Get out of here.", null, forager_enemy_goods_taken_on_consequence, 110, forager_enemy_has_goods_on_condition);
+		starter.AddPlayerLine("forager_enemy_attack_no", "forager_talk_enemy_attack_final", "close_window", "{=HAP_ForagerAttackNo}Fine. Get out of my sight.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddPlayerLine("forager_enemy_fight_attack", "forager_talk_enemy_fight_or_leave", "close_window", "{=HAP_ForagerFightAttack}Then we'll take them by force. Attack!", null, forager_attack_on_consequence, 120);
+		starter.AddPlayerLine("forager_enemy_fight_leave", "forager_talk_enemy_fight_or_leave", "close_window", "{=HAP_ForagerFightLeave}On second thought, be on your way.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_talk_fleeing_friendly_start", "start", "forager_fleeing_friendly_options", "{=HAP_ForagerFleeingFriendly}We've lost {CASTLE_NAME}... We're heading to {FLEE_TARGET} to regroup. Dark times, friend.[rf:idle_angry][ib:nervous]", forager_talk_fleeing_friendly_on_condition, null, 160);
+		starter.AddPlayerLine("forager_fleeing_friendly_sympathy", "forager_fleeing_friendly_options", "close_window", "{=HAP_ForagerFleeingSympathy}Safe travels. I hope your lord recovers what was lost.", null, forager_talk_leave_on_consequence);
+		starter.AddPlayerLine("forager_fleeing_friendly_leave", "forager_fleeing_friendly_options", "close_window", "{=HAP_ForagerFleeingLeave}Good luck out there.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_talk_fleeing_enemy_start", "start", "forager_fleeing_enemy_options", "{=HAP_ForagerFleeingEnemy}You've taken everything from us! Our castle is gone... Just let us go, haven't you won enough?[rf:idle_angry][ib:nervous]", forager_talk_fleeing_enemy_on_condition, null, 160);
+		starter.AddPlayerLine("forager_fleeing_enemy_attack", "forager_fleeing_enemy_options", "forager_fleeing_enemy_attack_confirm", "{=HAP_ForagerFleeingAttack}No mercy for the defeated. Seize them!", null, null, 120);
+		starter.AddPlayerLine("forager_fleeing_enemy_take_goods", "forager_fleeing_enemy_options", "forager_fleeing_enemy_goods_confirm", "{=HAP_ForagerFleeingTakeGoods}Your supplies. Hand them over and you can go.", null, null, 110);
+		starter.AddPlayerLine("forager_fleeing_enemy_let_go", "forager_fleeing_enemy_options", "close_window", "{=HAP_ForagerFleeingLetGo}Run while you can. I've no quarrel with fleeing men.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_fleeing_enemy_goods_response", "forager_fleeing_enemy_goods_confirm", "close_window", "{=HAP_ForagerFleeingGoodsResponse}Take it! Take it all! Just let us live![rf:idle_angry][ib:nervous]", null, forager_goods_taken_on_consequence);
+		starter.AddDialogLine("forager_fleeing_enemy_attack_fight", "forager_fleeing_enemy_attack_confirm", "forager_fleeing_enemy_fight_or_leave", "{=HAP_ForagerFleeingAttackResponse}Damn you! We'll die fighting then![rf:idle_angry][ib:aggressive]", forager_will_fight_on_condition, null);
+		starter.AddDialogLine("forager_fleeing_enemy_attack_surrender", "forager_fleeing_enemy_attack_confirm", "forager_fleeing_enemy_surrender_options", "{=HAP_ForagerFleeingSurrender}We're beaten... Take what you want. Just spare our lives![rf:idle_angry][ib:nervous]", forager_will_surrender_on_condition, null);
+		starter.AddPlayerLine("forager_fleeing_enemy_fight_attack", "forager_fleeing_enemy_fight_or_leave", "close_window", "{=HAP_ForagerFightAttack}Then we'll take them by force. Attack!", null, forager_attack_on_consequence, 120);
+		starter.AddPlayerLine("forager_fleeing_enemy_fight_leave", "forager_fleeing_enemy_fight_or_leave", "close_window", "{=HAP_ForagerFightLeave}On second thought, be on your way.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddPlayerLine("forager_fleeing_enemy_surrender_prisoner", "forager_fleeing_enemy_surrender_options", "close_window", "{=HAP_ForagerAttackYes}Your goods AND your freedom. Seize them!", null, forager_take_prisoner_on_consequence, 120);
+		starter.AddPlayerLine("forager_fleeing_enemy_surrender_goods", "forager_fleeing_enemy_surrender_options", "close_window", "{=HAP_ForagerEnemyTakeGoods}Just the supplies. Get out of here.", null, forager_enemy_goods_taken_on_consequence, 110, forager_enemy_has_goods_on_condition);
+		starter.AddPlayerLine("forager_fleeing_enemy_surrender_let_go", "forager_fleeing_enemy_surrender_options", "close_window", "{=HAP_ForagerAttackNo}Fine. Get out of my sight.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddPlayerLine("forager_fallback_attack", "forager_fallback_options", "forager_fallback_attack_confirm", "{=HAP_ForagerFallbackAttack}You're not going anywhere! Surrender!", null, null, 120);
+		starter.AddPlayerLine("forager_fallback_take_goods", "forager_fallback_options", "forager_fallback_goods_confirm", "{=HAP_ForagerFleeingTakeGoods}Your supplies. Hand them over and you can go.", null, null, 110);
+		starter.AddPlayerLine("forager_fallback_leave", "forager_fallback_options", "close_window", "{=HAP_ForagerFallbackLeave}Be on your way.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_fallback_attack_fight", "forager_fallback_attack_confirm", "forager_fallback_fight_or_leave", "{=HAP_ForagerEnemyFight}You want our supplies? We're garrison soldiers, not peasants! You'll have to take them![rf:idle_angry][ib:aggressive]", forager_will_fight_on_condition, null);
+		starter.AddDialogLine("forager_fallback_attack_surrender", "forager_fallback_attack_confirm", "forager_fallback_surrender_options", "{=HAP_ForagerSurrender}Please! We're not warriors. Take our goods, but spare our lives![rf:idle_angry][ib:nervous]", forager_will_surrender_on_condition, null);
+		starter.AddPlayerLine("forager_fallback_fight_attack", "forager_fallback_fight_or_leave", "close_window", "{=HAP_ForagerFightAttack}Then we'll take them by force. Attack!", null, forager_attack_on_consequence, 120);
+		starter.AddPlayerLine("forager_fallback_fight_leave", "forager_fallback_fight_or_leave", "close_window", "{=HAP_ForagerFightLeave}On second thought, be on your way.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddPlayerLine("forager_fallback_surrender_prisoner", "forager_fallback_surrender_options", "close_window", "{=HAP_ForagerAttackYes}Your goods AND your freedom. Seize them!", null, forager_take_prisoner_on_consequence, 120);
+		starter.AddPlayerLine("forager_fallback_surrender_goods", "forager_fallback_surrender_options", "close_window", "{=HAP_ForagerEnemyTakeGoods}Just the supplies. Get out of here.", null, forager_enemy_goods_taken_on_consequence, 110, forager_enemy_has_goods_on_condition);
+		starter.AddPlayerLine("forager_fallback_surrender_let_go", "forager_fallback_surrender_options", "close_window", "{=HAP_ForagerAttackNo}Fine. Get out of my sight.", null, forager_talk_leave_on_consequence, 80);
+		starter.AddDialogLine("forager_fallback_goods_response", "forager_fallback_goods_confirm", "close_window", "{=HAP_ForagerFleeingGoodsResponse}Take it! Take it all! Just let us live![rf:idle_angry][ib:nervous]", null, forager_enemy_goods_taken_on_consequence);
+	}
+
+	private bool forager_not_same_faction_on_condition()
+	{
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent?.HomeCastle == null)
+		{
+			return true;
+		}
+		Clan ownerClan = foragerComponent.HomeCastle.OwnerClan;
+		if (ownerClan == null)
+		{
+			return true;
+		}
+		IFaction mapFaction = ownerClan.MapFaction;
+		if (mapFaction != null && mapFaction == Hero.MainHero.MapFaction)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private bool forager_talk_friendly_on_condition()
+	{
+		if (MobileParty.ConversationParty == null)
+		{
+			return false;
+		}
+		if (!CastleForagerPartyComponent.IsForagerParty(MobileParty.ConversationParty))
+		{
+			return false;
+		}
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent == null)
+		{
+			return false;
+		}
+		if (foragerComponent.State == CastleForagerPartyComponent.ForagerState.Defending || foragerComponent.State == CastleForagerPartyComponent.ForagerState.Fleeing)
+		{
+			return false;
+		}
+		IFaction faction = foragerComponent.OriginalClan?.MapFaction ?? MobileParty.ConversationParty.MapFaction;
+		if (faction == null)
+		{
+			return false;
+		}
+		if (faction.IsAtWarWith(Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		if (GetForagerInteraction(MobileParty.ConversationParty) != 0)
+		{
+			return false;
+		}
+		SetForagerInteraction(MobileParty.ConversationParty, 1);
+		if (foragerComponent.HomeCastle != null)
+		{
+			MBTextManager.SetTextVariable("CASTLE_LINK", foragerComponent.HomeCastle.EncyclopediaLinkWithName);
+		}
+		return true;
+	}
+
+	private bool forager_talk_friendly_return_on_condition()
+	{
+		if (MobileParty.ConversationParty == null)
+		{
+			return false;
+		}
+		if (!CastleForagerPartyComponent.IsForagerParty(MobileParty.ConversationParty))
+		{
+			return false;
+		}
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent == null)
+		{
+			return false;
+		}
+		if (foragerComponent.State == CastleForagerPartyComponent.ForagerState.Defending || foragerComponent.State == CastleForagerPartyComponent.ForagerState.Fleeing)
+		{
+			return false;
+		}
+		IFaction faction = foragerComponent.OriginalClan?.MapFaction ?? MobileParty.ConversationParty.MapFaction;
+		if (faction == null || faction.IsAtWarWith(Hero.MainHero.MapFaction))
+		{
+			return false;
+		}
+		if (GetForagerInteraction(MobileParty.ConversationParty) != 1)
+		{
+			return false;
+		}
+		if (foragerComponent.HomeCastle != null)
+		{
+			MBTextManager.SetTextVariable("CASTLE_LINK", foragerComponent.HomeCastle.EncyclopediaLinkWithName);
+		}
+		return true;
+	}
+
+	private bool forager_talk_hostile_return_on_condition()
+	{
+		if (MobileParty.ConversationParty == null)
+		{
+			return false;
+		}
+		if (!CastleForagerPartyComponent.IsForagerParty(MobileParty.ConversationParty))
+		{
+			return false;
+		}
+		CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(MobileParty.ConversationParty);
+		if (foragerComponent == null)
+		{
+			return false;
+		}
+		if (foragerComponent.State == CastleForagerPartyComponent.ForagerState.Defending || foragerComponent.State == CastleForagerPartyCompo

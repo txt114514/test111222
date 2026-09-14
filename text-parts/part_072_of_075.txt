@@ -1,0 +1,665 @@
+﻿PART 72/75
+(MobileParty mobileParty, Settlement settlement)
+	{
+		_shouldProcess = false;
+		if (mobileParty != null && mobileParty.IsActive && mobileParty.IsVillager && !HerderPartyComponent.IsHerderParty(mobileParty) && settlement.IsVillage && mobileParty.PartyTradeGold > 0)
+		{
+			Village village = mobileParty.HomeSettlement?.Village;
+			if (village != null)
+			{
+				_shouldProcess = true;
+				_savedTradeGold = mobileParty.PartyTradeGold;
+				_savedTaxAccumulated = village.TradeTaxAccumulated;
+			}
+		}
+	}
+
+	[HarmonyPostfix]
+	public static void Postfix(MobileParty mobileParty)
+	{
+		if (!_shouldProcess)
+		{
+			return;
+		}
+		_shouldProcess = false;
+		Village village = mobileParty.HomeSettlement?.Village;
+		if (village != null)
+		{
+			int num = village.TradeTaxAccumulated - _savedTaxAccumulated;
+			int num2 = _savedTradeGold - num;
+			if (num2 > 0)
+			{
+				village.ChangeGold(num2);
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VillagerLivestockPatch.cs =====
+using System;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(VillagerCampaignBehavior))]
+public static class VillagerLivestockPatch
+{
+	private const int ANIMALS_PER_MEMBER = 6;
+
+	private const int MIN_ANIMAL_CAP = 10;
+
+	private const bool DEBUG_HERD = false;
+
+	[HarmonyPostfix]
+	[HarmonyPatch("MoveItemsToVillagerParty")]
+	public static void MoveItemsToVillagerParty_Postfix(Village village, MobileParty villagerParty)
+	{
+		try
+		{
+			if (village == null || villagerParty == null)
+			{
+				return;
+			}
+			int totalManCount = villagerParty.MemberRoster.TotalManCount;
+			int num = Math.Max(10, totalManCount * 6);
+			int num2 = 0;
+			int num3 = 0;
+			int num4 = 0;
+			for (int i = 0; i < villagerParty.ItemRoster.Count; i++)
+			{
+				ItemRosterElement elementCopyAtIndex = villagerParty.ItemRoster.GetElementCopyAtIndex(i);
+				ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+				if (IsLivestock(item))
+				{
+					num2 += elementCopyAtIndex.Amount;
+				}
+				else if (IsMount(item))
+				{
+					num3 += elementCopyAtIndex.Amount;
+				}
+				else if (IsPackAnimal(item))
+				{
+					num4 += elementCopyAtIndex.Amount;
+				}
+			}
+			int num5 = num2 + num3 + num4;
+			if (num5 <= num)
+			{
+				return;
+			}
+			int num6 = num5 - num;
+			bool flag = false;
+			int num7 = num6 / 2;
+			int val = num6 - num7;
+			int num8 = Math.Min(num7, num2);
+			int num9 = Math.Min(val, num3);
+			int num10 = num6 - num8 - num9;
+			if (num10 > 0)
+			{
+				int num11 = Math.Min(num10, num2 - num8);
+				num8 += num11;
+				num10 -= num11;
+				int num12 = Math.Min(num10, num3 - num9);
+				num9 += num12;
+				num10 -= num12;
+			}
+			if (num8 > 0)
+			{
+				ReturnAnimals(villagerParty, village, num8, IsLivestock, "Livestock");
+			}
+			if (num9 > 0)
+			{
+				ReturnAnimals(villagerParty, village, num9, IsMount, "Mount");
+			}
+			if (num10 > 0)
+			{
+				int num13 = Math.Min(num10, num4);
+				if (num13 > 0)
+				{
+					ReturnAnimals(villagerParty, village, num13, IsPackAnimal, "Pack");
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in VillagerLivestockPatch: " + ex.Message);
+		}
+	}
+
+	private static void ReturnAnimals(MobileParty villagerParty, Village village, int toTrim, Func<ItemObject, bool> filter, string debugLabel)
+	{
+		int num = 0;
+		int num2 = villagerParty.ItemRoster.Count - 1;
+		while (num2 >= 0 && num < toTrim)
+		{
+			ItemRosterElement elementCopyAtIndex = villagerParty.ItemRoster.GetElementCopyAtIndex(num2);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (filter(item) && elementCopyAtIndex.Amount > 0)
+			{
+				int num3 = Math.Min(elementCopyAtIndex.Amount, toTrim - num);
+				villagerParty.ItemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, -num3);
+				village.Settlement.ItemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, num3);
+				num += num3;
+				bool flag = false;
+			}
+			num2--;
+		}
+		bool flag2 = false;
+	}
+
+	private static bool IsLivestock(ItemObject item)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		return item.HasHorseComponent && item.HorseComponent.IsLiveStock;
+	}
+
+	private static bool IsMount(ItemObject item)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		return item.HasHorseComponent && item.HorseComponent.IsMount;
+	}
+
+	private static bool IsPackAnimal(ItemObject item)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		return item.HasHorseComponent && item.HorseComponent.IsPackAnimal;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VillagerMilitiaGuardPatch.cs =====
+using System;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(VillagerCampaignBehavior))]
+public static class VillagerMilitiaGuardPatch
+{
+	[HarmonyPostfix]
+	[HarmonyPatch("CreateVillagerParty")]
+	public static void CreateVillagerParty_Postfix(Village village)
+	{
+		try
+		{
+			MobileParty mobileParty = village?.VillagerPartyComponent?.MobileParty;
+			if (mobileParty != null && village != null)
+			{
+				MilitiaGuardHelper.EnsureMilitiaGuards(mobileParty, village);
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in VillagerMilitiaGuardPatch.CreateVillagerParty_Postfix: " + ex.Message);
+		}
+	}
+
+	[HarmonyPostfix]
+	[HarmonyPatch("AddVillagersToParty")]
+	public static void AddVillagersToParty_Postfix(MobileParty villagerParty)
+	{
+		try
+		{
+			Village village = villagerParty?.HomeSettlement?.Village;
+			if (villagerParty != null && village != null)
+			{
+				MilitiaGuardHelper.EnsureMilitiaGuards(villagerParty, village);
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in VillagerMilitiaGuardPatch.AddVillagersToParty_Postfix: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VillageTooltipPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using HarvestAndProduction.Models;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.Core;
+using TaleWorlds.Core.ViewModelCollection.Information;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+public class VillageTooltipPatch
+{
+	private static bool _vanillaPatchApplied;
+
+	private static bool _navalPatchApplied;
+
+	public static void Postfix(PropertyBasedTooltipVM propertyBasedTooltipVM, object[] args)
+	{
+		try
+		{
+			if (propertyBasedTooltipVM == null || args == null || args.Length < 1)
+			{
+				return;
+			}
+			Settlement settlement = null;
+			if (args[0] is PartyBase partyBase)
+			{
+				settlement = partyBase.Settlement;
+			}
+			else if (args[0] is Settlement settlement2)
+			{
+				settlement = settlement2;
+			}
+			if (settlement == null)
+			{
+				return;
+			}
+			if (settlement.IsTown && settlement.Town != null)
+			{
+				AddTownWorkshopNames(propertyBasedTooltipVM, settlement);
+			}
+			if (!settlement.IsVillage || settlement.Village == null)
+			{
+				return;
+			}
+			ReplacePrimaryProductionName(propertyBasedTooltipVM, settlement.Village);
+			SecondaryProductionType secondaryType = VillageSecondaryProductionBehavior.GetSecondaryType(settlement.Village);
+			if (secondaryType == SecondaryProductionType.None)
+			{
+				return;
+			}
+			MBBindingList<TooltipProperty> tooltipPropertyList = propertyBasedTooltipVM.TooltipPropertyList;
+			if (tooltipPropertyList == null || tooltipPropertyList.Count == 0)
+			{
+				return;
+			}
+			string text = new TextObject("{=HAP_SecondaryProduction}Secondary Production").ToString();
+			foreach (TooltipProperty item2 in tooltipPropertyList)
+			{
+				if (item2.DefinitionLabel == text)
+				{
+					return;
+				}
+			}
+			int index = FindInsertionPoint(tooltipPropertyList);
+			string displayName = SecondaryProductionHelper.GetDisplayName(secondaryType);
+			TooltipProperty item = new TooltipProperty(new TextObject("{=HAP_SecondaryProduction}Secondary Production").ToString(), displayName, 0);
+			tooltipPropertyList.Insert(index, item);
+		}
+		catch
+		{
+		}
+	}
+
+	private static void AddTownWorkshopNames(PropertyBasedTooltipVM propertyBasedTooltipVM, Settlement settlement)
+	{
+		try
+		{
+			if (CampaignUIHelper.IsSettlementInformationHidden(settlement, out var _))
+			{
+				return;
+			}
+			Workshop[] workshops = settlement.Town.Workshops;
+			if (workshops == null)
+			{
+				return;
+			}
+			List<string> list = new List<string>();
+			Workshop[] array = workshops;
+			foreach (Workshop workshop in array)
+			{
+				if (workshop?.WorkshopType != null && !workshop.WorkshopType.IsHidden)
+				{
+					string text = workshop.WorkshopType.Name?.ToString();
+					if (!string.IsNullOrEmpty(text))
+					{
+						list.Add(text);
+					}
+				}
+			}
+			if (list.Count == 0)
+			{
+				return;
+			}
+			string text2 = new TextObject("{=HAP_Workshops}Workshops").ToString();
+			string value = string.Join(",\n", list);
+			MBBindingList<TooltipProperty> tooltipPropertyList = propertyBasedTooltipVM.TooltipPropertyList;
+			if (tooltipPropertyList == null || tooltipPropertyList.Count == 0)
+			{
+				return;
+			}
+			foreach (TooltipProperty item2 in tooltipPropertyList)
+			{
+				if (item2.DefinitionLabel == text2)
+				{
+					return;
+				}
+			}
+			string text3 = GameTexts.FindText("str_security").ToString();
+			int num = -1;
+			for (int j = 0; j < tooltipPropertyList.Count; j++)
+			{
+				if (!string.IsNullOrEmpty(tooltipPropertyList[j].DefinitionLabel) && tooltipPropertyList[j].DefinitionLabel == text3)
+				{
+					num = j + 1;
+					break;
+				}
+			}
+			if (num < 0)
+			{
+				num = Math.Max(0, tooltipPropertyList.Count - 2);
+			}
+			TooltipProperty item = new TooltipProperty(text2, value, 0);
+			tooltipPropertyList.Insert(num, item);
+		}
+		catch
+		{
+		}
+	}
+
+	private static void ReplacePrimaryProductionName(PropertyBasedTooltipVM propertyBasedTooltipVM, Village village)
+	{
+		try
+		{
+			if (village.VillageType == null)
+			{
+				return;
+			}
+			string displayName = VillageProductionNamePatch.GetDisplayName(village.VillageType.StringId);
+			if (displayName == null)
+			{
+				return;
+			}
+			string text = GameTexts.FindText("str_primary_production").ToString();
+			MBBindingList<TooltipProperty> tooltipPropertyList = propertyBasedTooltipVM.TooltipPropertyList;
+			for (int i = 0; i < tooltipPropertyList.Count; i++)
+			{
+				if (tooltipPropertyList[i].DefinitionLabel == text)
+				{
+					tooltipPropertyList[i].ValueLabel = displayName;
+					break;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in ReplacePrimaryProductionName: " + ex.Message);
+		}
+	}
+
+	private static int FindInsertionPoint(MBBindingList<TooltipProperty> list)
+	{
+		string text = GameTexts.FindText("str_primary_production").ToString();
+		for (int i = 0; i < list.Count; i++)
+		{
+			string definitionLabel = list[i].DefinitionLabel;
+			if (!string.IsNullOrEmpty(definitionLabel) && definitionLabel == text)
+			{
+				return i + 1;
+			}
+		}
+		return Math.Max(0, list.Count - 2);
+	}
+
+	public static void ApplyPatch(Harmony harmony)
+	{
+		ApplyVanillaPatch(harmony);
+		ApplyNavalPatch(harmony);
+	}
+
+	private static void ApplyVanillaPatch(Harmony harmony)
+	{
+		if (_vanillaPatchApplied)
+		{
+			return;
+		}
+		try
+		{
+			MethodInfo method = typeof(TooltipRefresherCollection).GetMethod("RefreshSettlementTooltip");
+			MethodInfo method2 = typeof(VillageTooltipPatch).GetMethod("Postfix", BindingFlags.Static | BindingFlags.Public);
+			if (method != null && method2 != null)
+			{
+				harmony.Patch(method, null, new HarmonyMethod(method2));
+				_vanillaPatchApplied = true;
+				Main.Log("VillageTooltipPatch: Vanilla TooltipRefresherCollection patched successfully");
+			}
+			else
+			{
+				Main.Log("VillageTooltipPatch: Could not find vanilla RefreshSettlementTooltip method");
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("VillageTooltipPatch ERROR (vanilla): " + ex.Message);
+		}
+	}
+
+	private static void ApplyNavalPatch(Harmony harmony)
+	{
+		if (_navalPatchApplied)
+		{
+			return;
+		}
+		try
+		{
+			Type type = null;
+			Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+			foreach (Assembly assembly in assemblies)
+			{
+				try
+				{
+					if (assembly.FullName.Contains("NavalDLC"))
+					{
+						type = assembly.GetType("NavalDLC.View.NavalTooltipRefresherCollection");
+						if (type != null)
+						{
+							Main.Log("VillageTooltipPatch: Found NavalTooltipRefresherCollection in " + assembly.GetName().Name);
+							break;
+						}
+					}
+				}
+				catch
+				{
+				}
+			}
+			if (type == null)
+			{
+				Main.Log("VillageTooltipPatch: War Sails DLC not detected - Naval patch not needed");
+				return;
+			}
+			MethodInfo method = type.GetMethod("RefreshSettlementTooltip", BindingFlags.Static | BindingFlags.Public);
+			MethodInfo method2 = typeof(VillageTooltipPatch).GetMethod("Postfix", BindingFlags.Static | BindingFlags.Public);
+			if (method != null && method2 != null)
+			{
+				harmony.Patch(method, null, new HarmonyMethod(method2));
+				_navalPatchApplied = true;
+				Main.Log("VillageTooltipPatch: War Sails NavalTooltipRefresherCollection patched successfully");
+			}
+			else
+			{
+				Main.Log($"VillageTooltipPatch: Could not find Naval RefreshSettlementTooltip method (navalOriginal: {method != null}, postfix: {method2 != null})");
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("VillageTooltipPatch ERROR (Naval): " + ex.Message);
+		}
+	}
+
+	public static void ResetPatchState()
+	{
+		_vanillaPatchApplied = false;
+		_navalPatchApplied = false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VillageTradePricePatch.cs =====
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultTradeItemPriceFactorModel), "GetTradePenalty")]
+public static class VillageTradePricePatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(ref float __result, ItemObject item, MobileParty clientParty, PartyBase merchant, bool isSelling, float inStore, float supply, float demand)
+	{
+		if (isSelling || clientParty == null || merchant == null || !merchant.IsSettlement || merchant.Settlement == null || !merchant.Settlement.IsVillage)
+		{
+			return;
+		}
+		CultureObject culture = merchant.Settlement.Culture;
+		if (culture != null)
+		{
+			string text = culture.StringId?.ToLowerInvariant() ?? "";
+			if (text.Contains("vlandia") && CulturalFeatsBehavior.HasVlandianFeudalPurveyance(clientParty))
+			{
+				__result *= 0.8f;
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\VillageTypePrimaryProductionPatch.cs =====
+using System.Collections.Generic;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(VillageType), "PrimaryProduction", MethodType.Getter)]
+public static class VillageTypePrimaryProductionPatch
+{
+	private static readonly Dictionary<string, HashSet<string>> _validPrimaryItems = new Dictionary<string, HashSet<string>>
+	{
+		["wheat_farm"] = new HashSet<string> { "grain" },
+		["fisherman"] = new HashSet<string> { "fish" },
+		["cattle_farm"] = new HashSet<string> { "cow", "butter", "cheese" },
+		["sheep_farm"] = new HashSet<string> { "sheep", "wool", "butter", "cheese" },
+		["swine_farm"] = new HashSet<string> { "hog" },
+		["lumberjack"] = new HashSet<string> { "hardwood" },
+		["clay_mine"] = new HashSet<string> { "clay" },
+		["salt_mine"] = new HashSet<string> { "salt" },
+		["iron_mine"] = new HashSet<string> { "iron" },
+		["silver_mine"] = new HashSet<string> { "silver" },
+		["trapper"] = new HashSet<string> { "fur" },
+		["walrus_hunter"] = new HashSet<string> { "walrus_tusk", "fish" },
+		["whaler"] = new HashSet<string> { "whale_oil", "fish" },
+		["vineyard"] = new HashSet<string> { "grape" },
+		["date_farm"] = new HashSet<string> { "date_fruit" },
+		["olive_trees"] = new HashSet<string> { "olives" },
+		["flax_plant"] = new HashSet<string> { "flax" },
+		["silk_plant"] = new HashSet<string> { "cotton" },
+		["europe_horse_ranch"] = new HashSet<string> { "empire_horse", "t2_empire_horse", "t3_empire_horse" },
+		["vlandian_horse_ranch"] = new HashSet<string> { "vlandia_horse", "t2_vlandia_horse", "t3_vlandia_horse" },
+		["battanian_horse_ranch"] = new HashSet<string> { "battania_horse", "t2_battania_horse", "t3_battania_horse" },
+		["sturgian_horse_ranch"] = new HashSet<string> { "sturgia_horse", "t2_sturgia_horse", "t3_sturgia_horse" },
+		["steppe_horse_ranch"] = new HashSet<string> { "khuzait_horse", "t2_khuzait_horse", "t3_khuzait_horse" },
+		["desert_horse_ranch"] = new HashSet<string> { "aserai_horse", "t2_aserai_horse", "t3_aserai_horse" }
+	};
+
+	public static bool Prefix(VillageType __instance, ref ItemObject __result)
+	{
+		string stringId = __instance.StringId;
+		if (!_validPrimaryItems.ContainsKey(stringId))
+		{
+			return true;
+		}
+		HashSet<string> hashSet = _validPrimaryItems[stringId];
+		MBReadOnlyList<(ItemObject, float)> productions = __instance.Productions;
+		ItemObject itemObject = null;
+		float num = 0f;
+		foreach (var item in productions)
+		{
+			if (item.Item1 != null && hashSet.Contains(item.Item1.StringId))
+			{
+				float num2 = item.Item2 * (float)item.Item1.Value;
+				if (num2 > num)
+				{
+					num = num2;
+					(itemObject, _) = item;
+				}
+			}
+		}
+		if (itemObject != null)
+		{
+			__result = itemObject;
+			return false;
+		}
+		return true;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\WorkshopEncyclopediaTooltipPatch.cs =====
+using System.Collections.Generic;
+using System.Linq;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.Core;
+using TaleWorlds.Core.ViewModelCollection.Information;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(TooltipRefresherCollection), "RefreshWorkshopTooltip")]
+public static class WorkshopEncyclopediaTooltipPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(PropertyBasedTooltipVM propertyBasedTooltipVM, object[] args)
+	{
+		Workshop workshop = args[0] as Workshop;
+		if (workshop?.WorkshopType == null)
+		{
+			return true;
+		}
+		try
+		{
+			propertyBasedTooltipVM.Mode = 1;
+			propertyBasedTooltipVM.AddProperty("", workshop.WorkshopType.Name.ToString(), 0, TooltipProperty.TooltipPropertyFlags.Title);
+			propertyBasedTooltipVM.AddProperty(string.Empty, string.Empty, -1);
+			string definition = GameTexts.FindText("str_owner").ToString();
+			string value = workshop.Owner?.Name?.ToString() ?? "???";
+			propertyBasedTooltipVM.AddProperty(definition, value);
+			propertyBasedTooltipVM.AddProperty(string.Empty, string.Empty, -1);
+			string definition2 = new TextObject("{=HAP_WS_Input}Input").ToString();
+			IEnumerable<TextObject> enumerable = from c 

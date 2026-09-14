@@ -1,0 +1,645 @@
+﻿PART 62/75
+ds.CampaignSystem.ComponentInterfaces;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(GarrisonTroopsCampaignBehavior), "CalculateMaxGarrisonSizeTownCanFeed")]
+public static class GarrisonFoodStocksFloorPatch
+{
+	private const int BUFFER_DAYS = 14;
+
+	private const float FLOOR_SCALE = 0.6f;
+
+	private const bool DEBUG_FLOOR = false;
+
+	[HarmonyPostfix]
+	public static void Postfix(ref int __result, Town town, bool includeMarketStocks)
+	{
+		try
+		{
+			if (town?.Settlement == null)
+			{
+				return;
+			}
+			float foodStocks = town.FoodStocks;
+			if (foodStocks <= 0f || town.Settlement.IsStarving)
+			{
+				return;
+			}
+			float starvationDays = StarvationDesertionBehavior.GetStarvationDays(town.Settlement);
+			if (starvationDays > 0f)
+			{
+				return;
+			}
+			SettlementFoodModel settlementFoodModel = Campaign.Current.Models.SettlementFoodModel;
+			if (settlementFoodModel == null)
+			{
+				return;
+			}
+			float num = town.Prosperity / (float)settlementFoodModel.NumberOfProsperityToEatOneFood;
+			float num2 = foodStocks - num * 14f;
+			if (num2 <= 0f)
+			{
+				bool flag = false;
+				return;
+			}
+			int numberOfMenOnGarrisonToEatOneFood = settlementFoodModel.NumberOfMenOnGarrisonToEatOneFood;
+			int a = (int)(num2 * (float)numberOfMenOnGarrisonToEatOneFood / 14f * 0.6f);
+			int b = (town.IsCastle ? 500 : 750);
+			a = MathF.Min(a, b);
+			if (a > __result)
+			{
+				bool flag2 = false;
+				__result = a;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in GarrisonFoodStocksFloorPatch: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\GarrisonMoralePrefabExtension.cs =====
+using System.Xml;
+using Bannerlord.UIExtenderEx.Attributes;
+using Bannerlord.UIExtenderEx.Prefabs2;
+
+namespace HarvestAndProduction.Patches;
+
+[PrefabExtension("SettlementOverlay", "descendant::ListPanel[@DataSource='{GarrisonHint}']")]
+internal sealed class GarrisonMoralePrefabExtension : PrefabExtensionInsertPatch
+{
+	private readonly XmlDocument _document;
+
+	public override InsertType Type => InsertType.Prepend;
+
+	public GarrisonMoralePrefabExtension()
+	{
+		_document = new XmlDocument();
+		_document.LoadXml("<Widget Id=\"GarrisonMoraleLabel\" WidthSizePolicy=\"CoverChildren\" HeightSizePolicy=\"CoverChildren\" MarginTop=\"5\" MarginLeft=\"20\">  <Children>    <ListPanel DataSource=\"{GarrisonMoraleHint}\" DoNotPassEventsToChildren=\"true\" WidthSizePolicy=\"CoverChildren\" HeightSizePolicy=\"CoverChildren\" HorizontalAlignment=\"Center\" StackLayout.LayoutMethod=\"VerticalTopToBottom\" Command.HoverBegin=\"ExecuteBeginHint\" Command.HoverEnd=\"ExecuteEndHint\">      <Children>        <Widget DataSource=\"{..}\" WidthSizePolicy=\"Fixed\" HeightSizePolicy=\"Fixed\" SuggestedWidth=\"40\" SuggestedHeight=\"40\" HorizontalAlignment=\"Center\" Sprite=\"General\\Icons\\Morale@2x\" ExtendLeft=\"-2\" ExtendRight=\"-2\" ExtendTop=\"-10\" ExtendBottom=\"0\" GamepadNavigationIndex=\"10\" />        <ListPanel DataSource=\"{..}\" WidthSizePolicy=\"CoverChildren\" HeightSizePolicy=\"CoverChildren\" HorizontalAlignment=\"Center\" StackLayout.LayoutMethod=\"VerticalTopToBottom\">          <Children>            <TextWidget WidthSizePolicy=\"CoverChildren\" HeightSizePolicy=\"CoverChildren\" HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\" Brush=\"SettlementValuesTextBrush\" Brush.TextHorizontalAlignment=\"Center\" Text=\"@GarrisonMoraleLbl\" MinWidth=\"50\" />          </Children>        </ListPanel>      </Children>    </ListPanel>  </Children></Widget>");
+	}
+
+	[PrefabExtensionXmlDocument(false)]
+	public XmlDocument GetPrefabExtension()
+	{
+		return _document;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\GarrisonTroopDonationPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using Helpers;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(GarrisonTroopsCampaignBehavior), "OnSettlementEntered")]
+public static class GarrisonTroopDonationPatch
+{
+	private const int LORD_MIN_REGULARS = 30;
+
+	private const bool DEBUG_DONATION = false;
+
+	[HarmonyPrefix]
+	public static bool Prefix(MobileParty mobileParty, Settlement settlement, Hero hero)
+	{
+		try
+		{
+			if (settlement == null || !settlement.IsCastle)
+			{
+				return true;
+			}
+			if (!Campaign.Current.GameStarted)
+			{
+				return true;
+			}
+			if (mobileParty == null || !mobileParty.IsLordParty || mobileParty.IsDisbanding || mobileParty.LeaderHero == null || mobileParty.IsMainParty)
+			{
+				return true;
+			}
+			if (mobileParty.Army != null)
+			{
+				return true;
+			}
+			if (!DiplomacyHelper.IsSameFactionAndNotEliminated(mobileParty.MapFaction, settlement.MapFaction))
+			{
+				return true;
+			}
+			if (settlement.OwnerClan == Clan.PlayerClan)
+			{
+				bool flag = false;
+				return true;
+			}
+			float starvationDays = StarvationDesertionBehavior.GetStarvationDays(settlement);
+			int deterministicDesertionCount = StarvationDesertionBehavior.GetDeterministicDesertionCount(settlement);
+			int valueOrDefault = (settlement.Town?.GarrisonParty?.Party.NumberOfRegularMembers).GetValueOrDefault();
+			int num = 20 + deterministicDesertionCount;
+			int numberOfRegularMembers = mobileParty.Party.NumberOfRegularMembers;
+			bool flag2 = false;
+			if (starvationDays < 7f)
+			{
+				bool flag3 = false;
+				return true;
+			}
+			if (valueOrDefault >= num)
+			{
+				bool flag4 = false;
+				return true;
+			}
+			int num2 = num - valueOrDefault;
+			int num3 = numberOfRegularMembers - 30;
+			bool flag5 = false;
+			if (num3 < num2)
+			{
+				bool flag6 = false;
+				return false;
+			}
+			if (settlement.Town.GarrisonParty == null)
+			{
+				settlement.AddGarrisonParty();
+				bool flag7 = false;
+			}
+			if (settlement.Town.GarrisonParty == null)
+			{
+				bool flag8 = false;
+				return false;
+			}
+			TransferTroopsToStarvingGarrison(mobileParty, settlement, num2);
+			int num4 = settlement.Town.GarrisonParty?.Party.NumberOfRegularMembers ?? 0;
+			bool flag9 = false;
+			return false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in GarrisonTroopDonationPatch: " + ex.Message);
+			return true;
+		}
+	}
+
+	private static void TransferTroopsToStarvingGarrison(MobileParty mobileParty, Settlement settlement, int count)
+	{
+		TroopRoster troopRoster = TroopRoster.CreateDummyTroopRoster();
+		MobileParty garrisonParty = settlement.Town.GarrisonParty;
+		int num = 0;
+		for (int i = 0; i <= 7; i++)
+		{
+			if (num >= count)
+			{
+				break;
+			}
+			int num2 = mobileParty.MemberRoster.Count - 1;
+			while (num2 >= 0 && num < count)
+			{
+				TroopRosterElement elementCopyAtIndex = mobileParty.MemberRoster.GetElementCopyAtIndex(num2);
+				if (!elementCopyAtIndex.Character.IsHero && elementCopyAtIndex.Character.Tier == i && elementCopyAtIndex.Number > 0)
+				{
+					int num3 = MathF.Min(elementCopyAtIndex.Number, count - num);
+					int a = ((elementCopyAtIndex.WoundedNumber > 0) ? MathF.Min(elementCopyAtIndex.WoundedNumber, (int)Math.Ceiling((float)elementCopyAtIndex.WoundedNumber * (float)num3 / (float)elementCopyAtIndex.Number)) : 0);
+					a = MathF.Min(a, num3);
+					garrisonParty.MemberRoster.AddToCounts(elementCopyAtIndex.Character, num3, insertAtFront: false, a);
+					mobileParty.MemberRoster.AddToCounts(elementCopyAtIndex.Character, -num3, insertAtFront: false, -a);
+					troopRoster.AddToCounts(elementCopyAtIndex.Character, num3, insertAtFront: false, a);
+					num += num3;
+				}
+				num2--;
+			}
+		}
+		if (troopRoster.Count > 0)
+		{
+			CampaignEventDispatcher.Instance.OnTroopGivenToSettlement(mobileParty.LeaderHero, settlement, troopRoster);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\GetNumOfCategoryItemPartyHasPatch.cs =====
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.ViewModelCollection.Party;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(PartyCharacterVM), "GetNumOfCategoryItemPartyHas")]
+public static class GetNumOfCategoryItemPartyHasPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(ItemRoster items, ItemCategory itemCategory, ref int __result)
+	{
+		if (items == null || itemCategory == null)
+		{
+			__result = 0;
+			return false;
+		}
+		int num = 0;
+		for (int i = 0; i < items.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = items.GetElementCopyAtIndex(i);
+			ItemCategory itemCategory2 = elementCopyAtIndex.EquipmentElement.Item?.ItemCategory;
+			if (TroopUpgradeItemPatch.CategoriesMatch(itemCategory2, itemCategory))
+			{
+				num += elementCopyAtIndex.Amount;
+			}
+		}
+		__result = num;
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\GetUpgradeHintPatch.cs =====
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(CampaignUIHelper), "GetUpgradeHint")]
+public static class GetUpgradeHintPatch
+{
+	[HarmonyPrefix]
+	public static void Prefix(int index, ref int numOfItems, CharacterObject character)
+	{
+		if (character?.UpgradeTargets == null || index < 0 || index >= character.UpgradeTargets.Length)
+		{
+			return;
+		}
+		ItemCategory itemCategory = character.UpgradeTargets[index]?.UpgradeRequiresItemFromCategory;
+		if (itemCategory == null)
+		{
+			return;
+		}
+		PartyBase mainParty = PartyBase.MainParty;
+		if (mainParty?.ItemRoster == null)
+		{
+			return;
+		}
+		int num = 0;
+		for (int i = 0; i < mainParty.ItemRoster.Count; i++)
+		{
+			ItemRosterElement itemRosterElement = mainParty.ItemRoster[i];
+			ItemCategory itemCategory2 = itemRosterElement.EquipmentElement.Item?.ItemCategory;
+			if (TroopUpgradeItemPatch.CategoriesMatch(itemCategory2, itemCategory))
+			{
+				num += itemRosterElement.Amount;
+			}
+		}
+		numOfItems = num;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\GovernorCulturePatch.cs =====
+using System.Collections.Generic;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(ClanVariablesCampaignBehavior), "UpdateGovernorsOfClan")]
+public static class GovernorCulturePatch
+{
+	private const float CULTURE_MATCH_BONUS = 1.5f;
+
+	private const float INCUMBENCY_BONUS = 1f;
+
+	private const float NEW_GOVERNOR_FACTOR = 0.75f;
+
+	private const bool DEBUG_GOVERNOR = false;
+
+	[HarmonyPrefix]
+	public static bool Prefix(Clan clan)
+	{
+		HashSet<CultureObject> hashSet = new HashSet<CultureObject>();
+		foreach (Hero aliveLord in clan.AliveLords)
+		{
+			if (Campaign.Current.Models.ClanPoliticsModel.CanHeroBeGovernor(aliveLord) && aliveLord.PartyBelongedTo == null && aliveLord.Clan != Clan.PlayerClan)
+			{
+				hashSet.Add(aliveLord.Culture);
+			}
+		}
+		List<(Town, float)> list = new List<(Town, float)>();
+		foreach (Town fief in clan.Fiefs)
+		{
+			float num = 0f;
+			num += (fief.IsTown ? 3f : 1f);
+			num += MathF.Sqrt(fief.Prosperity / 1000f);
+			num += (float)fief.Settlement.BoundVillages.Count;
+			bool flag = clan.Culture != fief.Settlement.Culture;
+			if (flag && hashSet.Contains(fief.Settlement.Culture))
+			{
+				num *= 1.5f;
+			}
+			else if (flag)
+			{
+				num *= 0.5f;
+			}
+			float num2 = (clan.Leader.MapFaction.IsKingdomFaction ? Campaign.Current.Models.MapDistanceModel.GetDistance(fief.Settlement, clan.Leader.MapFaction.FactionMidSettlement, isFromPort: false, isTargetingPort: false, MobileParty.NavigationType.All) : 100f);
+			float maximumDistanceBetweenTwoConnectedSettlements = Campaign.Current.Models.MapDistanceModel.GetMaximumDistanceBetweenTwoConnectedSettlements(MobileParty.NavigationType.Default);
+			num *= 1f - MathF.Sqrt(num2 / maximumDistanceBetweenTwoConnectedSettlements);
+			list.Add((fief, num));
+		}
+		List<Hero> list2 = new List<Hero>();
+		for (int i = 0; i < clan.Fiefs.Count; i++)
+		{
+			(Town, float) item = (null, 0f);
+			foreach (var item2 in list)
+			{
+				if (item2.Item2 > item.Item2)
+				{
+					item = item2;
+				}
+			}
+			if (item.Item2 <= 0.01f)
+			{
+				break;
+			}
+			list.Remove(item);
+			float num3 = 0f;
+			Hero hero = null;
+			foreach (Hero aliveLord2 in clan.AliveLords)
+			{
+				if (Campaign.Current.Models.ClanPoliticsModel.CanHeroBeGovernor(aliveLord2) && aliveLord2.PartyBelongedTo == null && aliveLord2.Clan != Clan.PlayerClan && !list2.Contains(aliveLord2))
+				{
+					float num4 = ((item.Item1.Governor == aliveLord2) ? 1f : 0.75f);
+					float heroGoverningStrengthForClan = Campaign.Current.Models.DiplomacyModel.GetHeroGoverningStrengthForClan(aliveLord2);
+					float num5 = ((aliveLord2.Culture == item.Item1.Settlement.Culture) ? 1.5f : 1f);
+					float num6 = num4 * heroGoverningStrengthForClan * num5;
+					if (num6 > num3)
+					{
+						num3 = num6;
+						hero = aliveLord2;
+					}
+				}
+			}
+			if (hero == null)
+			{
+				continue;
+			}
+			if (item.Item1.Governor != hero)
+			{
+				Hero governor = item.Item1.Governor;
+				if (hero.GovernorOf != null)
+				{
+					ChangeGovernorAction.RemoveGovernorOf(hero);
+				}
+				ChangeGovernorAction.Apply(item.Item1, hero);
+				bool flag2 = false;
+			}
+			list2.Add(hero);
+		}
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\HerderTooltipPatch.cs =====
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(MobileParty), "GetBehaviorText")]
+public static class HerderTooltipPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(MobileParty __instance, ref TextObject __result)
+	{
+		if (!HerderPartyComponent.IsHerderParty(__instance))
+		{
+			return;
+		}
+		HerderPartyComponent component = HerderPartyComponent.GetComponent(__instance);
+		if (component != null)
+		{
+			MobileParty mobileParty = __instance.ShortTermTargetParty;
+			if (mobileParty == null && component.ThreatParty != null && component.ThreatParty.IsActive)
+			{
+				mobileParty = component.ThreatParty;
+			}
+			if (mobileParty != null)
+			{
+				__result = new TextObject("{=AcMayd1p}Running from {TARGET_PARTY}.");
+				__result.SetTextVariable("TARGET_PARTY", mobileParty.Name);
+			}
+			else if (__instance.ShortTermBehavior == __instance.DefaultBehavior && !__instance.IsFleeing() && __instance.CurrentSettlement == null && component.State != HerderPartyComponent.HerderState.ReturningToVillage)
+			{
+				__result = new TextObject("{=HAP_HerderTooltipHerding}Herding.");
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\HerderVillagerSkipPatch.cs =====
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(VillagerCampaignBehavior), "HourlyTickParty")]
+public static class HerderVillagerSkipPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(MobileParty villagerParty)
+	{
+		if (HerderPartyComponent.IsHerderParty(villagerParty))
+		{
+			return false;
+		}
+		return true;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\HerdTooltipHelper.cs =====
+using System;
+using System.Collections.Generic;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Core;
+using TaleWorlds.Core.ViewModelCollection.Information;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+internal static class HerdTooltipHelper
+{
+	public struct HerdCounts
+	{
+		public int TotalHerd;
+
+		public int Mounts;
+
+		public int PackAnimals;
+
+		public int Livestock;
+
+		public int Cattle;
+
+		public int Sheep;
+
+		public int Hogs;
+
+		public int Poultry;
+
+		public int Hares;
+
+		public int OtherAnimals;
+
+		public int Mules;
+
+		public int PackHorses;
+
+		public int PackCamels;
+
+		public int RidingHorses;
+
+		public int RidingCamels;
+	}
+
+	public static void AddHerdTooltip(PropertyBasedTooltipVM propertyBasedTooltipVM, HerdCounts herdCounts, bool showDetails)
+	{
+		MBBindingList<TooltipProperty> tooltipPropertyList = propertyBasedTooltipVM.TooltipPropertyList;
+		if (tooltipPropertyList != null && tooltipPropertyList.Count != 0)
+		{
+			int num = FindHerdInsertIndex(tooltipPropertyList, propertyBasedTooltipVM.IsExtended);
+			List<TooltipProperty> list = new List<TooltipProperty>();
+			list.Add(new TooltipProperty(string.Empty, string.Empty, -1));
+			if (showDetails)
+			{
+				AddDetailedHerdInfo(list, herdCounts, propertyBasedTooltipVM.IsExtended);
+			}
+			else
+			{
+				AddQuestionMarkHerdInfo(list, herdCounts.TotalHerd);
+			}
+			for (int i = 0; i < list.Count; i++)
+			{
+				tooltipPropertyList.Insert(num + i, list[i]);
+			}
+		}
+	}
+
+	private static int FindHerdInsertIndex(IList<TooltipProperty> list, bool isExtended)
+	{
+		if (list == null || list.Count == 0)
+		{
+			return 0;
+		}
+		if (isExtended)
+		{
+			return list.Count;
+		}
+		if (list.Count >= 2)
+		{
+			TooltipProperty tooltipProperty = list[list.Count - 1];
+			TooltipProperty tooltipProperty2 = list[list.Count - 2];
+			if (tooltipProperty.TextHeight == -1 && tooltipProperty2.TextHeight == -1)
+			{
+				return list.Count - 2;
+			}
+		}
+		return list.Count;
+	}
+
+	public static HerdCounts GetSimplifiedHerdCounts(MobileParty party)
+	{
+		HerdCounts counts = default(HerdCounts);
+		if (party == null || party.ItemRoster == null)
+		{
+			return counts;
+		}
+		AddPartyHerdCounts(party, ref counts);
+		return counts;
+	}
+
+	public static HerdCounts GetArmyHerdCounts(Army army)
+	{
+		HerdCounts counts = default(HerdCounts);
+		if (army == null)
+		{
+			return counts;
+		}
+		MobileParty leaderParty = army.LeaderParty;
+		if (leaderParty != null)
+		{
+			AddPartyHerdCounts(leaderParty, ref counts);
+			if (leaderParty.AttachedParties != null)
+			{
+				foreach (MobileParty attachedParty in leaderParty.AttachedParties)
+				{
+					if (attachedParty != null)
+					{
+						AddPartyHerdCounts(attachedParty, ref counts);
+					}
+				}
+			}
+		}
+		return counts;
+	}
+
+	private static void AddPartyHerdCounts(MobileParty party, ref HerdCounts counts)
+	{
+		if (party == null || party.ItemRoster == null)
+		{
+			return;
+		}
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemObject itemAtIndex = party.ItemRoster.GetItemAtIndex(i);
+			if (itemAtIndex == null)
+			{
+				continue;
+			}
+			int elementNumber = party.ItemRoster.GetElementNumber(i);
+			if (elementNumber <= 0)
+			{
+				continue;
+			}
+			if (itemAtIndex.Type == ItemObject.ItemTypeEnum.Animal)
+			{
+				counts.Livestock += elementNumber;
+				counts.TotalHerd += elementNumber;
+				switch (itemAtIndex.StringId ?? "")
+				{
+				case "cow":
+					counts.Cattle += elementNumber;
+					break;
+				case "sheep":
+					counts.Sheep += elementNumber;
+					break;
+				case "hog":
+					counts.H

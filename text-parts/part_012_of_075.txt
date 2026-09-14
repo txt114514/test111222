@@ -1,0 +1,610 @@
+﻿PART 12/75
+, settlement);
+			}
+		}
+	}
+
+	private void ReturnLivestockToVillage(MobileParty villagerParty, Settlement village)
+	{
+		try
+		{
+			int num = 0;
+			ItemRoster itemRoster = villagerParty.ItemRoster;
+			for (int num2 = itemRoster.Count - 1; num2 >= 0; num2--)
+			{
+				ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num2);
+				ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+				if (item != null && elementCopyAtIndex.Amount > 0 && item.HasHorseComponent && item.HorseComponent.IsLiveStock)
+				{
+					itemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, -elementCopyAtIndex.Amount);
+					village.ItemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, elementCopyAtIndex.Amount);
+					num += elementCopyAtIndex.Amount;
+					bool flag = false;
+				}
+			}
+			bool flag2 = false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in ReturnLivestockToVillage: " + ex.Message);
+		}
+	}
+
+	private void ProcessCastleArrival(MobileParty villagerParty, Settlement castleSettlement)
+	{
+		try
+		{
+			Village village = villagerParty.HomeSettlement?.Village;
+			if (village == null)
+			{
+				return;
+			}
+			if (village.Bound != castleSettlement)
+			{
+				bool flag = false;
+				return;
+			}
+			if (FactionManager.IsAtWarAgainstFaction(villagerParty.MapFaction, castleSettlement.MapFaction))
+			{
+				bool flag2 = false;
+				return;
+			}
+			Town town = castleSettlement.Town;
+			if (town != null)
+			{
+				VillagerDestinationPatch.MarkCastleVisited(villagerParty);
+				int num = DepositFoodToCastle(villagerParty, town);
+				int num2 = 0;
+				if (FoodSystemConstants.IsEmergencyMode(town))
+				{
+					num2 = SlaughterLivestockAtCastle(villagerParty, town);
+					num += num2;
+				}
+				DecideNextDestination(villagerParty, village, town, num);
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in CastleSupplyBehavior.ProcessCastleArrival: " + ex.Message);
+		}
+	}
+
+	private int DepositFoodToCastle(MobileParty villagerParty, Town castle)
+	{
+		int num = castle.FoodStocksUpperLimit();
+		float num2 = MathF.Max(0f, (float)num - castle.FoodStocks);
+		if (num2 <= 0f)
+		{
+			bool flag = false;
+			return 0;
+		}
+		bool flag2 = FoodSystemConstants.IsEmergencyMode(castle);
+		Settlement tradeBoundTown = villagerParty.HomeSettlement?.Village?.TradeBound;
+		ItemRoster itemRoster = villagerParty.ItemRoster;
+		int num3 = 0;
+		List<(EquipmentElement, int)> list = new List<(EquipmentElement, int)>();
+		int num4 = itemRoster.Count - 1;
+		while (num4 >= 0 && (float)num3 < num2)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num4);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && ShouldDepositItem(item, castle, tradeBoundTown))
+			{
+				float marketReleasePercent = FoodSystemConstants.GetMarketReleasePercent(castle);
+				int num5 = (int)((float)elementCopyAtIndex.Amount * marketReleasePercent);
+				int a = elementCopyAtIndex.Amount - num5;
+				int num6 = MathF.Min(a, (int)(num2 - (float)num3));
+				if (num6 > 0)
+				{
+					itemRoster.AddToCounts(item, -num6);
+					castle.FoodStocks += num6;
+					num3 += num6;
+					list.Add((elementCopyAtIndex.EquipmentElement, num6));
+					bool flag3 = false;
+				}
+			}
+			num4--;
+		}
+		if (castle.FoodStocks > (float)num)
+		{
+			castle.FoodStocks = num;
+		}
+		if (num3 > 0)
+		{
+			RecordDailySupply(castle.Settlement, num3);
+			bool flag4 = false;
+			if (list.Count > 0)
+			{
+				CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(villagerParty, castle, list);
+			}
+		}
+		return num3;
+	}
+
+	private bool ShouldDepositItem(ItemObject item, Town castle, Settlement tradeBoundTown)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		bool flag = item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores;
+		bool isFood = item.IsFood;
+		if (RawMaterialRegistry.IsProtectedForCastle(item.StringId, castle, tradeBoundTown, RawMaterialRegistry.ProtectionContext.CastleDeposit))
+		{
+			return false;
+		}
+		if (FoodSystemConstants.IsEmergencyMode(castle))
+		{
+			return flag | isFood;
+		}
+		return flag;
+	}
+
+	private void DecideNextDestination(MobileParty villagerParty, Village village, Town castle, int foodDeposited)
+	{
+		int num = castle.FoodStocksUpperLimit();
+		if (HasSellableItems(villagerParty))
+		{
+			Settlement tradeBound = village.TradeBound;
+			if (tradeBound != null && !tradeBound.IsUnderSiege)
+			{
+				bool flag = false;
+				MoveVillagersToSettlement(villagerParty, tradeBound);
+			}
+			else
+			{
+				bool flag2 = false;
+				MoveVillagersToSettlement(villagerParty, village.Settlement);
+			}
+		}
+		else
+		{
+			bool flag3 = false;
+			MoveVillagersToSettlement(villagerParty, village.Settlement);
+		}
+	}
+
+	private bool HasSellableItems(MobileParty villagerParty)
+	{
+		ItemRoster itemRoster = villagerParty.ItemRoster;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && item.ItemCategory != DefaultItemCategories.PackAnimal)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void MoveVillagersToSettlement(MobileParty villagerParty, Settlement destination)
+	{
+		AiHelper.GetBestNavigationTypeAndAdjustedDistanceOfSettlementForMobileParty(villagerParty, destination, isTargetingPort: false, out var bestNavigationType, out var _, out var isFromPort);
+		SetPartyAiAction.GetActionForVisitingSettlement(villagerParty, destination, bestNavigationType, isFromPort, isTargetingPort: false);
+	}
+
+	private int SlaughterLivestockAtCastle(MobileParty villagerParty, Town castle)
+	{
+		int num = castle.FoodStocksUpperLimit();
+		float num2 = MathF.Max(0f, (float)num - castle.FoodStocks);
+		if (num2 <= 0f)
+		{
+			return 0;
+		}
+		ItemRoster itemRoster = villagerParty.ItemRoster;
+		int num3 = 0;
+		List<(EquipmentElement, int)> list = new List<(EquipmentElement, int)>();
+		for (int num4 = itemRoster.Count - 1; num4 >= 0 && (float)num3 < num2; num4--)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num4);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item == null || elementCopyAtIndex.Amount <= 0 || !item.HasHorseComponent)
+			{
+				continue;
+			}
+			bool isLiveStock = item.HorseComponent.IsLiveStock;
+			bool flag = !isLiveStock && item.ItemCategory != null && item.ItemCategory.StringId == "sumpter_horse";
+			if (!isLiveStock && !flag)
+			{
+				continue;
+			}
+			if (!LivestockMeatMap.TryGetValue(item.StringId, out (string, int) value))
+			{
+				if (!flag)
+				{
+					continue;
+				}
+				value = ("meat", 3);
+			}
+			ItemObject itemObject = MBObjectManager.Instance.GetObject<ItemObject>(value.Item1);
+			if (itemObject != null)
+			{
+				int num5 = (int)((num2 - (float)num3) / (float)value.Item2);
+				if (num5 <= 0 && value.Item2 <= 1)
+				{
+					num5 = 1;
+				}
+				int num6 = Math.Min(elementCopyAtIndex.Amount, Math.Max(1, num5));
+				int num7 = num6 * value.Item2;
+				if ((float)(num3 + num7) > num2)
+				{
+					num7 = (int)(num2 - (float)num3);
+					num6 = (int)Math.Ceiling((double)num7 / (double)value.Item2);
+					num7 = num6 * value.Item2;
+				}
+				if (num6 > 0)
+				{
+					itemRoster.AddToCounts(elementCopyAtIndex.EquipmentElement, -num6);
+					castle.FoodStocks += num7;
+					num3 += num7;
+					EquipmentElement item2 = new EquipmentElement(itemObject);
+					list.Add((item2, num7));
+					bool flag2 = false;
+				}
+			}
+		}
+		if (castle.FoodStocks > (float)num)
+		{
+			castle.FoodStocks = num;
+		}
+		if (list.Count > 0)
+		{
+			RecordDailySupply(castle.Settlement, num3);
+			CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(villagerParty, castle, list);
+			bool flag3 = false;
+		}
+		return num3;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\CulturalFeatsBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+using TaleWorlds.ObjectSystem;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class CulturalFeatsBehavior : CampaignBehaviorBase
+{
+	private FeatObject _khuzaitGrazingHerdFeat;
+
+	private FeatObject _sturgianWinterStoresFeat;
+
+	private FeatObject _nordPreservedProvisionsFeat;
+
+	private FeatObject _aseraiFastingTraditionsFeat;
+
+	private FeatObject _battanianForestForagersFeat;
+
+	private FeatObject _vlandianFeudalPurveyanceFeat;
+
+	private FeatObject _empireStandardizedRationsFeat;
+
+	private static CampaignTime _lastPlayerForagingTime = CampaignTime.Never;
+
+	public FeatObject KhuzaitGrazingHerdFeat => _khuzaitGrazingHerdFeat;
+
+	public FeatObject SturgianWinterStoresFeat => _sturgianWinterStoresFeat;
+
+	public FeatObject NordPreservedProvisionsFeat => _nordPreservedProvisionsFeat;
+
+	public FeatObject AseraiFastingTraditionsFeat => _aseraiFastingTraditionsFeat;
+
+	public FeatObject BattanianForestForagersFeat => _battanianForestForagersFeat;
+
+	public FeatObject VlandianFeudalPurveyanceFeat => _vlandianFeudalPurveyanceFeat;
+
+	public FeatObject EmpireStandardizedRationsFeat => _empireStandardizedRationsFeat;
+
+	public CulturalFeatsBehavior()
+	{
+		RegisterCustomFeats();
+	}
+
+	private void RegisterCustomFeats()
+	{
+		if (Game.Current != null && Game.Current.ObjectManager != null)
+		{
+			_khuzaitGrazingHerdFeat = Game.Current.ObjectManager.RegisterPresumedObject(new FeatObject("khuzait_grazing_herd"));
+			if (_khuzaitGrazingHerdFeat != null)
+			{
+				_khuzaitGrazingHerdFeat.Initialize("{=HAP_KhuzaitGrazingName}khuzait_grazing_herd", "{=HAP_KhuzaitGrazing}Horses never consume food in the steppes.", -1f, isPositiveEffect: true, FeatObject.AdditionType.AddFactor);
+			}
+			_sturgianWinterStoresFeat = Game.Current.ObjectManager.RegisterPresumedObject(new FeatObject("sturgian_winter_stores"));
+			if (_sturgianWinterStoresFeat != null)
+			{
+				_sturgianWinterStoresFeat.Initialize("{=HAP_SturgianWinterName}sturgian_winter_stores", "{=HAP_SturgianWinter}No food spoilage in freezing conditions.", -1f, isPositiveEffect: true, FeatObject.AdditionType.AddFactor);
+			}
+			_nordPreservedProvisionsFeat = Game.Current.ObjectManager.RegisterPresumedObject(new FeatObject("nord_preserved_provisions"));
+			if (_nordPreservedProvisionsFeat != null)
+			{
+				_nordPreservedProvisionsFeat.Initialize("{=HAP_NordPreservedName}nord_preserved_provisions", "{=HAP_NordPreserved}Fresh fish and meat spoil 50% slower.", -0.5f, isPositiveEffect: true, FeatObject.AdditionType.AddFactor);
+			}
+			_aseraiFastingTraditionsFeat = Game.Current.ObjectManager.RegisterPresumedObject(new FeatObject("aserai_fasting_traditions"));
+			if (_aseraiFastingTraditionsFeat != null)
+			{
+				_aseraiFastingTraditionsFeat.Initialize("{=HAP_AseraiFastingName}aserai_fasting_traditions", "{=HAP_AseraiFasting}Base food consumption reduced by 30% in hot climates.", -0.3f, isPositiveEffect: true, FeatObject.AdditionType.AddFactor);
+			}
+			_battanianForestForagersFeat = Game.Current.ObjectManager.RegisterPresumedObject(new FeatObject("battania_forest_foragers"));
+			if (_battanianForestForagersFeat != null)
+			{
+				_battanianForestForagersFeat.Initialize("{=HAP_BattaniaForagersName}battania_forest_foragers", "{=HAP_BattaniaForestForagers}Parties have a chance to find food while traveling through forests.", 0.05f, isPositiveEffect: true, FeatObject.AdditionType.AddFactor);
+			}
+			_vlandianFeudalPurveyanceFeat = Game.Current.ObjectManager.RegisterPresumedObject(new FeatObject("vlandia_feudal_purveyance"));
+			if (_vlandianFeudalPurveyanceFeat != null)
+			{
+				_vlandianFeudalPurveyanceFeat.Initialize("{=HAP_VlandiaPurveyanceName}vlandia_feudal_purveyance", "{=HAP_VlandiaFeudalPurveyance}20% reduced buying price penalty in Vlandian villages.", -0.2f, isPositiveEffect: true, FeatObject.AdditionType.AddFactor);
+			}
+			_empireStandardizedRationsFeat = Game.Current.ObjectManager.RegisterPresumedObject(new FeatObject("empire_standardized_rations"));
+			if (_empireStandardizedRationsFeat != null)
+			{
+				_empireStandardizedRationsFeat.Initialize("{=HAP_EmpireRationsName}empire_standardized_rations", "{=HAP_EmpireStandardizedRations}10% reduced base food consumption.", -0.1f, isPositiveEffect: true, FeatObject.AdditionType.AddFactor);
+			}
+		}
+	}
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.HourlyTickPartyEvent.AddNonSerializedListener(this, OnHourlyTickParty);
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+	}
+
+	private void OnSessionLaunched(CampaignGameStarter starter)
+	{
+		DefaultCulturalFeats.SturgianGrainProductionFeat?.Initialize("{=!}sturgian_increased_grain_production", "{=HAP_SturgianGrainDesc}Villages grain production is increased by 20%.", 0.2f, isPositiveEffect: true, FeatObject.AdditionType.AddFactor);
+	}
+
+	private void OnHourlyTickParty(MobileParty party)
+	{
+		if (party == MobileParty.MainParty && party.LeaderHero?.Culture != null && party.LeaderHero.Culture.StringId.IndexOf("battania", StringComparison.OrdinalIgnoreCase) >= 0)
+		{
+			TryForestForaging(party);
+		}
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		_lastPlayerForagingTime = CampaignTime.Never;
+	}
+
+	public static bool HasNordPreservedProvisions(MobileParty party)
+	{
+		if (!IsEligibleForCulturalFeats(party))
+		{
+			return false;
+		}
+		string lowerCase = StringCache.GetLowerCase(party.LeaderHero.Culture.StringId);
+		return lowerCase.Contains("nord");
+	}
+
+	public static bool HasAseraiFastingTraditions(MobileParty party)
+	{
+		if (!IsEligibleForCulturalFeats(party))
+		{
+			return false;
+		}
+		string lowerCase = StringCache.GetLowerCase(party.LeaderHero.Culture.StringId);
+		return lowerCase.Contains("aserai");
+	}
+
+	public static float GetCurrentTemperature(MobileParty party)
+	{
+		try
+		{
+			if (party != null)
+			{
+				_ = party.GetPosition2D;
+				if (0 == 0 && Campaign.Current?.Models?.MapWeatherModel != null)
+				{
+					Vec3 vec = new Vec3(party.GetPosition2D.X, party.GetPosition2D.Y);
+					return Campaign.Current.Models.MapWeatherModel.GetAtmosphereModel(new CampaignVec2(vec.AsVec2, isOnLand: true)).AreaInfo.Temperature;
+				}
+			}
+			return 20f;
+		}
+		catch
+		{
+			return 20f;
+		}
+	}
+
+	public static bool IsHotClimate(MobileParty party)
+	{
+		return GetCurrentTemperature(party) >= 35f;
+	}
+
+	private static bool IsEligibleForCulturalFeats(MobileParty party)
+	{
+		if (party == null || !party.IsActive || party.IsDisbanding)
+		{
+			return false;
+		}
+		if (CastleForagerPartyComponent.IsForagerParty(party))
+		{
+			return false;
+		}
+		if (TownSupplyLinePartyComponent.IsSupplyLineParty(party))
+		{
+			return false;
+		}
+		if (party.LeaderHero == null)
+		{
+			return false;
+		}
+		if (party.LeaderHero.Culture == null)
+		{
+			return false;
+		}
+		if (!party.LeaderHero.IsLord && party.LeaderHero.Clan != Clan.PlayerClan && !party.LeaderHero.IsMinorFactionHero)
+		{
+			return false;
+		}
+		if (party.IsGarrison || party.IsCaravan || party.IsBandit || party.IsMilitia || party.IsPatrolParty || party.IsVillager)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	public static bool HasBattanianForestForagers(MobileParty party)
+	{
+		if (!IsEligibleForCulturalFeats(party))
+		{
+			return false;
+		}
+		string lowerCase = StringCache.GetLowerCase(party.LeaderHero.Culture.StringId);
+		return lowerCase.Contains("battania");
+	}
+
+	public static bool HasVlandianFeudalPurveyance(MobileParty party)
+	{
+		if (!IsEligibleForCulturalFeats(party))
+		{
+			return false;
+		}
+		string lowerCase = StringCache.GetLowerCase(party.LeaderHero.Culture.StringId);
+		return lowerCase.Contains("vlandia");
+	}
+
+	public static bool HasEmpireStandardizedRations(MobileParty party)
+	{
+		if (!IsEligibleForCulturalFeats(party))
+		{
+			return false;
+		}
+		string lowerCase = StringCache.GetLowerCase(party.LeaderHero.Culture.StringId);
+		return lowerCase.Contains("empire");
+	}
+
+	public static bool HasKhuzaitGrazingHerd(MobileParty party)
+	{
+		if (!IsEligibleForCulturalFeats(party))
+		{
+			return false;
+		}
+		string lowerCase = StringCache.GetLowerCase(party.LeaderHero.Culture.StringId);
+		return lowerCase.Contains("khuzait");
+	}
+
+	public static bool HasSturgianWinterStores(MobileParty party)
+	{
+		if (!IsEligibleForCulturalFeats(party))
+		{
+			return false;
+		}
+		string lowerCase = StringCache.GetLowerCase(party.LeaderHero.Culture.StringId);
+		return lowerCase.Contains("sturg");
+	}
+
+	public static bool IsInForest(MobileParty party)
+	{
+		if (party == null || Campaign.Current?.MapSceneWrapper == null)
+		{
+			return false;
+		}
+		try
+		{
+			TerrainType terrainTypeAtPosition = Campaign.Current.MapSceneWrapper.GetTerrainTypeAtPosition(new CampaignVec2(party.GetPosition2D, isOnLand: true));
+			return terrainTypeAtPosition == TerrainType.Forest;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private static float GetItemSeasonalWeight(string itemId, CampaignTime.Seasons season)
+	{
+		return itemId switch
+		{
+			"nuts" => (season == CampaignTime.Seasons.Autumn) ? 4f : 0f, 
+			"mushroom_vegetable" => season switch
+			{
+				CampaignTime.Seasons.Autumn => 3f, 
+				CampaignTime.Seasons.Summer => 0.6f, 
+				CampaignTime.Seasons.Winter => 0.3f, 
+				CampaignTime.Seasons.Spring => 0.1f, 
+				_ => 1f, 
+			}, 
+			"meat_hare" => season switch
+			{
+				CampaignTime.Seasons.Winter => 1.6f, 
+				CampaignTime.Seasons.Autumn => 1.3f, 
+				CampaignTime.Seasons.Spring => 0.8f, 
+				CampaignTime.Seasons.Summer => 0.5f, 
+				_ => 1f, 
+			}, 
+			_ => 1f, 
+		};
+	}
+
+	public static void TryForestForaging(MobileParty party)
+	{
+		if (!HasBattanianForestForagers(party) || party.MemberRoster.TotalManCount < 5 || !IsInForest(party) || (_lastPlayerForagingTime != CampaignTime.Never && (CampaignTime.Now - _lastPlayerForagingTime).ToDays < 2.0))
+		{
+			return;
+		}
+		float num = 0.05f;
+		if (MBRandom.RandomFloat > num)
+		{
+			return;
+		}
+		List<(ItemObject, int)> list = new List<(ItemObject, int)>();
+		CampaignTime.Seasons getSeasonOfYear = CampaignTime.Now.GetSeasonOfYear;
+		string[] array = new string[3] { "nuts", "mushroom_vegetable", "meat_hare" };
+		string[] array2 = array;
+		foreach (string text in array2)
+		{
+			float itemSeasonalWeight = GetItemSeasonalWeight(text, getSeasonOfYear);
+			if (itemSeasonalWeight <= 0f)
+			{
+				continue;
+			}
+			float val = itemSeasonalWeight / 10f;
+			val = Math.Min(val, 0.8f);
+			if (!(MBRandom.RandomFloat > val))
+			{
+				ItemObject itemObject = MBObjectManager.Instance.GetObject<ItemObject>(text);
+				if (itemObject != null)
+				{
+					int totalManCount = party.MemberRoster.TotalManCount;
+					float f = (float)totalManCount / 40f;
+					int val2 = MBRandom.RoundRandomized(f);
+					val2 = Math.Max(1, Math.Min(val2, 5));
+					list.Add((itemObject, val2));
+				}
+			}
+		}
+		if (list.Count <= 0)
+		{
+			return;
+		}
+		foreach (var (item, number) in list)
+		{
+			party.ItemRoster.AddToCounts(item, number);
+		}
+		_lastPlayerForagingTime = CampaignTime.Now;
+		if (party != MobileParty.MainParty)
+		{
+			return;
+		}
+		string text2 = "";
+		for (int j = 0; j < list.Count; j++)
+		{
+			if (j > 0)
+			{
+				text2 += ", ";
+			}
+			text2 += $"{list[j].Item2} {list[j].Item1.Name}";
+		}
+		InformationManager.DisplayMessage(new InformationMessage("Your troops foraged " + text2 + " in the forest.", Color.FromUint(42825

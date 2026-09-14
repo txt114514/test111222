@@ -1,0 +1,599 @@
+﻿PART 25/75
+llbackArgs args)
+	{
+		try
+		{
+			Settlement currentSettlement = Settlement.CurrentSettlement;
+			Town town = currentSettlement.Town;
+			MobileParty sackBesiegerParty = _sackBesiegerParty;
+			float prosperityBefore = ((_sackProsperityCache >= 0f) ? _sackProsperityCache : town.Prosperity);
+			_summaryPackAnimalsSeized = 0;
+			_summaryLivestockSeized = 0;
+			_summaryMarketFoodSeized = 0;
+			_summaryGranaryFoodSeized = 0;
+			_summaryGoldGained = 0;
+			ApplyPenalties(sackBesiegerParty, currentSettlement, town, prosperityBefore);
+			int num = CountFoodItems(MobileParty.MainParty);
+			int num2 = CountPackAnimals(MobileParty.MainParty) + CountLivestock(MobileParty.MainParty);
+			if (currentSettlement.IsTown)
+			{
+				_summaryPackAnimalsSeized = SeizePackAnimals(currentSettlement);
+				_summaryLivestockSeized = SeizeLivestock(currentSettlement);
+			}
+			if (currentSettlement.IsTown)
+			{
+				_summaryMarketFoodSeized = SeizeMarketFood(currentSettlement);
+			}
+			_summaryGranaryFoodSeized = SeizeGranaryFood(town);
+			int num3 = _summaryMarketFoodSeized + _summaryGranaryFoodSeized;
+			if (num3 > 0)
+			{
+				RecordSackFood(currentSettlement, num3);
+			}
+			int num4 = CountFoodItems(MobileParty.MainParty) - num;
+			int num5 = CountPackAnimals(MobileParty.MainParty) + CountLivestock(MobileParty.MainParty) - num2;
+			if (num4 > 0 && num5 > 0)
+			{
+				TextObject textObject = new TextObject("{=HAP_SACK_PLAYER_BOTH}Seized {AMOUNT} food and {ANIMALS} animals from {SETTLEMENT_NAME}.");
+				textObject.SetTextVariable("AMOUNT", num4);
+				textObject.SetTextVariable("ANIMALS", num5);
+				textObject.SetTextVariable("SETTLEMENT_NAME", currentSettlement.Name);
+				InformationManager.DisplayMessage(new InformationMessage(textObject.ToString(), Colors.Green));
+			}
+			else if (num4 > 0)
+			{
+				TextObject textObject2 = new TextObject("{=HAP_SACK_PLAYER_FOOD}Seized {AMOUNT} food from {SETTLEMENT_NAME}.");
+				textObject2.SetTextVariable("AMOUNT", num4);
+				textObject2.SetTextVariable("SETTLEMENT_NAME", currentSettlement.Name);
+				InformationManager.DisplayMessage(new InformationMessage(textObject2.ToString(), Colors.Green));
+			}
+			else if (num5 > 0)
+			{
+				TextObject textObject3 = new TextObject("{=HAP_SACK_PLAYER_ANIMALS}Seized {ANIMALS} animals from {SETTLEMENT_NAME}.");
+				textObject3.SetTextVariable("ANIMALS", num5);
+				textObject3.SetTextVariable("SETTLEMENT_NAME", currentSettlement.Name);
+				InformationManager.DisplayMessage(new InformationMessage(textObject3.ToString(), Colors.Green));
+			}
+			bool flag = false;
+			GameMenu.SwitchToMenu("sack_aftermath_summary");
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[Sack] ERROR in SackOnConsequence: " + ex.Message);
+			GameMenu.SwitchToMenu("siege_aftermath_contextual_summary");
+		}
+	}
+
+	private void ApplyPenalties(MobileParty attackerParty, Settlement settlement, Town town, float prosperityBefore)
+	{
+		float influenceCost = GetInfluenceCost(attackerParty, settlement);
+		if (influenceCost > 0f)
+		{
+			ChangeClanInfluenceAction.Apply(attackerParty.ActualClan, 0f - influenceCost);
+		}
+		town.Prosperity += GetProsperityPenalty(attackerParty, settlement, prosperityBefore);
+		int buildingLevelsLost = GetBuildingLevelsLost(attackerParty);
+		for (int i = 0; i < buildingLevelsLost; i++)
+		{
+			List<Building> list = new List<Building>();
+			foreach (Building building in town.Buildings)
+			{
+				if (!building.BuildingType.IsDailyProject && building.CurrentLevel > 0)
+				{
+					list.Add(building);
+				}
+			}
+			if (list.Count == 0)
+			{
+				break;
+			}
+			list.GetRandomElement().LevelDown();
+		}
+		town.Loyalty += -50f;
+		if (settlement.IsTown)
+		{
+			foreach (Hero notable in settlement.Notables)
+			{
+				notable.AddPower(notable.Power * -1f);
+			}
+		}
+		if (attackerParty.LeaderHero != null && _sackPrevOwnerClan?.Leader != null)
+		{
+			ChangeRelationAction.ApplyRelationChangeBetweenHeroes(attackerParty.LeaderHero, _sackPrevOwnerClan.Leader, -50);
+		}
+		float totalArmyGold = GetArmyGoldGain(attackerParty, settlement, prosperityBefore);
+		foreach (KeyValuePair<MobileParty, float> sackPartyContribution in _sackPartyContributions)
+		{
+			MobileParty key = sackPartyContribution.Key;
+			int partyGoldGain = GetPartyGoldGain(totalArmyGold, sackPartyContribution.Value);
+			if (key.LeaderHero != null)
+			{
+				GiveGoldAction.ApplyForPartyToCharacter(null, key.LeaderHero, partyGoldGain);
+			}
+			else
+			{
+				GiveGoldAction.ApplyForCharacterToParty(null, key.Party, partyGoldGain);
+			}
+			if (key == MobileParty.MainParty)
+			{
+				_summaryGoldGained = partyGoldGain;
+			}
+			key.RecentEventsMorale += 30f;
+			if (attackerParty == MobileParty.MainParty && key != attackerParty && key.LeaderHero != null && attackerParty.MapFaction.Culture != settlement.Culture)
+			{
+				int traitLevel = key.LeaderHero.GetTraitLevel(DefaultTraits.Mercy);
+				int num = 0;
+				if (traitLevel > 0)
+				{
+					num = -10;
+				}
+				else if (traitLevel < 0)
+				{
+					num = 10;
+				}
+				if (num != 0)
+				{
+					ChangeRelationAction.ApplyPlayerRelation(key.LeaderHero, num);
+				}
+			}
+		}
+		if (attackerParty == MobileParty.MainParty)
+		{
+			TraitLevelingHelper.OnSiegeAftermathApplied(settlement, SiegeAftermathAction.SiegeAftermath.Devastate, new TraitObject[1] { DefaultTraits.Mercy });
+		}
+	}
+
+	private int SeizePackAnimals(Settlement settlement)
+	{
+		int num = 0;
+		ItemRoster itemRoster = settlement.ItemRoster;
+		List<(ItemObject, int)> list = new List<(ItemObject, int)>();
+		for (int num2 = itemRoster.Count - 1; num2 >= 0; num2--)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num2);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && item.HasHorseComponent && item.HorseComponent.IsPackAnimal)
+			{
+				list.Add((item, elementCopyAtIndex.Amount));
+			}
+		}
+		if (list.Count == 0)
+		{
+			return 0;
+		}
+		int num3 = 0;
+		foreach (var item5 in list)
+		{
+			ItemObject item2 = item5.Item1;
+			int item3 = item5.Item2;
+			num3 += item3;
+		}
+		float num4 = _sackPartyContributions.Values.Sum();
+		if (num4 <= 0f)
+		{
+			num4 = 1f;
+		}
+		foreach (KeyValuePair<MobileParty, float> sackPartyContribution in _sackPartyContributions)
+		{
+			MobileParty key = sackPartyContribution.Key;
+			float num5 = sackPartyContribution.Value / num4;
+			int val = MBRandom.RoundRandomized((float)num3 * num5);
+			int val2 = Math.Max(1, (key.MemberRoster?.TotalHealthyCount ?? 0) / 5);
+			val = Math.Min(val, val2);
+			int num6 = 0;
+			foreach (var (item4, num7) in list)
+			{
+				if (num6 >= val)
+				{
+					break;
+				}
+				int itemNumber = itemRoster.GetItemNumber(item4);
+				if (itemNumber > 0)
+				{
+					int num8 = Math.Min(val - num6, itemNumber);
+					key.ItemRoster.AddToCounts(item4, num8);
+					itemRoster.AddToCounts(item4, -num8);
+					num6 += num8;
+					num += num8;
+				}
+			}
+		}
+		bool flag = false;
+		return num;
+	}
+
+	private int SeizeLivestock(Settlement settlement)
+	{
+		int num = 0;
+		ItemRoster itemRoster = settlement.ItemRoster;
+		List<(ItemObject, int)> list = new List<(ItemObject, int)>();
+		for (int num2 = itemRoster.Count - 1; num2 >= 0; num2--)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num2);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && item.HasHorseComponent && item.HorseComponent.IsLiveStock)
+			{
+				list.Add((item, elementCopyAtIndex.Amount));
+			}
+		}
+		if (list.Count == 0)
+		{
+			return 0;
+		}
+		int num3 = 0;
+		foreach (var item5 in list)
+		{
+			ItemObject item2 = item5.Item1;
+			int item3 = item5.Item2;
+			num3 += item3;
+		}
+		float num4 = _sackPartyContributions.Values.Sum();
+		if (num4 <= 0f)
+		{
+			num4 = 1f;
+		}
+		foreach (KeyValuePair<MobileParty, float> sackPartyContribution in _sackPartyContributions)
+		{
+			MobileParty key = sackPartyContribution.Key;
+			float num5 = sackPartyContribution.Value / num4;
+			int val = MBRandom.RoundRandomized((float)num3 * num5);
+			int val2 = Math.Max(1, (key.MemberRoster?.TotalHealthyCount ?? 0) / 5);
+			val = Math.Min(val, val2);
+			int num6 = 0;
+			foreach (var (item4, num7) in list)
+			{
+				if (num6 >= val)
+				{
+					break;
+				}
+				int itemNumber = itemRoster.GetItemNumber(item4);
+				if (itemNumber > 0)
+				{
+					int num8 = Math.Min(val - num6, itemNumber);
+					key.ItemRoster.AddToCounts(item4, num8);
+					itemRoster.AddToCounts(item4, -num8);
+					num6 += num8;
+					num += num8;
+				}
+			}
+		}
+		bool flag = false;
+		return num;
+	}
+
+	private int SeizeMarketFood(Settlement settlement)
+	{
+		int num = 0;
+		ItemRoster itemRoster = settlement.ItemRoster;
+		List<(ItemObject, int)> list = new List<(ItemObject, int)>();
+		for (int num2 = itemRoster.Count - 1; num2 >= 0; num2--)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num2);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && IsFoodItem(item))
+			{
+				list.Add((item, elementCopyAtIndex.Amount));
+			}
+		}
+		if (list.Count == 0)
+		{
+			return 0;
+		}
+		float num3 = _sackPartyContributions.Values.Sum();
+		if (num3 <= 0f)
+		{
+			num3 = 1f;
+		}
+		foreach (var (itemObject, num4) in list)
+		{
+			foreach (KeyValuePair<MobileParty, float> sackPartyContribution in _sackPartyContributions)
+			{
+				MobileParty key = sackPartyContribution.Key;
+				float num5 = sackPartyContribution.Value / num3;
+				int num6 = MBRandom.RoundRandomized((float)num4 * num5);
+				if (num6 > 0)
+				{
+					int itemNumber = itemRoster.GetItemNumber(itemObject);
+					if (itemNumber <= 0)
+					{
+						break;
+					}
+					float num7 = (float)key.InventoryCapacity - key.TotalWeightCarried;
+					float num8 = ((itemObject.Weight > 0f) ? itemObject.Weight : 10f);
+					int val = (int)(num7 / num8);
+					int num9 = Math.Min(num6, Math.Min(val, itemNumber));
+					if (num9 > 0)
+					{
+						key.ItemRoster.AddToCounts(itemObject, num9);
+						itemRoster.AddToCounts(itemObject, -num9);
+						num += num9;
+					}
+				}
+			}
+		}
+		bool flag = false;
+		return num;
+	}
+
+	private int SeizeGranaryFood(Town town)
+	{
+		int num = (int)town.FoodStocks;
+		if (num <= 0)
+		{
+			return 0;
+		}
+		town.FoodStocks = 0f;
+		List<(ItemObject, int)> list = GenerateFoodFromVillages(town.Settlement, num);
+		if (list.Count == 0)
+		{
+			bool flag = false;
+			return 0;
+		}
+		int num2 = 0;
+		float num3 = _sackPartyContributions.Values.Sum();
+		if (num3 <= 0f)
+		{
+			num3 = 1f;
+		}
+		foreach (KeyValuePair<MobileParty, float> sackPartyContribution in _sackPartyContributions)
+		{
+			MobileParty key = sackPartyContribution.Key;
+			float num4 = sackPartyContribution.Value / num3;
+			float num5 = (float)key.InventoryCapacity - key.TotalWeightCarried;
+			foreach (var item3 in list)
+			{
+				ItemObject item = item3.Item1;
+				int item2 = item3.Item2;
+				int num6 = MBRandom.RoundRandomized((float)item2 * num4);
+				if (num6 > 0)
+				{
+					float num7 = ((item.Weight > 0f) ? item.Weight : 10f);
+					int val = (int)(num5 / num7);
+					int num8 = Math.Min(num6, val);
+					if (num8 > 0)
+					{
+						key.ItemRoster.AddToCounts(item, num8);
+						num5 -= (float)num8 * num7;
+						num2 += num8;
+					}
+				}
+			}
+		}
+		bool flag2 = false;
+		return num2;
+	}
+
+	private List<(ItemObject item, int amount)> GenerateFoodFromVillages(Settlement settlement, int totalAmount)
+	{
+		List<(ItemObject, int)> list = new List<(ItemObject, int)>();
+		MBReadOnlyList<Village> boundVillages = settlement.BoundVillages;
+		if (boundVillages == null || boundVillages.Count == 0)
+		{
+			return GenerateFallbackFood(totalAmount);
+		}
+		VillageProductionCalculatorModel villageProductionCalculatorModel = Campaign.Current?.Models?.VillageProductionCalculatorModel;
+		if (villageProductionCalculatorModel == null)
+		{
+			return GenerateFallbackFood(totalAmount);
+		}
+		List<(ItemObject, float)> list2 = new List<(ItemObject, float)>();
+		foreach (Village item4 in boundVillages)
+		{
+			if (item4?.VillageType?.Productions == null)
+			{
+				continue;
+			}
+			foreach (var production in item4.VillageType.Productions)
+			{
+				var (item, num) = production;
+				if (item == null || !item.IsFood)
+				{
+					continue;
+				}
+				float resultNumber = villageProductionCalculatorModel.CalculateDailyProductionAmount(item4, item).ResultNumber;
+				if (!(resultNumber <= 0f))
+				{
+					int num2 = list2.FindIndex(((ItemObject item, float weight) p) => p.item == item);
+					if (num2 >= 0)
+					{
+						(ItemObject, float) tuple2 = list2[num2];
+						list2[num2] = (tuple2.Item1, tuple2.Item2 + resultNumber);
+					}
+					else
+					{
+						list2.Add((item, resultNumber));
+					}
+				}
+			}
+		}
+		if (list2.Count == 0)
+		{
+			return GenerateFallbackFood(totalAmount);
+		}
+		float num3 = list2.Sum<(ItemObject, float)>(((ItemObject item, float weight) p) => p.weight);
+		foreach (var item5 in list2)
+		{
+			ItemObject item2 = item5.Item1;
+			float item3 = item5.Item2;
+			float num4 = item3 / num3;
+			int num5 = MathF.Round((float)totalAmount * num4);
+			if (num5 > 0)
+			{
+				list.Add((item2, num5));
+			}
+		}
+		if (list.Count == 0 && list2.Count > 0)
+		{
+			list.Add((list2[0].Item1, totalAmount));
+		}
+		return list;
+	}
+
+	private List<(ItemObject item, int amount)> GenerateFallbackFood(int totalAmount)
+	{
+		List<(ItemObject, int)> list = new List<(ItemObject, int)>();
+		string[] array = new string[4] { "grain", "bread", "butter", "cheese" };
+		List<ItemObject> list2 = new List<ItemObject>();
+		string[] array2 = array;
+		foreach (string objectName in array2)
+		{
+			ItemObject itemObject = MBObjectManager.Instance.GetObject<ItemObject>(objectName);
+			if (itemObject != null && itemObject.IsFood)
+			{
+				list2.Add(itemObject);
+			}
+		}
+		if (list2.Count == 0)
+		{
+			return list;
+		}
+		int num = Math.Max(1, totalAmount / list2.Count);
+		int num2 = 0;
+		for (int j = 0; j < list2.Count; j++)
+		{
+			int num3 = ((j == list2.Count - 1) ? (totalAmount - num2) : num);
+			if (num3 > 0)
+			{
+				list.Add((list2[j], num3));
+				num2 += num3;
+			}
+		}
+		return list;
+	}
+
+	private void SackSummaryOnInit(MenuCallbackArgs args)
+	{
+		Settlement currentSettlement = Settlement.CurrentSettlement;
+		TextObject textObject = ((!currentSettlement.IsTown) ? new TextObject("{=HAP_SACK_START_CASTLE}Your troops sweep through {SETTLEMENT_NAME}, stripping the granaries bare. What they can't carry, they destroy.") : new TextObject("{=HAP_SACK_START_TOWN}Your troops sweep through {SETTLEMENT_NAME}, stripping the granaries, seizing provisions from the market stalls, and commandeering every pack animal in sight. What they can't carry, they destroy."));
+		textObject.SetTextVariable("SETTLEMENT_NAME", currentSettlement.Name);
+		MBTextManager.SetTextVariable("SACK_START_TEXT", textObject);
+		TextObject textObject2 = new TextObject("{=!}{ANIMALS_LINE}{LIVESTOCK_LINE}{MARKET_FOOD_LINE} • Granary Food Seized: {GRANARY_FOOD}{newline} • Gold Gained: {GOLD}{newline} • Loyalty in {SETTLEMENT} : {LOYALTY}{newline} • Party Morale Change : +{MORALE}");
+		if (currentSettlement.IsTown)
+		{
+			TextObject textObject3 = new TextObject("{=!} • Pack Animals Seized: {ANIMALS}{newline}");
+			textObject3.SetTextVariable("ANIMALS", _summaryPackAnimalsSeized);
+			textObject2.SetTextVariable("ANIMALS_LINE", textObject3);
+			TextObject textObject4 = new TextObject("{=!} • Livestock Seized: {LIVESTOCK}{newline}");
+			textObject4.SetTextVariable("LIVESTOCK", _summaryLivestockSeized);
+			textObject2.SetTextVariable("LIVESTOCK_LINE", textObject4);
+			TextObject textObject5 = new TextObject("{=!} • Market Food Seized: {MARKET_FOOD}{newline}");
+			textObject5.SetTextVariable("MARKET_FOOD", _summaryMarketFoodSeized);
+			textObject2.SetTextVariable("MARKET_FOOD_LINE", textObject5);
+		}
+		else
+		{
+			textObject2.SetTextVariable("ANIMALS_LINE", TextObject.GetEmpty());
+			textObject2.SetTextVariable("LIVESTOCK_LINE", TextObject.GetEmpty());
+			textObject2.SetTextVariable("MARKET_FOOD_LINE", TextObject.GetEmpty());
+		}
+		textObject2.SetTextVariable("GRANARY_FOOD", _summaryGranaryFoodSeized);
+		textObject2.SetTextVariable("GOLD", _summaryGoldGained);
+		textObject2.SetTextVariable("SETTLEMENT", currentSettlement.GetName());
+		textObject2.SetTextVariable("LOYALTY", -50f);
+		textObject2.SetTextVariable("MORALE", 30f);
+		MBTextManager.SetTextVariable("SACK_SUMMARY_TEXT", textObject2);
+		TextObject textObject6 = new TextObject("{=HAP_SACK_END}{SETTLEMENT_NAME} has been sacked. You may station a garrison here to defend it against enemies who may try to recapture it.");
+		textObject6.SetTextVariable("SETTLEMENT_NAME", currentSettlement.Name);
+		MBTextManager.SetTextVariable("SACK_END_TEXT", textObject6);
+		args.MenuContext.SetBackgroundMeshName("encounter_win");
+	}
+
+	private bool ContinueOnCondition(MenuCallbackArgs args)
+	{
+		args.optionLeaveType = GameMenuOption.LeaveType.Continue;
+		return true;
+	}
+
+	private void ContinueOnConsequence(MenuCallbackArgs args)
+	{
+		GameMenu.ExitToLast();
+	}
+
+	private float GetProsperityPenalty(MobileParty attackerParty, Settlement settlement, float prosperity)
+	{
+		int num = attackerParty.MemberRoster?.TotalHealthyCount ?? 0;
+		if (attackerParty.Army != null)
+		{
+			num = attackerParty.Army.TotalHealthyMembers;
+		}
+		float num2 = -1f * (MathF.Log((float)num * 0.04f + 2f, 2f) * 2.5f + 2.5f) * 0.01f * prosperity;
+		return 3f * num2;
+	}
+
+	private int GetBuildingLevelsLost(MobileParty attackerParty)
+	{
+		int num = attackerParty.MemberRoster?.TotalHealthyCount ?? 0;
+		if (attackerParty.Army != null)
+		{
+			num = attackerParty.Army.TotalHealthyMembers;
+		}
+		int num2 = MathF.Floor(MathF.Log((float)num * 0.02f + 2f, 2f));
+		return MathF.Ceiling(3f * (float)num2);
+	}
+
+	private int GetArmyGoldGain(MobileParty attackerParty, Settlement settlement, float prosperity)
+	{
+		float num = -1f * GetProsperityPenalty(attackerParty, settlement, prosperity);
+		return MathF.Floor(num * 15f);
+	}
+
+	private int GetPartyGoldGain(float totalArmyGold, float partyContribution)
+	{
+		return MathF.Floor(totalArmyGold * partyContribution / 100f);
+	}
+
+	private float GetInfluenceCost(MobileParty attackerParty, Settlement settlement)
+	{
+		if (attackerParty.Army == null)
+		{
+			return 0f;
+		}
+		int num = attackerParty.Army.Parties.Count((MobileParty t) => t != attackerParty && t.LeaderHero != null && t.LeaderHero.GetTraitLevel(DefaultTraits.Mercy) > 0);
+		return (3000f + settlement.Town.Prosperity) / 400f * (float)num * 1.25f;
+	}
+
+	private static bool IsFoodItem(ItemObject item)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		if (item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores)
+		{
+			return true;
+		}
+		if (item.IsFood)
+		{
+			return true;
+		}
+		return false;
+	}
+
+	private int CountFoodItems(MobileParty party)
+	{
+		if (party?.ItemRoster == null)
+		{
+			return 0;
+		}
+		int num = 0;
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = party.ItemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.EquipmentElement.Item != null && IsFoodItem(elementCopyAtIndex.EquipmentElement.Item))
+			{
+				num += elementCopyAtIndex.Amount;
+			}
+		}
+		return num;
+	}
+
+	private int CountPackAnimals(MobileParty party)
+	{
+		if (party?.ItemRoster == null)
+		{
+			return 0;
+		}
+		int num = 0;
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = party.ItemRoster.GetElementCopyAtIndex(i);

@@ -1,0 +1,577 @@
+﻿PART 48/75
+	float climateMultiplier = GetClimateMultiplier(climateZone, village, text);
+			if (climateMultiplier == 0f)
+			{
+				return new ExplainedNumber(0f, false, null);
+			}
+			float seasonalMultiplier = GetSeasonalMultiplier(text, climateZone);
+			if (seasonalMultiplier == 0f)
+			{
+				return new ExplainedNumber(0f, false, null);
+			}
+			float num = baseProductionAmount * climateMultiplier * seasonalMultiplier;
+			float num2 = CalculateScalingFactor(village, text);
+			num *= num2;
+			float num3 = GlobalSettings<HAPSettings>.Instance?.GlobalProductionMultiplier ?? 1f;
+			num *= num3;
+			ExplainedNumber production = new ExplainedNumber(num);
+			float num4 = Math.Min(village.Hearth, 1000f) / 1000f;
+			float num5 = 0.25f + num4 * num4 * 0.75f;
+			production.Add(num * (num5 - 1f));
+			ApplyAllProductionBonuses(village, item, ref production);
+			float issueEffectMultiplier = GetIssueEffectMultiplier(village, item);
+			if (issueEffectMultiplier != 1f)
+			{
+				production.AddFactor(issueEffectMultiplier - 1f, new TextObject("{=!}Issue Effect"));
+			}
+			ApplyExternalModifiers(village, ref production);
+			return production;
+		}
+		if (_nativeItemIds.Contains(text))
+		{
+			ExplainedNumber result = CalculateNativeItemProduction(village, item, text);
+			ApplyExternalModifiers(village, ref result);
+			return result;
+		}
+		ExplainedNumber result2 = base.CalculateDailyProductionAmount(village, item);
+		result2.AddFactor(-0.25f, new TextObject("Production penalty"));
+		ApplyExternalModifiers(village, ref result2);
+		return result2;
+	}
+
+	private ExplainedNumber CalculateNativeItemProduction(Village village, ItemObject item, string itemId)
+	{
+		string text = village.VillageType?.StringId;
+		if (string.IsNullOrEmpty(text))
+		{
+			Main.Log($"WARNING: Village {village.Name} has null VillageType, skipping production");
+			return new ExplainedNumber(0f, false, null);
+		}
+		bool flag = false;
+		if (_nativeProductionRules.ContainsKey(itemId) && _nativeProductionRules[itemId].Contains(text))
+		{
+			flag = true;
+		}
+		if (!flag)
+		{
+			SecondaryProductionType secondaryType = VillageSecondaryProductionBehavior.GetSecondaryType(village);
+			if (secondaryType != SecondaryProductionType.None && _secondaryProductionItems.ContainsKey(secondaryType) && _secondaryProductionItems[secondaryType].Contains(itemId))
+			{
+				flag = true;
+			}
+		}
+		if (!flag)
+		{
+			return new ExplainedNumber(0f, false, null);
+		}
+		float num = base.CalculateDailyProductionAmount(village, item).ResultNumber;
+		SecondaryProductionType secondaryType2 = VillageSecondaryProductionBehavior.GetSecondaryType(village);
+		if (secondaryType2 != SecondaryProductionType.None && _secondaryPrimaryOverrides.ContainsKey(secondaryType2) && _secondaryPrimaryOverrides[secondaryType2].ContainsKey(itemId))
+		{
+			num = _secondaryPrimaryOverrides[secondaryType2][itemId];
+		}
+		if (secondaryType2 != SecondaryProductionType.None && _nativeSecondaryClimateItemMultipliers.ContainsKey(secondaryType2))
+		{
+			ClimateZone climateZoneForVillage = GetClimateZoneForVillage(village);
+			Dictionary<ClimateZone, Dictionary<string, float>> dictionary = _nativeSecondaryClimateItemMultipliers[secondaryType2];
+			if (dictionary.ContainsKey(climateZoneForVillage) && dictionary[climateZoneForVillage].ContainsKey(itemId))
+			{
+				num *= dictionary[climateZoneForVillage][itemId];
+			}
+		}
+		if (secondaryType2 != SecondaryProductionType.None && _nativeSecondaryVillageBonuses.ContainsKey(secondaryType2) && _nativeSecondaryVillageBonuses[secondaryType2].ContainsKey(text))
+		{
+			num *= _nativeSecondaryVillageBonuses[secondaryType2][text];
+		}
+		TerrainType villageTerrain = GetVillageTerrain(village);
+		if (_terrainProductionMultipliers.ContainsKey(villageTerrain) && _terrainProductionMultipliers[villageTerrain].ContainsKey(itemId))
+		{
+			num *= _terrainProductionMultipliers[villageTerrain][itemId];
+		}
+		ClimateZone climateZone = GetClimateZone(village);
+		float nativeClimateMultiplier = GetNativeClimateMultiplier(itemId, climateZone);
+		if (nativeClimateMultiplier == 0f)
+		{
+			return new ExplainedNumber(0f, false, null);
+		}
+		float nativeSeasonalMultiplier = GetNativeSeasonalMultiplier(itemId, climateZone);
+		if (nativeSeasonalMultiplier == 0f)
+		{
+			return new ExplainedNumber(0f, false, null);
+		}
+		float num2 = num;
+		if (village.TradeBound != null && village.TradeBound.Town != null && item.IsMountable && item.Tier == ItemObject.ItemTiers.Tier2 && PerkHelper.GetPerkValueForTown(DefaultPerks.Riding.Shepherd, village.TradeBound.Town) && MBRandom.RandomFloat < DefaultPerks.Riding.Shepherd.SecondaryBonus)
+		{
+			num2++;
+		}
+		float num3 = Math.Min(village.Hearth, 1000f) / 1000f;
+		float num4 = 0.25f + num3 * num3 * 0.75f;
+		float num5 = GlobalSettings<HAPSettings>.Instance?.GlobalProductionMultiplier ?? 1f;
+		float ranchCountMultiplier = GetRanchCountMultiplier(village);
+		ExplainedNumber production = new ExplainedNumber(num2 * nativeClimateMultiplier * nativeSeasonalMultiplier * num4 * num5 * ranchCountMultiplier);
+		ApplyAllProductionBonuses(village, item, ref production);
+		float issueEffectMultiplier = GetIssueEffectMultiplier(village, item);
+		if (issueEffectMultiplier != 1f)
+		{
+			production.AddFactor(issueEffectMultiplier - 1f, new TextObject("{=!}Issue Effect"));
+		}
+		return production;
+	}
+
+	private bool IsVillageValid(Village village)
+	{
+		if (village == null)
+		{
+			Main.Log("ERROR: Village is null in IsVillageValid check");
+			return false;
+		}
+		if (village.VillageType == null)
+		{
+			Main.Log($"ERROR: Village {village.Name} has null VillageType");
+			return false;
+		}
+		if (village.Bound == null)
+		{
+			Main.Log($"ERROR: Village {village.Name} has null Bound - corrupted game state!");
+			return false;
+		}
+		return true;
+	}
+
+	public static bool ValidateVillageForProduction(Village village, out string errorMessage)
+	{
+		errorMessage = null;
+		if (village == null)
+		{
+			errorMessage = "Village is null";
+			return false;
+		}
+		if (village.VillageType == null)
+		{
+			errorMessage = $"Village {village.Name} has null VillageType";
+			return false;
+		}
+		if (village.VillageState != Village.VillageStates.Normal)
+		{
+			errorMessage = $"Village {village.Name} is not in Normal state (State: {village.VillageState})";
+			return false;
+		}
+		return true;
+	}
+
+	public bool CanProduceItemForRaid(Village village, ItemObject item)
+	{
+		if (item == null || !IsVillageValid(village))
+		{
+			return false;
+		}
+		string stringId = item.StringId;
+		if (_customItemIds.Contains(stringId))
+		{
+			if (!CanVillageProduceItem(village, stringId))
+			{
+				return false;
+			}
+			ClimateZone climateZone = GetClimateZone(village);
+			return GetClimateMultiplier(climateZone, village, stringId) > 0f && GetSeasonalMultiplier(stringId, climateZone) > 0f;
+		}
+		if (_nativeItemIds.Contains(stringId))
+		{
+			string stringId2 = village.VillageType.StringId;
+			bool flag = _nativeProductionRules.ContainsKey(stringId) && _nativeProductionRules[stringId].Contains(stringId2);
+			if (!flag)
+			{
+				SecondaryProductionType secondaryType = VillageSecondaryProductionBehavior.GetSecondaryType(village);
+				flag = secondaryType != SecondaryProductionType.None && _secondaryProductionItems.ContainsKey(secondaryType) && _secondaryProductionItems[secondaryType].Contains(stringId);
+			}
+			if (!flag)
+			{
+				return false;
+			}
+			SecondaryProductionType secondaryType2 = VillageSecondaryProductionBehavior.GetSecondaryType(village);
+			if (secondaryType2 != SecondaryProductionType.None && _nativeSecondaryClimateItemMultipliers.ContainsKey(secondaryType2))
+			{
+				ClimateZone climateZone2 = GetClimateZone(village);
+				if (_nativeSecondaryClimateItemMultipliers[secondaryType2].ContainsKey(climateZone2) && _nativeSecondaryClimateItemMultipliers[secondaryType2][climateZone2].ContainsKey(stringId) && _nativeSecondaryClimateItemMultipliers[secondaryType2][climateZone2][stringId] == 0f)
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+		return true;
+	}
+
+	public override float CalculateDailyFoodProductionAmount(Village village)
+	{
+		return 0f;
+	}
+
+	private float GetNativeClimateMultiplier(string itemId, ClimateZone climate)
+	{
+		if (_nativeClimateMultipliers.ContainsKey(itemId))
+		{
+			return _nativeClimateMultipliers[itemId][climate];
+		}
+		return 1f;
+	}
+
+	private float GetNativeSeasonalMultiplier(string itemId, ClimateZone climate)
+	{
+		return GetNativeSeasonalMultiplierForSeason(itemId, climate, CampaignTime.Now.GetSeasonOfYear);
+	}
+
+	internal float GetNativeSeasonalMultiplierForSeason(string itemId, ClimateZone climate, CampaignTime.Seasons season)
+	{
+		bool isDairyOrLivestock = itemId == "butter" || itemId == "cheese";
+		float baseSeasonal;
+		if (_nativeSeasonalMultipliers.ContainsKey(itemId))
+		{
+			baseSeasonal = _nativeSeasonalMultipliers[itemId][season];
+		}
+		else
+		{
+			if (!itemId.Contains("_horse"))
+			{
+				switch (itemId)
+				{
+				default:
+					if (!(itemId == "pack_camel"))
+					{
+						return 1f;
+					}
+					break;
+				case "mule":
+				case "saddle_horse":
+				case "sumpter_horse":
+				case "old_horse":
+				case "hunter":
+				case "charger":
+				case "camel":
+				case "war_camel":
+					break;
+				}
+			}
+			string key = (itemId.Contains("camel") ? "camel" : "empire_horse");
+			baseSeasonal = _nativeSeasonalMultipliers[key][season];
+		}
+		return ApplyClimateSeasonalModifier(baseSeasonal, climate, isDairyOrLivestock);
+	}
+
+	private void ApplyAllProductionBonuses(Village village, ItemObject item, ref ExplainedNumber production)
+	{
+		if (village.TradeBound != null && village.TradeBound.Town != null)
+		{
+			Town town = village.TradeBound.Town;
+			if (item.ItemCategory == DefaultItemCategories.Grain || item.ItemCategory == DefaultItemCategories.Olives || item.ItemCategory == DefaultItemCategories.Fish || item.ItemCategory == DefaultItemCategories.DateFruit)
+			{
+				PerkHelper.AddPerkBonusForTown(DefaultPerks.Trade.GranaryAccountant, town, ref production);
+			}
+			else if (item.ItemCategory == DefaultItemCategories.Clay || item.ItemCategory == DefaultItemCategories.Iron || item.ItemCategory == DefaultItemCategories.Cotton || item.ItemCategory == DefaultItemCategories.Silver)
+			{
+				PerkHelper.AddPerkBonusForTown(DefaultPerks.Trade.TradeyardForeman, town, ref production);
+			}
+			if (item.IsTradeGood)
+			{
+				PerkHelper.AddPerkBonusForTown(DefaultPerks.Athletics.Steady, town, ref production);
+			}
+			if (item.IsAnimal)
+			{
+				PerkHelper.AddPerkBonusForTown(DefaultPerks.Medicine.PerfectHealth, town, ref production);
+			}
+			PerkHelper.AddPerkBonusForTown(DefaultPerks.Riding.Breeder, town, ref production);
+		}
+		if (village.Settlement?.OwnerClan?.Culture != null)
+		{
+			CultureObject culture = village.Settlement.OwnerClan.Culture;
+			if ((item.ItemCategory == DefaultItemCategories.Sheep || item.ItemCategory == DefaultItemCategories.Cow || item.ItemCategory == DefaultItemCategories.WarHorse || item.ItemCategory == DefaultItemCategories.Horse || item.ItemCategory == DefaultItemCategories.PackAnimal) && culture.HasFeat(DefaultCulturalFeats.KhuzaitAnimalProductionFeat))
+			{
+				production.AddFactor(DefaultCulturalFeats.KhuzaitAnimalProductionFeat.EffectBonus, GameTexts.FindText("str_culture"));
+			}
+			if (item.ItemCategory == DefaultItemCategories.Grain && culture.HasFeat(DefaultCulturalFeats.SturgianGrainProductionFeat))
+			{
+				production.AddFactor(DefaultCulturalFeats.SturgianGrainProductionFeat.EffectBonus, GameTexts.FindText("str_culture"));
+			}
+			if (village.Bound != null && village.Bound.IsCastle && culture.HasFeat(DefaultCulturalFeats.VlandianCastleVillageProductionFeat))
+			{
+				production.AddFactor(DefaultCulturalFeats.VlandianCastleVillageProductionFeat.EffectBonus, GameTexts.FindText("str_culture"));
+			}
+		}
+		if (village.Bound != null && village.Bound.IsFortification && village.Bound.Town != null)
+		{
+			village.Bound.Town.AddEffectOfBuildings(BuildingEffectEnum.VillageProduction, ref production);
+		}
+		InitializeNavalDLC();
+		if (village.TradeBound != null && village.TradeBound.Town != null)
+		{
+			Town town2 = village.TradeBound.Town;
+			string stringId = item.StringId;
+			if (_blessingsOfTheSeaPerk != null && item.ItemCategory == DefaultItemCategories.Fish)
+			{
+				PerkHelper.AddPerkBonusForTown(_blessingsOfTheSeaPerk, town2, ref production);
+			}
+			if (_portAuthorityPerk != null && (stringId == "walrus_tusk" || stringId == "whale_oil"))
+			{
+				PerkHelper.AddPerkBonusForTown(_portAuthorityPerk, town2, ref production);
+			}
+		}
+		if (village.Bound?.OwnerClan?.Kingdom != null)
+		{
+			Kingdom kingdom = village.Bound.OwnerClan.Kingdom;
+			if (_maritimeWealEdictPolicy != null && kingdom.HasPolicy(_maritimeWealEdictPolicy))
+			{
+				production.AddFactor(0.25f, _maritimeWealEdictPolicy.Name);
+			}
+			if (_bolsterTheFyrdPolicy != null && kingdom.HasPolicy(_bolsterTheFyrdPolicy))
+			{
+				production.AddFactor(-0.05f, _bolsterTheFyrdPolicy.Name);
+			}
+			if (HAPPolicies.HarvestLevy != null && kingdom.HasPolicy(HAPPolicies.HarvestLevy))
+			{
+				production.AddFactor(0.1f, HAPPolicies.HarvestLevy.Name);
+			}
+		}
+	}
+
+	private float GetIssueEffectMultiplier(Village village, ItemObject item)
+	{
+		float num = 1f;
+		HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+		if (instance != null && !instance.EnableIssueEffects)
+		{
+			return num;
+		}
+		if (village.Settlement == null || !village.Settlement.IsVillage)
+		{
+			return num;
+		}
+		foreach (Hero item2 in SettlementHelper.GetAllHeroesOfSettlement(village.Settlement, includePrisoners: false))
+		{
+			if (item2.Issue == null || item2.MapFaction != village.Settlement.MapFaction)
+			{
+				continue;
+			}
+			string name = item2.Issue.GetType().Name;
+			bool flag = false;
+			switch (name)
+			{
+			default:
+				if (!(name == "VillageNeedsToolsIssue"))
+				{
+					if (name == "HeadmanNeedsToDeliverAHerdIssue" || name == "LandlordNeedsAccessToVillageCommonsIssue")
+					{
+						if (IsLivestockItem(item))
+						{
+							num *= 0.5f;
+						}
+						flag = true;
+					}
+					else if (name == "HeadmanNeedsGrainIssue")
+					{
+						if (IsGrainItem(item))
+						{
+							num *= 0.5f;
+						}
+						flag = true;
+					}
+					break;
+				}
+				goto case "NearbyBanditBaseIssue";
+			case "NearbyBanditBaseIssue":
+			case "ExtortionByDesertersIssue":
+			case "MerchantNeedsHelpWithOutlawsIssue":
+			case "LandLordNeedsManualLaborersIssue":
+			case "HeadmanVillageNeedsDraughtAnimalsIssue":
+			case "LandlordTrainingForRetainersIssueBehavior":
+				num *= 0.7f;
+				flag = true;
+				break;
+			}
+			if (!flag)
+			{
+				float activeIssueEffectAmount = item2.Issue.GetActiveIssueEffectAmount(DefaultIssueEffects.HalfVillageProduction);
+				if (activeIssueEffectAmount != 0f)
+				{
+					num *= activeIssueEffectAmount;
+				}
+			}
+		}
+		return num;
+	}
+
+	private bool IsLivestockItem(ItemObject item)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		if (item.ItemCategory == DefaultItemCategories.Cow || item.ItemCategory == DefaultItemCategories.Sheep || item.ItemCategory == DefaultItemCategories.Hog || item.ItemCategory == DefaultItemCategories.Horse || item.ItemCategory == DefaultItemCategories.WarHorse || item.ItemCategory == DefaultItemCategories.PackAnimal)
+		{
+			return true;
+		}
+		string stringId = item.StringId;
+		int result;
+		switch (stringId)
+		{
+		default:
+			result = ((stringId == "egg") ? 1 : 0);
+			break;
+		case "cow":
+		case "sheep":
+		case "hog":
+		case "chicken_product":
+		case "goose_product":
+		case "butter":
+		case "cheese":
+		case "milk":
+		case "heavy_cream":
+			result = 1;
+			break;
+		}
+		return (byte)result != 0;
+	}
+
+	private bool IsGrainItem(ItemObject item)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		if (item.ItemCategory == DefaultItemCategories.Grain)
+		{
+			return true;
+		}
+		return item.StringId == "grain";
+	}
+
+	private string GetItemCategoryDisplayName(string itemId)
+	{
+		switch (itemId)
+		{
+		case "cow":
+		case "sheep":
+		case "hog":
+		case "wool":
+			return new TextObject("{=HAP_CatLivestock}Livestock").ToString();
+		case "butter":
+		case "cheese":
+		case "milk":
+		case "heavy_cream":
+			return new TextObject("{=HAP_CatDairy}Dairy").ToString();
+		case "chicken_product":
+		case "goose_product":
+		case "egg":
+			return new TextObject("{=HAP_CatPoultry}Poultry").ToString();
+		case "grain":
+		case "straw":
+			return new TextObject("{=HAP_CatGrain}Grain").ToString();
+		case "apple_fruit":
+		case "orange_fruit":
+		case "melon_fruit":
+		case "date_fruit":
+		case "grape":
+		case "olives":
+			return new TextObject("{=HAP_CatFruits}Fruits").ToString();
+		case "cabbage_vegetable":
+		case "leek_vegetable":
+		case "carrot_vegetable":
+			return new TextObject("{=HAP_CatVegetables}Vegetables").ToString();
+		case "empire_horse":
+		case "t2_empire_horse":
+		case "t3_empire_horse":
+		case "vlandia_horse":
+		case "t2_vlandia_horse":
+		case "t3_vlandia_horse":
+		case "battania_horse":
+		case "t2_battania_horse":
+		case "t3_battania_horse":
+		case "sturgian_horse":
+		case "t2_sturgian_horse":
+		case "t3_sturgian_horse":
+		case "aserai_horse":
+		case "t2_aserai_horse":
+		case "t3_aserai_horse":
+		case "khuzait_horse":
+		case "t2_khuzait_horse":
+		case "t3_khuzait_horse":
+			return new TextObject("{=HAP_CatHorses}Horses").ToString();
+		case "black_pepper":
+			return new TextObject("{=HAP_CatSpices}Spices").ToString();
+		case "herbs":
+			return new TextObject("{=HAP_CatHerbs}Herbs").ToString();
+		case "fish":
+			return new TextObject("{=HAP_CatFish}Fish").ToString();
+		case "honey":
+			return new TextObject("{=HAP_CatHoney}Honey").ToString();
+		case "nuts":
+			return new TextObject("{=HAP_CatNuts}Nuts").ToString();
+		case "mushroom_vegetable":
+			return new TextObject("{=HAP_CatMushrooms}Mushrooms").ToString();
+		case "hardwood":
+		case "charcoal":
+			return new TextObject("{=HAP_CatTimber}Timber").ToString();
+		case "iron":
+		case "silver":
+		case "salt":
+		case "clay":
+		case "gold_ore":
+		case "cut_stone":
+			return new TextObject("{=HAP_CatMinerals}Minerals").ToString();
+		case "flax":
+		case "cotton":
+			return new TextObject("{=HAP_CatCrops}Crops").ToString();
+		default:
+			return null;
+		}
+	}
+
+	private float GetSingleIssueMultiplier(string issueTypeName, ItemObject item, Hero issueHero)
+	{
+		HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+		if (instance != null && !instance.EnableIssueEffects)
+		{
+			return 1f;
+		}
+		switch (issueTypeName)
+		{
+		default:
+			if (!(issueTypeName == "VillageNeedsToolsIssue"))
+			{
+				if (issueTypeName == "HeadmanNeedsToDeliverAHerdIssue" || issueTypeName == "LandlordNeedsAccessToVillageCommonsIssue")
+				{
+					return IsLivestockItem(item) ? 0.5f : 1f;
+				}
+				if (issueTypeName == "HeadmanNeedsGrainIssue")
+				{
+					return IsGrainItem(item) ? 0.5f : 1f;
+				}
+				if (issueHero?.Issue != null)
+				{
+					float activeIssueEffectAmount = issueHero.Issue.GetActiveIssueEffectAmount(DefaultIssueEffects.HalfVillageProduction);
+					if (activeIssueEffectAmount != 0f)
+					{
+						return activeIssueEffectAmount;
+					}
+				}
+				return 1f;
+			}
+			goto case "NearbyBanditBaseIssue";
+		case "NearbyBanditBaseIssue":
+		case "ExtortionByDesertersIssue":
+		case "MerchantNeedsHelpWithOutlawsIssue":
+		case "LandLordNeedsManualLaborersIssue":
+		case "HeadmanVillageNeedsDraughtAnimalsIssue":
+		case "LandlordTrainingForRetainersIssueBehavior":
+			return 0.7f;
+		}
+	}
+
+	private static void InitializeCustomItems()
+	{
+		if (_itemsInitialized)
+		{
+			return;
+		}
+		try
+		{
+			foreach (string customItemId in _customItemId

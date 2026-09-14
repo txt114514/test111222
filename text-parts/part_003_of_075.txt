@@ -1,0 +1,705 @@
+﻿PART 3/75
+MobileParty(party, key, isTargetingPort: true, out var bestNavigationType2, out var bestNavigationDistance2, out var isFromPort3);
+					if (bestNavigationType2 != MobileParty.NavigationType.None && bestNavigationDistance2 < num18)
+					{
+						navigationType = bestNavigationType2;
+						num18 = bestNavigationDistance2;
+						isFromPort = isFromPort3;
+						flag2 = true;
+					}
+				}
+				if (navigationType == MobileParty.NavigationType.None)
+				{
+					num11++;
+					continue;
+				}
+				num19 = num18 / (Campaign.Current.EstimatedAverageLordPartySpeed * (float)CampaignTime.HoursInDay);
+			}
+			catch
+			{
+				float num20 = MathF.Sqrt(num17);
+				num19 = num20 / (foodSit.PartySpeed * (float)CampaignTime.HoursInDay);
+				navigationType = MobileParty.NavigationType.Default;
+				isFromPort = false;
+				flag2 = false;
+			}
+			if (num19 > 3f)
+			{
+				num12++;
+				continue;
+			}
+			float num21 = PredictFoodOnArrivalCached(key.IsTown, num14, num19, value.PartiesTargeting, value.PartiesAt);
+			if (num21 < num2)
+			{
+				num13++;
+				continue;
+			}
+			float num22 = CalculateSettlementScoreCached(party, key, foodSit, num14, num21, num19, value.PartiesTargeting, value.PartiesAt, targetSettlement);
+			if (num22 > 0f)
+			{
+				AddSettlementScore(p, party, key, num22, navigationType, isFromPort, flag2);
+				if (debugThisParty && _debugScoredSettlements != null)
+				{
+					string text = (flag2 ? " [NAVAL]" : "");
+					_debugScoredSettlements.Add(new DebugSettlementScore
+					{
+						Settlement = key,
+						Score = num22,
+						CurrentFood = num14,
+						PredictedFood = num21,
+						TravelDays = num19,
+						Reason = $"Nav:{navigationType}{text} Comp:{value.PartiesTargeting}→/{value.PartiesAt}@"
+					});
+				}
+			}
+			num5++;
+		}
+		if (debugThisParty)
+		{
+			int num23 = _settlementCache?.Count ?? 0;
+			string text2 = (flag ? " [STARVING PRICES]" : "");
+			Main.Log($"[AI FOOD DEBUG]   Cache: {num23} | Checked: {num5} | Scored: {_debugScoredSettlements?.Count ?? 0}{text2}");
+			Main.Log($"[AI FOOD DEBUG]   Filtered: Food<{num}:{num6} | Dist:{num7} | Access:{num8} | War:{num9} | Hearth:{num10} | Nav:{num11} | Travel>{3f}d:{num12} | PredFood:{num13}");
+		}
+	}
+
+	private float PredictFoodOnArrivalCached(bool isTown, int currentFood, float travelDays, int partiesTargeting, int partiesAt)
+	{
+		float num = (isTown ? 15f : 5f);
+		float num2 = num * travelDays;
+		float num3 = (float)partiesAt + (float)partiesTargeting * 0.5f;
+		float num4 = num3 * 40f;
+		float val = (float)currentFood + num2 - num4;
+		return Math.Max(0f, val);
+	}
+
+	private float CalculateSettlementScoreCached(MobileParty party, Settlement settlement, FoodSituation foodSit, int currentFood, float predictedFood, float travelDays, int partiesTargeting, int partiesAt, Settlement currentTarget)
+	{
+		float num = 5f;
+		float num2 = predictedFood / Math.Max(1f, foodSit.FoodNeeded);
+		float num3 = ((!(num2 < 1f)) ? (1f + 0.2f * Math.Min(2f, num2 - 1f)) : (0.2f + 0.8f * num2));
+		num *= num3;
+		float val;
+		if (travelDays <= 1f)
+		{
+			val = 1.2f - 0.13f * (travelDays / 1f);
+		}
+		else
+		{
+			float num4 = travelDays - 1f;
+			float num5 = 2f;
+			val = 1f - 0.6f * (num4 / num5);
+		}
+		val = Math.Max(0.2f, val);
+		num *= val;
+		float num6 = travelDays * foodSit.DailyConsumption;
+		if (num6 > foodSit.TotalFood && !foodSit.IsStarving)
+		{
+			num *= 0.3f;
+		}
+		float num7 = 1f / (1f + 0.12f * ((float)partiesTargeting + (float)partiesAt * 0.5f));
+		num *= num7;
+		if (settlement.IsTown)
+		{
+			num *= 1.25f;
+		}
+		if (settlement.MapFaction == party.MapFaction)
+		{
+			num *= 1.2f;
+		}
+		else if (party.MapFaction != null && settlement.MapFaction != null && !FactionManager.IsAtWarAgainstFaction(party.MapFaction, settlement.MapFaction))
+		{
+			num *= 1.05f;
+		}
+		num *= foodSit.UrgencyMultiplier;
+		float val2 = (foodSit.IsStarving ? 60f : 30f);
+		num = Math.Min(val2, num);
+		if (currentTarget != null && settlement == currentTarget)
+		{
+			num *= 2f;
+		}
+		return num;
+	}
+
+	private void EvaluateCastlesForResupply(MobileParty party, PartyThinkParams p, FoodSituation foodSit, bool debugThisParty)
+	{
+		Hero leaderHero = party.LeaderHero;
+		if (leaderHero == null || leaderHero.Clan == null)
+		{
+			return;
+		}
+		Vec2 getPosition2D;
+		try
+		{
+			getPosition2D = party.GetPosition2D;
+		}
+		catch
+		{
+			return;
+		}
+		Settlement targetSettlement = party.TargetSettlement;
+		int num = 0;
+		int num2 = 0;
+		foreach (Settlement item in _castleCache)
+		{
+			if ((item.OwnerClan != leaderHero.Clan && (HAPPolicies.RightOfBilleting == null || leaderHero.Clan.Kingdom == null || leaderHero.Clan.Kingdom != item.OwnerClan?.Kingdom || !leaderHero.Clan.Kingdom.ActivePolicies.Contains(HAPPolicies.RightOfBilleting))) || item.IsUnderSiege)
+			{
+				continue;
+			}
+			Town town = item.Town;
+			if (town == null)
+			{
+				continue;
+			}
+			num++;
+			int num3 = town.FoodStocksUpperLimit();
+			float foodStocks = town.FoodStocks;
+			float num4 = ((num3 > 0) ? (foodStocks / (float)num3) : 0f);
+			if (num4 < 0.3f)
+			{
+				continue;
+			}
+			int totalManCount = party.MemberRoster.TotalManCount;
+			float num5 = ((party.Army != null) ? 0.15f : 0.3f);
+			float num6 = (float)totalManCount * num5;
+			float a = num6 * num4;
+			float b = foodStocks * 0.2f;
+			int num7 = (int)MathF.Min(a, b);
+			if (num7 < 5)
+			{
+				continue;
+			}
+			float num8 = getPosition2D.Distance(item.Position.ToVec2());
+			float num9 = num8 / (foodSit.PartySpeed * (float)CampaignTime.HoursInDay);
+			if (num9 > 3f)
+			{
+				continue;
+			}
+			AiHelper.GetBestNavigationTypeAndAdjustedDistanceOfSettlementForMobileParty(party, item, isTargetingPort: false, out var bestNavigationType, out var bestNavigationDistance, out var isFromPort);
+			bool isTargetingPort = false;
+			if (party.HasNavalNavigationCapability && item.HasPort)
+			{
+				AiHelper.GetBestNavigationTypeAndAdjustedDistanceOfSettlementForMobileParty(party, item, isTargetingPort: true, out var bestNavigationType2, out var bestNavigationDistance2, out var isFromPort2);
+				if (bestNavigationDistance2 < bestNavigationDistance)
+				{
+					bestNavigationType = bestNavigationType2;
+					bestNavigationDistance = bestNavigationDistance2;
+					isFromPort = isFromPort2;
+					isTargetingPort = true;
+				}
+			}
+			if (bestNavigationType == MobileParty.NavigationType.None)
+			{
+				continue;
+			}
+			num9 = bestNavigationDistance / (foodSit.PartySpeed * (float)CampaignTime.HoursInDay);
+			if (num9 > 3f)
+			{
+				continue;
+			}
+			float num10 = 8f;
+			float num11 = (float)num7 / Math.Max(1f, foodSit.FoodNeeded);
+			float num12 = ((num11 < 1f) ? (0.2f + 0.8f * num11) : (1f + 0.2f * Math.Min(2f, num11 - 1f)));
+			num10 *= num12;
+			float val;
+			if (num9 <= 1f)
+			{
+				val = 1.2f - 0.13f * (num9 / 1f);
+			}
+			else
+			{
+				float num13 = num9 - 1f;
+				float num14 = 2f;
+				val = 1f - 0.6f * (num13 / num14);
+			}
+			val = Math.Max(0.2f, val);
+			num10 *= val;
+			float num15 = num9 * foodSit.DailyConsumption;
+			if (num15 > foodSit.TotalFood && !foodSit.IsStarving)
+			{
+				num10 *= 0.3f;
+			}
+			float num16 = 0.8f + 0.4f * num4;
+			num10 *= num16;
+			num10 *= 2f;
+			num10 *= foodSit.UrgencyMultiplier;
+			float val2 = (foodSit.IsStarving ? 60f : 30f);
+			num10 = Math.Min(val2, num10);
+			if (targetSettlement != null && item == targetSettlement)
+			{
+				num10 *= 2f;
+			}
+			if (num10 > 0f)
+			{
+				AddSettlementScore(p, party, item, num10, bestNavigationType, isFromPort, isTargetingPort);
+				num2++;
+				if (debugThisParty && _debugScoredSettlements != null)
+				{
+					_debugScoredSettlements.Add(new DebugSettlementScore
+					{
+						Settlement = item,
+						Score = num10,
+						CurrentFood = num7,
+						PredictedFood = num7,
+						TravelDays = num9,
+						Reason = $"CASTLE Stocks:{num4:P0} Est:{num7}"
+					});
+				}
+			}
+		}
+		if (debugThisParty)
+		{
+			Main.Log($"[AI FOOD DEBUG]   Castles: Checked {num}, Scored {num2}");
+		}
+	}
+
+	private static int CountLordPartiesAt(Settlement settlement)
+	{
+		int num = 0;
+		foreach (MobileParty party in settlement.Parties)
+		{
+			if (party.IsLordParty)
+			{
+				num++;
+			}
+		}
+		return num;
+	}
+
+	private static int CountLordPartiesTargeting(Settlement settlement)
+	{
+		int num = 0;
+		foreach (MobileParty allLordParty in MobileParty.AllLordParties)
+		{
+			if (allLordParty.TargetSettlement == settlement)
+			{
+				num++;
+			}
+		}
+		return num;
+	}
+
+	private bool ShouldProcessParty(MobileParty party)
+	{
+		if (party == null || !party.IsActive)
+		{
+			return false;
+		}
+		if (!party.IsLordParty)
+		{
+			return false;
+		}
+		if (party.IsMainParty)
+		{
+			return false;
+		}
+		if (party.LeaderHero == null)
+		{
+			return false;
+		}
+		if (party.Army != null && party.AttachedTo != null)
+		{
+			return false;
+		}
+		if (party.CurrentSettlement != null)
+		{
+			return false;
+		}
+		if (party.BesiegedSettlement != null)
+		{
+			return false;
+		}
+		if (party.MapEvent != null)
+		{
+			return false;
+		}
+		if (party.IsDisbanding)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private void AddSettlementScore(PartyThinkParams p, MobileParty party, Settlement settlement, float score, MobileParty.NavigationType navType, bool isFromPort, bool isTargetingPort)
+	{
+		AIBehaviorData aiBehaviorData = new AIBehaviorData(settlement, AiBehavior.GoToSettlement, navType, willGatherArmy: false, isFromPort, isTargetingPort);
+		if (p.TryGetBehaviorScore(in aiBehaviorData, out var score2))
+		{
+			p.SetBehaviorScore(in aiBehaviorData, score2 + score);
+		}
+		else
+		{
+			p.AddBehaviorScore((aiBehaviorData, score));
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\BanditRaidBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Map;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Party.PartyComponents;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class BanditRaidBehavior : CampaignBehaviorBase
+{
+	private const bool DEBUG_RAID = false;
+
+	private const float LAND_RAID_RANGE = 40f;
+
+	private const float NAVAL_RAID_RANGE = 50f;
+
+	private const float LORD_DETERRENCE_RADIUS = 25f;
+
+	private const float MIN_STRENGTH_RATIO = 1.5f;
+
+	private const int MIN_BANDIT_PARTY_SIZE = 20;
+
+	private const float BASE_VILLAGE_DEFENSE = 30f;
+
+	private const float MIN_HEARTH_TO_RAID = 200f;
+
+	private const float RAID_BEHAVIOR_SCORE = 10f;
+
+	private const int NAVAL_LOOT_VALUE_CAP = 1000;
+
+	private readonly HashSet<Hideout> _hideoutsWithActiveRaid = new HashSet<Hideout>();
+
+	private readonly HashSet<Settlement> _villagesAlreadyTargeted = new HashSet<Settlement>();
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, OnDailyTick);
+		CampaignEvents.AiHourlyTickEvent.AddNonSerializedListener(this, OnAiHourlyTick);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+	}
+
+	private void OnAiHourlyTick(MobileParty party, PartyThinkParams p)
+	{
+		if ((GlobalSettings<HAPSettings>.Instance == null || GlobalSettings<HAPSettings>.Instance.BanditRaidsEnabled) && party.IsBandit && party.DefaultBehavior == AiBehavior.RaidSettlement && party.TargetSettlement != null)
+		{
+			bool isCurrentlyAtSea = party.IsCurrentlyAtSea;
+			MobileParty.NavigationType navigationType = ((!isCurrentlyAtSea) ? MobileParty.NavigationType.Default : MobileParty.NavigationType.Naval);
+			AIBehaviorData item = new AIBehaviorData(party.TargetSettlement, AiBehavior.RaidSettlement, navigationType, willGatherArmy: false, isFromPort: false, isCurrentlyAtSea);
+			p.AddBehaviorScore((item, 10f));
+		}
+	}
+
+	private void OnDailyTick()
+	{
+		if (GlobalSettings<HAPSettings>.Instance != null && !GlobalSettings<HAPSettings>.Instance.BanditRaidsEnabled)
+		{
+			return;
+		}
+		try
+		{
+			RefreshActiveRaidTracking();
+			EvaluateBanditRaids();
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in BanditRaidBehavior.OnDailyTick: " + ex.Message);
+		}
+	}
+
+	private void RefreshActiveRaidTracking()
+	{
+		_hideoutsWithActiveRaid.Clear();
+		_villagesAlreadyTargeted.Clear();
+		foreach (MobileParty allBanditParty in MobileParty.AllBanditParties)
+		{
+			if (allBanditParty.DefaultBehavior == AiBehavior.RaidSettlement)
+			{
+				if (allBanditParty.TargetSettlement != null)
+				{
+					_villagesAlreadyTargeted.Add(allBanditParty.TargetSettlement);
+				}
+				BanditPartyComponent banditPartyComponent = allBanditParty.BanditPartyComponent;
+				if (banditPartyComponent?.Hideout != null)
+				{
+					_hideoutsWithActiveRaid.Add(banditPartyComponent.Hideout);
+				}
+			}
+		}
+		foreach (Settlement item in Settlement.All)
+		{
+			if (item.IsVillage && item.Party?.MapEvent != null && item.Party.MapEvent.IsRaid)
+			{
+				_villagesAlreadyTargeted.Add(item);
+			}
+		}
+	}
+
+	private void EvaluateBanditRaids()
+	{
+		List<MobileParty> list = new List<MobileParty>(MobileParty.AllBanditParties);
+		foreach (MobileParty item in list)
+		{
+			try
+			{
+				if (IsEligibleForRaid(item))
+				{
+					if (IsNavalPirate(item))
+					{
+						TryAssignNavalRaid(item);
+					}
+					else
+					{
+						TryAssignLandRaid(item);
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				Main.Log("[BanditRaid] ERROR evaluating " + (item?.Name?.ToString() ?? "unknown") + ": " + ex.Message);
+			}
+		}
+	}
+
+	private bool IsEligibleForRaid(MobileParty party)
+	{
+		if (!party.IsBandit || party.IsBanditBossParty)
+		{
+			return false;
+		}
+		if (party.LeaderHero != null)
+		{
+			return false;
+		}
+		if (party.MapEvent != null)
+		{
+			return false;
+		}
+		if (party.DefaultBehavior == AiBehavior.RaidSettlement)
+		{
+			return false;
+		}
+		if (party.MemberRoster.TotalManCount < 20)
+		{
+			return false;
+		}
+		if (IsNavalPirate(party) && IsCarryingSignificantLoot(party))
+		{
+			return false;
+		}
+		if (!party.IsActive || party.CurrentSettlement != null)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private bool IsNavalPirate(MobileParty party)
+	{
+		Clan actualClan = party.ActualClan;
+		if (actualClan?.Culture == null)
+		{
+			return false;
+		}
+		return !actualClan.Culture.CanHaveSettlement && party.HasNavalNavigationCapability && actualClan.IsBanditFaction;
+	}
+
+	private void TryAssignLandRaid(MobileParty party)
+	{
+		BanditPartyComponent banditPartyComponent = party.BanditPartyComponent;
+		if (banditPartyComponent == null)
+		{
+			return;
+		}
+		Hideout hideout = banditPartyComponent.Hideout;
+		if (hideout == null || !hideout.IsInfested || _hideoutsWithActiveRaid.Contains(hideout))
+		{
+			return;
+		}
+		Settlement settlement = hideout.Settlement;
+		if (settlement == null)
+		{
+			return;
+		}
+		float estimatedStrength = party.Party.EstimatedStrength;
+		Settlement settlement2 = null;
+		float num = float.MinValue;
+		LocatableSearchData<Settlement> data = Settlement.StartFindingLocatablesAroundPosition(settlement.Position.ToVec2(), 40f);
+		for (Settlement settlement3 = Settlement.FindNextLocatable(ref data); settlement3 != null; settlement3 = Settlement.FindNextLocatable(ref data))
+		{
+			if (IsValidLandRaidTarget(settlement3, estimatedStrength))
+			{
+				float num2 = settlement.Position.DistanceSquared(settlement3.Position);
+				float num3 = 0f - num2;
+				if (num3 > num)
+				{
+					num = num3;
+					settlement2 = settlement3;
+				}
+			}
+		}
+		if (settlement2 != null)
+		{
+			party.SetMoveRaidSettlement(settlement2, MobileParty.NavigationType.Default, isTargetingPort: false);
+			_hideoutsWithActiveRaid.Add(hideout);
+			_villagesAlreadyTargeted.Add(settlement2);
+			bool flag = false;
+		}
+	}
+
+	private bool IsValidLandRaidTarget(Settlement settlement, float banditStrength)
+	{
+		if (!settlement.IsVillage)
+		{
+			return false;
+		}
+		Village village = settlement.Village;
+		if (village.VillageState != Village.VillageStates.Normal)
+		{
+			return false;
+		}
+		if (village.Hearth < 200f)
+		{
+			return false;
+		}
+		if (_villagesAlreadyTargeted.Contains(settlement))
+		{
+			return false;
+		}
+		if (settlement.Party.MapEvent != null)
+		{
+			return false;
+		}
+		float militiaStrength = GetMilitiaStrength(settlement);
+		if (banditStrength < militiaStrength * 1.5f)
+		{
+			return false;
+		}
+		if (IsFactionLordNearby(settlement))
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private void TryAssignNavalRaid(MobileParty party)
+	{
+		float estimatedStrength = party.Party.EstimatedStrength;
+		Vec2 position = party.Position.ToVec2();
+		Settlement settlement = null;
+		float num = float.MinValue;
+		LocatableSearchData<Settlement> data = Settlement.StartFindingLocatablesAroundPosition(position, 50f);
+		for (Settlement settlement2 = Settlement.FindNextLocatable(ref data); settlement2 != null; settlement2 = Settlement.FindNextLocatable(ref data))
+		{
+			if (IsValidNavalRaidTarget(settlement2, estimatedStrength))
+			{
+				float num2 = party.Position.DistanceSquared(settlement2.Position);
+				float num3 = 0f - num2;
+				if (num3 > num)
+				{
+					num = num3;
+					settlement = settlement2;
+				}
+			}
+		}
+		if (settlement != null)
+		{
+			party.SetMoveRaidSettlement(settlement, MobileParty.NavigationType.Naval, isTargetingPort: true);
+			_villagesAlreadyTargeted.Add(settlement);
+			bool flag = false;
+		}
+	}
+
+	private bool IsValidNavalRaidTarget(Settlement settlement, float banditStrength)
+	{
+		if (!settlement.IsVillage)
+		{
+			return false;
+		}
+		if (!settlement.HasPort)
+		{
+			return false;
+		}
+		Village village = settlement.Village;
+		if (village.VillageState != Village.VillageStates.Normal)
+		{
+			return false;
+		}
+		if (village.Hearth < 200f)
+		{
+			return false;
+		}
+		if (_villagesAlreadyTargeted.Contains(settlement))
+		{
+			return false;
+		}
+		if (settlement.Party.MapEvent != null)
+		{
+			return false;
+		}
+		float militiaStrength = GetMilitiaStrength(settlement);
+		if (banditStrength < militiaStrength * 1.5f)
+		{
+			return false;
+		}
+		if (IsFactionLordNearby(settlement))
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private float GetMilitiaStrength(Settlement settlement)
+	{
+		float val = 0f;
+		MobileParty mobileParty = settlement.MilitiaPartyComponent?.MobileParty;
+		if (mobileParty != null)
+		{
+			val = mobileParty.Party.EstimatedStrength;
+		}
+		return Math.Max(val, 30f);
+	}
+
+	private bool IsFactionLordNearby(Settlement village)
+	{
+		IFaction mapFaction = village.MapFaction;
+		if (mapFaction == null)
+		{
+			return false;
+		}
+		Vec2 position = village.Position.ToVec2();
+		LocatableSearchData<MobileParty> data = MobileParty.StartFindingLocatablesAroundPosition(position, 25f);
+		for (MobileParty mobileParty = MobileParty.FindNextLocatable(ref data); mobileParty != null; mobileParty = MobileParty.FindNextLocatable(ref data))
+		{
+			if (mobileParty.IsActive && !mobileParty.IsGarrison && !mobileParty.IsMilitia && !mobileParty.IsCaravan && !mobileParty.IsVillager && !mobileParty.IsBandit && mobileParty.CurrentSettlement == null && mobileParty.LeaderHero != null && mobileParty.MapFaction == mapFaction)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private bool IsCarryingSignificantLoot(MobileParty party)
+	{
+		if (party.TotalWeightCarried >= (float)party.InventoryCapacity)
+		{
+			return true;
+		}
+		int num = 0;
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemRosterElement itemRosterElement = party.ItemRoster[i];
+			num += itemRosterElement.Amount * itemRosterElement.EquipmentElement.Item.Value;
+		}
+		return num >= 1000;
+	}
+}
+
+===== END FI

@@ -1,0 +1,743 @@
+﻿PART 15/75
+.Instance.GetObject<ItemObject>("meat_mutton");
+					itemObject2 = MBObjectManager.Instance.GetObject<ItemObject>("medium_hides");
+					num2 = 2;
+					num3 = 1;
+					break;
+				case "hog":
+					itemObject = MBObjectManager.Instance.GetObject<ItemObject>("meat_pork");
+					itemObject2 = MBObjectManager.Instance.GetObject<ItemObject>("medium_hides");
+					num2 = 2;
+					num3 = 1;
+					break;
+				case "cow":
+					itemObject = MBObjectManager.Instance.GetObject<ItemObject>("meat_beef");
+					itemObject2 = MBObjectManager.Instance.GetObject<ItemObject>("hides");
+					num2 = 4;
+					num3 = 2;
+					break;
+				}
+				if (itemObject == null || num2 <= 0)
+				{
+					continue;
+				}
+				int num4 = meatNeeded - num;
+				int val = (int)Math.Ceiling((float)num4 / (float)num2);
+				int num5 = Math.Min(val, elementNumber);
+				if (num5 <= 0)
+				{
+					continue;
+				}
+				itemRoster.AddToCounts(itemAtIndex, -num5);
+				int num6 = num5 * num2;
+				itemRoster.AddToCounts(itemObject, num6);
+				num += num6;
+				int num7 = num5 * num3;
+				if (num7 > 0 && itemObject2 != null)
+				{
+					itemRoster.AddToCounts(itemObject2, num7);
+				}
+				string key = itemAtIndex.Name.ToString();
+				string key2 = itemObject.Name.ToString();
+				if (!slaughterResult.AnimalCounts.ContainsKey(key))
+				{
+					slaughterResult.AnimalCounts[key] = 0;
+				}
+				slaughterResult.AnimalCounts[key] += num5;
+				if (!slaughterResult.MeatCounts.ContainsKey(key2))
+				{
+					slaughterResult.MeatCounts[key2] = 0;
+				}
+				slaughterResult.MeatCounts[key2] += num6;
+				if (num7 > 0 && itemObject2 != null)
+				{
+					string key3 = itemObject2.Name.ToString();
+					if (!slaughterResult.HideCounts.ContainsKey(key3))
+					{
+						slaughterResult.HideCounts[key3] = 0;
+					}
+					slaughterResult.HideCounts[key3] += num7;
+				}
+				slaughterResult.TotalAnimals += num5;
+				slaughterResult.TotalMeat += num6;
+				slaughterResult.TotalHides += num7;
+			}
+		}
+		if (num < meatNeeded && !party.IsMainParty)
+		{
+			ItemObject itemObject3 = MBObjectManager.Instance.GetObject<ItemObject>("hides");
+			List<(int, int, ItemObject)> list = new List<(int, int, ItemObject)>();
+			for (int k = 0; k < itemRoster.Count; k++)
+			{
+				ItemObject itemAtIndex2 = itemRoster.GetItemAtIndex(k);
+				if (itemAtIndex2 == null || !itemAtIndex2.HasHorseComponent)
+				{
+					continue;
+				}
+				int elementNumber2 = itemRoster.GetElementNumber(k);
+				if (elementNumber2 <= 0)
+				{
+					continue;
+				}
+				int item;
+				if (itemAtIndex2.HorseComponent.IsPackAnimal)
+				{
+					item = 0;
+				}
+				else
+				{
+					if (!itemAtIndex2.HorseComponent.IsMount)
+					{
+						continue;
+					}
+					string text2 = itemAtIndex2.ItemCategory?.StringId ?? "";
+					item = ((text2 == "horse" || text2 == "workshop_horse") ? 1 : ((!(text2 == "war_horse") && !(text2 == "workshop_war_horse")) ? ((!(text2 == "noble_horse")) ? 1 : 3) : 2));
+				}
+				list.Add((item, itemAtIndex2.Value, itemAtIndex2));
+			}
+			list.Sort(delegate((int, int, ItemObject) a, (int, int, ItemObject) b)
+			{
+				int num14 = a.Item1.CompareTo(b.Item1);
+				return (num14 != 0) ? num14 : a.Item2.CompareTo(b.Item2);
+			});
+			foreach (var item3 in list)
+			{
+				if (num >= meatNeeded)
+				{
+					break;
+				}
+				ItemObject item2 = item3.Item3;
+				int itemNumber = itemRoster.GetItemNumber(item2);
+				if (itemNumber <= 0)
+				{
+					continue;
+				}
+				int num8 = ((item2.HorseComponent.MeatCount > 0) ? item2.HorseComponent.MeatCount : 3);
+				int num9 = ((item2.HorseComponent.HideCount <= 0) ? 1 : item2.HorseComponent.HideCount);
+				int num10 = meatNeeded - num;
+				int val2 = (int)Math.Ceiling((float)num10 / (float)num8);
+				int num11 = Math.Min(val2, itemNumber);
+				if (num11 <= 0)
+				{
+					continue;
+				}
+				itemRoster.AddToCounts(item2, -num11);
+				ItemObject meat = DefaultItems.Meat;
+				int num12 = num11 * num8;
+				itemRoster.AddToCounts(meat, num12);
+				num += num12;
+				int num13 = num11 * num9;
+				if (itemObject3 != null && num13 > 0)
+				{
+					itemRoster.AddToCounts(itemObject3, num13);
+					string key4 = itemObject3.Name.ToString();
+					if (!slaughterResult.HideCounts.ContainsKey(key4))
+					{
+						slaughterResult.HideCounts[key4] = 0;
+					}
+					slaughterResult.HideCounts[key4] += num13;
+					slaughterResult.TotalHides += num13;
+				}
+				string key5 = item2.Name.ToString();
+				string key6 = meat.Name.ToString();
+				if (!slaughterResult.AnimalCounts.ContainsKey(key5))
+				{
+					slaughterResult.AnimalCounts[key5] = 0;
+				}
+				slaughterResult.AnimalCounts[key5] += num11;
+				if (!slaughterResult.MeatCounts.ContainsKey(key6))
+				{
+					slaughterResult.MeatCounts[key6] = 0;
+				}
+				slaughterResult.MeatCounts[key6] += num12;
+				slaughterResult.TotalAnimals += num11;
+				slaughterResult.TotalMeat += num12;
+			}
+		}
+		if (party.IsMainParty && slaughterResult.TotalAnimals > 0)
+		{
+			DisplaySlaughterMessage(slaughterResult);
+		}
+		return num;
+	}
+
+	private bool TryAutoSlaughterLivestock(MobileParty party)
+	{
+		int num = TryAutoSlaughterLivestockBatch(party, 1);
+		return num > 0;
+	}
+
+	private void DisplaySlaughterMessage(SlaughterResult result)
+	{
+		Color color = Color.ConvertStringToColor("#CD5C5CFF");
+		List<string> list = new List<string>();
+		foreach (KeyValuePair<string, int> animalCount in result.AnimalCounts)
+		{
+			list.Add(animalCount.Value + " " + animalCount.Key);
+		}
+		string variable = string.Join(", ", list);
+		List<string> list2 = new List<string>();
+		foreach (KeyValuePair<string, int> meatCount in result.MeatCounts)
+		{
+			list2.Add(meatCount.Value + " " + meatCount.Key);
+		}
+		string variable2 = string.Join(", ", list2);
+		TextObject textObject;
+		if (result.TotalHides > 0)
+		{
+			List<string> list3 = new List<string>();
+			foreach (KeyValuePair<string, int> hideCount in result.HideCounts)
+			{
+				list3.Add(hideCount.Value + " " + hideCount.Key);
+			}
+			string variable3 = string.Join(", ", list3);
+			textObject = new TextObject("{=HAP_AutoSlaughterWithHide}Slaughtered {ANIMAL_TEXT} for {MEAT_TEXT} and {HIDE_TEXT}.");
+			textObject.SetTextVariable("ANIMAL_TEXT", variable);
+			textObject.SetTextVariable("MEAT_TEXT", variable2);
+			textObject.SetTextVariable("HIDE_TEXT", variable3);
+		}
+		else
+		{
+			textObject = new TextObject("{=HAP_AutoSlaughterNoHide}Slaughtered {ANIMAL_TEXT} for {MEAT_TEXT}.");
+			textObject.SetTextVariable("ANIMAL_TEXT", variable);
+			textObject.SetTextVariable("MEAT_TEXT", variable2);
+		}
+		InformationManager.DisplayMessage(new InformationMessage(textObject.ToString(), color));
+	}
+
+	private int RemoveFoodProportionally(MobileParty party, int wholeUnitsToRemove, bool isSpoilagePass = false)
+	{
+		if (party == null || wholeUnitsToRemove <= 0)
+		{
+			return 0;
+		}
+		ItemRoster itemRoster = party.ItemRoster;
+		if (itemRoster == null || GetActualFoodCount(itemRoster) <= 0)
+		{
+			return 0;
+		}
+		bool flag = false;
+		_reusableFoodItems.Clear();
+		List<FoodItemWeight> reusableFoodItems = _reusableFoodItems;
+		FoodConsumptionModel foodConsumptionModel = Campaign.Current.Models.MobilePartyFoodConsumptionModel as FoodConsumptionModel;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemObject itemAtIndex = itemRoster.GetItemAtIndex(i);
+			bool flag2 = false;
+			if (itemAtIndex.IsFood)
+			{
+				int elementNumber = itemRoster.GetElementNumber(i);
+				if (elementNumber > 0 && (isSpoilagePass || !party.IsMainParty || !ReservedItemService.IsReserved(itemAtIndex) || ReservedItemService.ShouldUseReservedFood(party)))
+				{
+					float num = foodConsumptionModel?.GetEnvironmentAdjustedSpoilageRate(party, itemAtIndex) ?? GetFoodTypeSpoilageRate(itemAtIndex);
+					float foodDeliciousness = GetFoodDeliciousness(itemAtIndex);
+					float randomFloat = MBRandom.RandomFloat;
+					float weight = ((!isSpoilagePass) ? (num * 0.4f + foodDeliciousness * 0.4f + randomFloat * 0.2f) : (num * 0.9f + randomFloat * 0.1f));
+					bool flag3 = false;
+					reusableFoodItems.Add(new FoodItemWeight
+					{
+						Item = itemAtIndex,
+						Count = elementNumber,
+						Weight = weight
+					});
+				}
+			}
+		}
+		bool flag4 = false;
+		if (reusableFoodItems.Count == 0)
+		{
+			return 0;
+		}
+		float num2 = 0f;
+		foreach (FoodItemWeight item in reusableFoodItems)
+		{
+			num2 += item.Weight;
+		}
+		bool flag5 = false;
+		if (num2 <= 0f)
+		{
+			return 0;
+		}
+		reusableFoodItems.Sort((FoodItemWeight a, FoodItemWeight b) => b.Weight.CompareTo(a.Weight));
+		int num3 = wholeUnitsToRemove;
+		foreach (FoodItemWeight item2 in reusableFoodItems)
+		{
+			if (num3 <= 0)
+			{
+				break;
+			}
+			float num4 = item2.Weight / num2 * (float)wholeUnitsToRemove;
+			int val = Math.Min((int)Math.Ceiling(num4), item2.Count);
+			val = Math.Min(val, num3);
+			if (val > 0)
+			{
+				bool flag6 = false;
+				itemRoster.AddToCounts(item2.Item, -val);
+				num3 -= val;
+			}
+		}
+		if (num3 > 0)
+		{
+			foreach (FoodItemWeight item3 in reusableFoodItems)
+			{
+				if (num3 <= 0)
+				{
+					break;
+				}
+				int itemNumber = itemRoster.GetItemNumber(item3.Item);
+				if (itemNumber > 0)
+				{
+					int num5 = Math.Min(num3, itemNumber);
+					if (num5 > 0)
+					{
+						itemRoster.AddToCounts(item3.Item, -num5);
+						num3 -= num5;
+					}
+				}
+			}
+		}
+		return wholeUnitsToRemove - num3;
+	}
+
+	private float GetFoodTypeSpoilageRate(ItemObject foodItem)
+	{
+		if (foodItem == null || foodItem.StringId == null)
+		{
+			return 0.3f;
+		}
+		switch (StringCache.GetLowerCase(foodItem.StringId))
+		{
+		case "fish":
+		case "crab":
+		case "lobster":
+		case "meat":
+		case "meat_beef":
+		case "meat_poultry":
+		case "meat_mutton":
+		case "meat_pork":
+		case "meat_hare":
+			return 0.9f;
+		case "lobster_cooked":
+		case "meat_sausage":
+		case "meat_ham":
+		case "meat_poultry_cooked":
+		case "meat_mutton_cooked":
+		case "meat_pork_cooked":
+		case "milk":
+		case "heavy_cream":
+		case "stew":
+		case "egg":
+			return 0.5f;
+		case "apple_fruit":
+		case "orange_fruit":
+		case "melon_fruit":
+		case "cabbage_vegetable":
+		case "leek_vegetable":
+		case "carrot_vegetable":
+		case "wine":
+		case "pie":
+		case "grape":
+		case "dough":
+			return 0.4f;
+		case "butter":
+		case "cheese":
+		case "date_fruit":
+		case "olives":
+		case "beer":
+		case "ale":
+		case "cider":
+		case "bread":
+			return 0.25f;
+		case "honey":
+		case "mead":
+		case "grain":
+		case "flour":
+		case "nuts":
+			return 0.12f;
+		default:
+			return 0.3f;
+		}
+	}
+
+	private float GetFoodDeliciousness(ItemObject foodItem)
+	{
+		try
+		{
+			if (foodItem?.ItemComponent is TradeItemComponent tradeItemComponent)
+			{
+				float num = tradeItemComponent.MoraleBonus;
+				float val = num / 5f;
+				return Math.Max(0f, Math.Min(1f, val));
+			}
+		}
+		catch
+		{
+		}
+		return GetFallbackDeliciousness(foodItem);
+	}
+
+	private float GetFallbackDeliciousness(ItemObject foodItem)
+	{
+		switch (StringCache.GetLowerCase(foodItem.StringId))
+		{
+		case "wine":
+		case "mead":
+			return 1f;
+		case "beer":
+		case "cider":
+		case "meat_sausage":
+		case "meat_ham":
+		case "meat_poultry_cooked":
+		case "meat_mutton_cooked":
+		case "meat_pork_cooked":
+		case "lobster_cooked":
+			return 0.8f;
+		case "ale":
+		case "pie":
+		case "stew":
+		case "meat_beef":
+		case "lobster":
+			return 0.6f;
+		case "butter":
+		case "cheese":
+		case "heavy_cream":
+		case "honey":
+		case "nuts":
+		case "date_fruit":
+		case "olives":
+		case "crab":
+		case "meat_poultry":
+		case "meat_mutton":
+		case "meat_pork":
+		case "meat_hare":
+		case "orange_fruit":
+		case "melon_fruit":
+		case "mushroom_vegetable":
+		case "bread":
+		case "grape":
+			return 0.4f;
+		case "grain":
+		case "flour":
+		case "dough":
+		case "egg":
+		case "milk":
+		case "meat":
+		case "fish":
+		case "cabbage_vegetable":
+		case "leek_vegetable":
+		case "carrot_vegetable":
+		case "apple_fruit":
+			return 0.2f;
+		default:
+			return 0.4f;
+		}
+	}
+
+	private int GetFoodVarietyMoraleBonus(int variety)
+	{
+		switch (variety)
+		{
+		case 0:
+		case 1:
+			return -6;
+		case 2:
+			return -4;
+		case 3:
+			return -2;
+		case 4:
+			return 0;
+		case 5:
+			return 1;
+		case 6:
+			return 2;
+		case 7:
+			return 3;
+		case 8:
+		case 9:
+			return 4;
+		case 10:
+		case 11:
+			return 5;
+		default:
+			return 6;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\GarrisonSupplyPressureBehavior.cs =====
+using System;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class GarrisonSupplyPressureBehavior : CampaignBehaviorBase
+{
+	private const float PRESSURE_START_DAYS = 7f;
+
+	private const float PRESSURE_MAX_DAYS = 0f;
+
+	private const int MIN_REMOVAL = 1;
+
+	private const int MAX_REMOVAL = 5;
+
+	private const int MIN_GARRISON_FOR_PRESSURE = 100;
+
+	private const bool DEBUG_PRESSURE = false;
+
+	private const bool USE_EMERGENCY_GRANARY_CHECK = true;
+
+	private const float GRANARY_HEALTHY_PERCENT = 0.3f;
+
+	private const float MARKET_HEALTHY_DAYS = 7f;
+
+	private const float GARRISON_SHARE_SCALE = 4f;
+
+	private const float LIVESTOCK_FOOD_WEIGHT = 1f;
+
+	public static int GetSupplyPressureCount(Settlement settlement)
+	{
+		if (settlement == null || !settlement.IsFortification)
+		{
+			return 0;
+		}
+		Town town = settlement.Town;
+		if (town == null)
+		{
+			return 0;
+		}
+		if ((GlobalSettings<HAPSettings>.Instance?.StarvationEffects?.SelectedIndex ?? 2) == 0)
+		{
+			return 0;
+		}
+		if (settlement.IsUnderSiege)
+		{
+			return 0;
+		}
+		float starvationDays = StarvationDesertionBehavior.GetStarvationDays(settlement);
+		if (starvationDays >= 7f)
+		{
+			return 0;
+		}
+		int num = town.GarrisonParty?.Party.NumberOfAllMembers ?? 0;
+		if (num <= 100)
+		{
+			return 0;
+		}
+		bool flag = true;
+		if (!FoodSystemConstants.IsEmergencyMode(town))
+		{
+			return 0;
+		}
+		if (town.IsTown)
+		{
+			float num2 = EstimateMarketFoodHealth(town.Settlement);
+			float num3 = town.Prosperity / 80f + (float)num / 40f;
+			if (num3 > 0f && num2 / num3 >= 7f)
+			{
+				return 0;
+			}
+		}
+		float num4 = EstimateDaysOfFood(town);
+		if (num4 >= 7f)
+		{
+			return 0;
+		}
+		if (num4 <= 0f)
+		{
+			return 5;
+		}
+		float num5 = 1f - (num4 - 0f) / 7f;
+		int num6 = 1 + (int)(num5 * 4f);
+		num6 = (int)MathF.Clamp(num6, 1f, 5f);
+		float resultNumber = Campaign.Current.Models.SettlementFoodModel.CalculateTownFoodStocksChange(town, includeMarketStocks: false).ResultNumber;
+		if (resultNumber < 0f)
+		{
+			float num7 = (float)num / (float)Campaign.Current.Models.SettlementFoodModel.NumberOfMenOnGarrisonToEatOneFood;
+			float num8 = num7 / (0f - resultNumber);
+			float num9 = MathF.Min(num8 * 4f, 1f);
+			int val = MBRandom.RoundRandomized((float)num6 * num9);
+			return Math.Max(val, 0);
+		}
+		return 0;
+	}
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.DailyTickSettlementEvent.AddNonSerializedListener(this, OnDailyTickSettlement);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+	}
+
+	private void OnDailyTickSettlement(Settlement settlement)
+	{
+		if (settlement == null || !settlement.IsFortification)
+		{
+			return;
+		}
+		int num = GetSupplyPressureCount(settlement);
+		if (num <= 0)
+		{
+			return;
+		}
+		MobileParty mobileParty = settlement.Town?.GarrisonParty;
+		if (mobileParty != null)
+		{
+			int totalManCount = mobileParty.MemberRoster.TotalManCount;
+			if (totalManCount - num < 100)
+			{
+				num = totalManCount - 100;
+			}
+			if (num > 0)
+			{
+				int num2 = RemoveTroopsLowestFirst(mobileParty.MemberRoster, num);
+				bool flag = false;
+			}
+		}
+	}
+
+	private static float EstimateDaysOfFood(Town town)
+	{
+		float foodStocks = town.FoodStocks;
+		if (foodStocks <= 0f)
+		{
+			return 0f;
+		}
+		float resultNumber = Campaign.Current.Models.SettlementFoodModel.CalculateTownFoodStocksChange(town, includeMarketStocks: false).ResultNumber;
+		if (resultNumber >= 0f)
+		{
+			return float.MaxValue;
+		}
+		return foodStocks / (0f - resultNumber);
+	}
+
+	private static int RemoveTroopsLowestFirst(TroopRoster roster, int count)
+	{
+		int num = 0;
+		for (int i = 0; i <= 6; i++)
+		{
+			if (num >= count)
+			{
+				break;
+			}
+			int num2 = roster.Count - 1;
+			while (num2 >= 0 && num < count)
+			{
+				TroopRosterElement elementCopyAtIndex = roster.GetElementCopyAtIndex(num2);
+				CharacterObject character = elementCopyAtIndex.Character;
+				if (character != null && !character.IsHero && character.Tier == i)
+				{
+					int num3 = MathF.Min(elementCopyAtIndex.WoundedNumber, count - num);
+					if (num3 > 0)
+					{
+						roster.AddToCounts(character, -num3, insertAtFront: false, -num3);
+						num += num3;
+					}
+					if (num < count)
+					{
+						int a = elementCopyAtIndex.Number - elementCopyAtIndex.WoundedNumber;
+						int num4 = MathF.Min(a, count - num);
+						if (num4 > 0)
+						{
+							roster.AddToCounts(character, -num4);
+							num += num4;
+						}
+					}
+				}
+				num2--;
+			}
+		}
+		return num;
+	}
+
+	private static float EstimateMarketFoodHealth(Settlement settlement)
+	{
+		if (settlement == null)
+		{
+			return 0f;
+		}
+		ItemRoster itemRoster = settlement.ItemRoster;
+		if (itemRoster == null)
+		{
+			return 0f;
+		}
+		float num = 0f;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0)
+			{
+				if ((item.ItemCategory != null && item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores) || item.IsFood)
+				{
+					num += (float)elementCopyAtIndex.Amount;
+				}
+				else if (item.HasHorseComponent && item.HorseComponent.IsLiveStock)
+				{
+					int num2 = ((item.ItemCategory == DefaultItemCategories.Cow) ? 4 : ((item.ItemCategory != DefaultItemCategories.Sheep && item.ItemCategory != DefaultItemCategories.Hog) ? 1 : 2));
+					num += (float)(elementCopyAtIndex.Amount * num2) * 1f;
+				}
+			}
+		}
+		return num;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Behaviors\HerderPartyCampaignBehavior.cs =====
+using System;
+using System.Collections.Generic;
+using HarvestAndProduction.Models;
+using HarvestAndProduction.PartyComponents;
+using Helpers;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.Map;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Behaviors;
+
+public class HerderPartyCampaignBehavior : CampaignBehaviorBase
+{
+	private const bool DEBUG_HERDER = false;
+
+	private const float COW_MILK_RATE_PER_ANIMAL = 0.008f;
+
+	private const float SHEEP_MILK_RATE_PER_ANIMAL = 0.004f;
+
+	private const float SHEEP_WOOL_RATE_PER_ANIMAL = 0.002f;
+
+	private const float MIN_HERDING_HOURS = 6f;
+
+	private const float MAX_HERDING_HOURS = 10f;
+
+	private const float MIN_ROAMING_DAYS = 1f;
+
+	private const float MAX_ROAMING_DAYS = 3f;
+
+	private const float MAX_GRAZING_DISTANCE = 12f;
+
+	private const float MIN_GRAZING_DISTANCE = 3f;
+
+	private const int MIN_ITEMS_TO_DROPOFF = 3;
+
+	private const float SLAUGHTER_PERCENT = 0.03f;
+
+	private const float RESTOCK_PERCENT = 0.1f;
+
+	private const int MEAT_PER

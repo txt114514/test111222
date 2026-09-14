@@ -1,0 +1,711 @@
+﻿PART 60/75
+not found (original={method != null}, postfix={method2 != null})");
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("FoodCapacityTooltipPatch ERROR: " + ex.Message);
+		}
+		MethodInfo method3 = typeof(CampaignUIHelper).GetMethod("GetTownGarrisonTooltip", BindingFlags.Static | BindingFlags.Public);
+		MethodInfo method4 = typeof(FoodCapacityTooltipPatch).GetMethod("GarrisonPostfix", BindingFlags.Static | BindingFlags.Public);
+		if (method3 != null && method4 != null)
+		{
+			harmony.Patch(method3, null, new HarmonyMethod(method4));
+			Main.Log("FoodCapacityTooltipPatch: Patched GetTownGarrisonTooltip");
+		}
+		else
+		{
+			Main.Log($"FoodCapacityTooltipPatch: GetTownGarrisonTooltip not found (original={method3 != null}, postfix={method4 != null})");
+		}
+	}
+
+	public static void Postfix(ref List<TooltipProperty> __result, Town town)
+	{
+		if (__result == null || __result.Count == 0 || town == null)
+		{
+			return;
+		}
+		try
+		{
+			TooltipProperty tooltipProperty = __result[0];
+			if (tooltipProperty.PropertyModifier == 4096 && !string.IsNullOrEmpty(tooltipProperty.ValueLabel))
+			{
+				int num = town.FoodStocksUpperLimit();
+				tooltipProperty.ValueLabel = $"{tooltipProperty.ValueLabel}/{num}";
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	public static void GarrisonPostfix(ref List<TooltipProperty> __result, Town town)
+	{
+		if (__result == null || __result.Count == 0 || town == null)
+		{
+			return;
+		}
+		try
+		{
+			MobileParty garrisonParty = town.GarrisonParty;
+			if (garrisonParty != null)
+			{
+				TooltipProperty tooltipProperty = __result[0];
+				if (tooltipProperty.PropertyModifier == 4096 && !string.IsNullOrEmpty(tooltipProperty.ValueLabel))
+				{
+					int partySizeLimit = garrisonParty.Party.PartySizeLimit;
+					tooltipProperty.ValueLabel = $"{tooltipProperty.ValueLabel}/{partySizeLimit}";
+				}
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\FoodConsumptionBehaviorDailyTickPatch.cs =====
+using System;
+using System.Reflection;
+using HarmonyLib;
+using HarvestAndProduction.Models;
+using TaleWorlds.CampaignSystem.Party;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch]
+public static class FoodConsumptionBehaviorDailyTickPatch
+{
+	private static MethodBase TargetMethod()
+	{
+		Type type = AccessTools.TypeByName("TaleWorlds.CampaignSystem.CampaignBehaviors.FoodConsumptionBehavior");
+		if (type == null)
+		{
+			Main.Log("WARNING: Could not find FoodConsumptionBehavior type!");
+			return null;
+		}
+		MethodInfo methodInfo = AccessTools.Method(type, "DailyTickParty");
+		if (methodInfo == null)
+		{
+			Main.Log("WARNING: Could not find DailyTickParty method!");
+			return null;
+		}
+		Main.Log("Found FoodConsumptionBehavior.DailyTickParty - will patch to skip");
+		return methodInfo;
+	}
+
+	private static bool Prefix(MobileParty party)
+	{
+		if (party == null)
+		{
+			return true;
+		}
+		if (FoodConsumptionModel.IsPartyProcessedToday(party))
+		{
+			return false;
+		}
+		return true;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\FoodConsumptionBehaviorOnTickPatch.cs =====
+using System;
+using System.Reflection;
+using HarmonyLib;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch]
+public static class FoodConsumptionBehaviorOnTickPatch
+{
+	private static MethodBase TargetMethod()
+	{
+		Type type = AccessTools.TypeByName("TaleWorlds.CampaignSystem.CampaignBehaviors.FoodConsumptionBehavior");
+		if (type == null)
+		{
+			return null;
+		}
+		MethodInfo methodInfo = AccessTools.Method(type, "OnTick");
+		if (methodInfo == null)
+		{
+			Main.Log("WARNING: Could not find OnTick method in FoodConsumptionBehavior!");
+			return null;
+		}
+		Main.Log("Found FoodConsumptionBehavior.OnTick - will patch to skip");
+		return methodInfo;
+	}
+
+	private static bool Prefix()
+	{
+		return true;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\FoodQualityTooltipPatch.cs =====
+using System;
+using System.Globalization;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
+using TaleWorlds.Core;
+using TaleWorlds.Core.ViewModelCollection;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(ItemMenuVM), "SetGeneralComponentTooltip")]
+public static class FoodQualityTooltipPatch
+{
+	private static MethodInfo _addStringProperty;
+
+	private static FieldInfo _targetItemField;
+
+	private static bool _resolved = false;
+
+	private static TextObject _moraleText;
+
+	private static readonly Func<EquipmentElement, int> DummyValue = (EquipmentElement e) => 0;
+
+	private static readonly Func<EquipmentElement, string> GetMoraleDisplay = delegate(EquipmentElement e)
+	{
+		if (e.Item == null || !e.Item.IsFood)
+		{
+			return (string)null;
+		}
+		int foodQualityTier = FoodSystemConstants.GetFoodQualityTier(e.Item);
+		return (foodQualityTier < 2) ? null : ("+" + FoodSystemConstants.GetFoodQualityMorale(foodQualityTier).ToString("F1", CultureInfo.InvariantCulture));
+	};
+
+	private static void ResolveOnce()
+	{
+		if (!_resolved)
+		{
+			_addStringProperty = typeof(ItemMenuVM).GetMethod("AddComparableStringProperty", BindingFlags.Instance | BindingFlags.NonPublic);
+			_targetItemField = typeof(ItemMenuVM).GetField("_targetItem", BindingFlags.Instance | BindingFlags.NonPublic);
+			_moraleText = new TextObject("{=HAP_ItemMorale}Morale");
+			_resolved = true;
+		}
+	}
+
+	[HarmonyPostfix]
+	public static void Postfix(ItemMenuVM __instance)
+	{
+		try
+		{
+			ResolveOnce();
+			if (_addStringProperty == null || _targetItemField == null)
+			{
+				return;
+			}
+			ItemVM itemVM = (ItemVM)_targetItemField.GetValue(__instance);
+			if (itemVM == null)
+			{
+				return;
+			}
+			ItemObject item = itemVM.ItemRosterElement.EquipmentElement.Item;
+			if (item != null && item.IsFood)
+			{
+				int foodQualityTier = FoodSystemConstants.GetFoodQualityTier(item);
+				if (foodQualityTier >= 2)
+				{
+					_addStringProperty.Invoke(__instance, new object[3] { _moraleText, GetMoraleDisplay, DummyValue });
+				}
+			}
+		}
+		catch
+		{
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\FoodSalePatch.cs =====
+using System.Collections.Generic;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(SellGoodsForTradeAction))]
+public static class FoodSalePatch
+{
+	private const float VILLAGE_BASE_MARKUP = 0.1f;
+
+	private const float VILLAGE_DEMAND_SHARE = 0.4f;
+
+	private const float VILLAGE_DEMAND_CAP = 0.3f;
+
+	private static Dictionary<Town, Dictionary<ItemCategory, int>> _pendingFoodPurchases = new Dictionary<Town, Dictionary<ItemCategory, int>>();
+
+	private const bool DEBUG_FOOD_SALE = false;
+
+	public static Dictionary<ItemCategory, int> GetPendingFoodByCategory(Town town)
+	{
+		if (town == null || !_pendingFoodPurchases.TryGetValue(town, out var value))
+		{
+			return new Dictionary<ItemCategory, int>();
+		}
+		return value;
+	}
+
+	public static float GetPendingFoodPurchases(Town town)
+	{
+		if (town == null || !_pendingFoodPurchases.TryGetValue(town, out var value))
+		{
+			return 0f;
+		}
+		int num = 0;
+		foreach (KeyValuePair<ItemCategory, int> item in value)
+		{
+			num += item.Value;
+		}
+		return num;
+	}
+
+	public static void ClearPendingPurchases()
+	{
+		_pendingFoodPurchases.Clear();
+	}
+
+	public static void ClearPendingForTown(Town town)
+	{
+		if (town != null)
+		{
+			_pendingFoodPurchases.Remove(town);
+		}
+	}
+
+	private static void AddPendingPurchase(Town town, ItemCategory category, int amount)
+	{
+		if (town != null && category != null && amount > 0)
+		{
+			if (!_pendingFoodPurchases.TryGetValue(town, out var value))
+			{
+				value = new Dictionary<ItemCategory, int>();
+				_pendingFoodPurchases[town] = value;
+			}
+			if (value.ContainsKey(category))
+			{
+				value[category] += amount;
+			}
+			else
+			{
+				value[category] = amount;
+			}
+		}
+	}
+
+	private static bool IsLivestockItem(ItemObject item)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		if (item.ItemCategory == DefaultItemCategories.Cow || item.ItemCategory == DefaultItemCategories.Sheep || item.ItemCategory == DefaultItemCategories.Hog)
+		{
+			return true;
+		}
+		string text = item.StringId?.ToLowerInvariant() ?? "";
+		int result;
+		switch (text)
+		{
+		default:
+			result = ((text == "hare") ? 1 : 0);
+			break;
+		case "chicken":
+		case "chicken_product":
+		case "goose":
+		case "goose_product":
+			result = 1;
+			break;
+		}
+		return (byte)result != 0;
+	}
+
+	private static bool ShouldRouteToFoodStocks(ItemObject item, bool isEmergency, Settlement settlement)
+	{
+		if (item == null || item.ItemCategory == null)
+		{
+			return false;
+		}
+		bool flag = item.ItemCategory.Properties == ItemCategory.Property.BonusToFoodStores;
+		if (!isEmergency)
+		{
+			return flag && !RawMaterialRegistry.IsProtected(item.StringId, settlement, RawMaterialRegistry.ProtectionContext.SaleRouting);
+		}
+		return flag || item.IsFood;
+	}
+
+	private static bool ShouldUseVillagePricing(ItemObject item)
+	{
+		if (item == null)
+		{
+			return false;
+		}
+		if (item.IsTradeGood)
+		{
+			return true;
+		}
+		if (item.IsFood)
+		{
+			return true;
+		}
+		if (IsLivestockItem(item))
+		{
+			return true;
+		}
+		ItemCategory itemCategory = item.ItemCategory;
+		if (itemCategory != null && itemCategory.Properties == ItemCategory.Property.BonusToFoodStores)
+		{
+			return true;
+		}
+		return false;
+	}
+
+	private static int CalculateVillagePrice(ItemObject item, Town town, MobileParty villagerParty)
+	{
+		if (item == null || town == null)
+		{
+			return 1;
+		}
+		int value = item.Value;
+		if (value <= 0)
+		{
+			return 1;
+		}
+		int itemPrice = town.GetItemPrice(item, villagerParty, isSelling: true);
+		float num = (float)itemPrice / (float)value;
+		float num2 = 0f;
+		if (num > 1f)
+		{
+			num2 = MathF.Min(0.3f, (num - 1f) * 0.4f);
+		}
+		float num3 = 1.1f + num2;
+		return MathF.Max(1, (int)((float)value * num3));
+	}
+
+	[HarmonyPrefix]
+	[HarmonyPatch("ApplyByVillagerTrade")]
+	public static bool ApplyByVillagerTrade_Prefix(Settlement settlement, MobileParty villagerParty)
+	{
+		Town town = settlement.Town;
+		if (town == null)
+		{
+			return false;
+		}
+		bool isEmergency = FoodSystemConstants.IsEmergencyMode(town);
+		List<(EquipmentElement, int)> list = new List<(EquipmentElement, int)>();
+		int num = 10000;
+		ItemObject itemObject = null;
+		for (int i = 0; i < villagerParty.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = villagerParty.ItemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.EquipmentElement.Item.ItemCategory == DefaultItemCategories.PackAnimal && elementCopyAtIndex.EquipmentElement.Item.Value < num)
+			{
+				num = elementCopyAtIndex.EquipmentElement.Item.Value;
+				itemObject = elementCopyAtIndex.EquipmentElement.Item;
+			}
+		}
+		for (int num2 = villagerParty.ItemRoster.Count - 1; num2 >= 0; num2--)
+		{
+			ItemRosterElement elementCopyAtIndex2 = villagerParty.ItemRoster.GetElementCopyAtIndex(num2);
+			ItemObject item = elementCopyAtIndex2.EquipmentElement.Item;
+			int num3 = ((!ShouldUseVillagePricing(item)) ? town.GetItemPrice(elementCopyAtIndex2.EquipmentElement, villagerParty, isSelling: true) : CalculateVillagePrice(item, town, villagerParty));
+			int num4 = villagerParty.ItemRoster.GetElementNumber(num2);
+			if (item == itemObject)
+			{
+				int num5 = (int)(0.5f * (float)villagerParty.MemberRoster.TotalManCount);
+				num4 -= num5;
+			}
+			if (num4 > 0)
+			{
+				int num6 = MathF.Min(num4, town.Gold / MathF.Max(1, num3));
+				if (num6 > 0)
+				{
+					if (ShouldRouteToFoodStocks(item, isEmergency, town.Settlement))
+					{
+						int num7 = town.FoodStocksUpperLimit();
+						float pendingFoodPurchases = GetPendingFoodPurchases(town);
+						float num8 = MathF.Max(0f, (float)num7 - town.FoodStocks - pendingFoodPurchases);
+						float marketReleasePercent = FoodSystemConstants.GetMarketReleasePercent(town);
+						int num9 = (int)((float)num6 * marketReleasePercent);
+						int num10 = num6 - num9;
+						int num11 = MathF.Min(num10, (int)num8);
+						int num12 = num9 + (num10 - num11);
+						if (num11 > 0)
+						{
+							AddPendingPurchase(town, item.ItemCategory, num11);
+							villagerParty.PartyTradeGold += num11 * num3;
+							town.ChangeGold(-num11 * num3);
+							villagerParty.ItemRoster.AddToCounts(elementCopyAtIndex2.EquipmentElement, -num11);
+							list.Add((elementCopyAtIndex2.EquipmentElement, num11));
+							bool flag = false;
+						}
+						if (num12 > 0)
+						{
+							villagerParty.PartyTradeGold += num12 * num3;
+							town.ChangeGold(-num12 * num3);
+							settlement.ItemRoster.AddToCounts(elementCopyAtIndex2.EquipmentElement, num12);
+							villagerParty.ItemRoster.AddToCounts(elementCopyAtIndex2.EquipmentElement, -num12);
+							list.Add((elementCopyAtIndex2.EquipmentElement, num12));
+							bool flag2 = false;
+						}
+					}
+					else
+					{
+						villagerParty.PartyTradeGold += num6 * num3;
+						town.ChangeGold(-num6 * num3);
+						settlement.ItemRoster.AddToCounts(elementCopyAtIndex2.EquipmentElement, num6);
+						villagerParty.ItemRoster.AddToCounts(elementCopyAtIndex2.EquipmentElement, -num6);
+						list.Add((elementCopyAtIndex2.EquipmentElement, num6));
+					}
+				}
+			}
+		}
+		if (list.Count > 0)
+		{
+			CampaignEventDispatcher.Instance.OnCaravanTransactionCompleted(villagerParty, town, list);
+		}
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\FoodTooltipPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.Core;
+using TaleWorlds.Core.ViewModelCollection.Information;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+public static class FoodTooltipPatch
+{
+	private static bool _patchApplied;
+
+	private const int MAX_FOOD_ITEMS_DISPLAYED = 25;
+
+	public static void ApplyPatch(Harmony harmony)
+	{
+		if (_patchApplied)
+		{
+			return;
+		}
+		try
+		{
+			MethodInfo method = typeof(CampaignUIHelper).GetMethod("GetPartyFoodTooltip", BindingFlags.Static | BindingFlags.Public);
+			MethodInfo method2 = typeof(FoodTooltipPatch).GetMethod("Postfix", BindingFlags.Static | BindingFlags.Public);
+			if (method != null && method2 != null)
+			{
+				harmony.Patch(method, null, new HarmonyMethod(method2));
+				_patchApplied = true;
+				Main.Log("FoodTooltipPatch: Patched GetPartyFoodTooltip successfully");
+			}
+			else
+			{
+				Main.Log($"FoodTooltipPatch: Could not find method. Original={method != null}, Postfix={method2 != null}");
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("FoodTooltipPatch ERROR: " + ex.Message);
+		}
+	}
+
+	public static void Postfix(ref List<TooltipProperty> __result, MobileParty mainParty)
+	{
+		if (__result == null)
+		{
+			return;
+		}
+		try
+		{
+			if (mainParty != null)
+			{
+				float partyStarvationDays = StarvationWoundingPatch.GetPartyStarvationDays(mainParty);
+				if (partyStarvationDays >= 1f)
+				{
+					__result.Add(new TooltipProperty(StarvationWoundingPatch.DaysWithoutFoodLabel.ToString(), StarvationWoundingPatch.FormatDaysWithoutFoodValue(partyStarvationDays), 0));
+				}
+			}
+			if (__result.Count >= 10)
+			{
+				int num = FindFoodItemsHeaderByStructure(__result);
+				if (num >= 0)
+				{
+					MarkReservedItems(__result, num);
+					MarkReservedLivestock(__result, num);
+					TruncateFoodSection(__result, num, 25);
+				}
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	private static int FindFoodItemsHeaderByStructure(List<TooltipProperty> list)
+	{
+		int num = -1;
+		for (int i = 0; i < list.Count; i++)
+		{
+			if (list[i].PropertyModifier == 8192)
+			{
+				num = i;
+				break;
+			}
+		}
+		if (num < 0 || num + 3 >= list.Count)
+		{
+			return -1;
+		}
+		int index = num + 1;
+		if (list[index].TextHeight != -1)
+		{
+			return -1;
+		}
+		int num2 = num + 2;
+		TooltipProperty tooltipProperty = list[num2];
+		if (string.IsNullOrEmpty(tooltipProperty.ValueLabel) || !int.TryParse(tooltipProperty.ValueLabel, out var result) || result <= 0)
+		{
+			return -1;
+		}
+		int num3 = num2 + 1;
+		if (num3 >= list.Count || list[num3].PropertyModifier != 512)
+		{
+			return -1;
+		}
+		return num2;
+	}
+
+	private static void TruncateFoodSection(List<TooltipProperty> list, int headerIndex, int maxItems)
+	{
+		int num = headerIndex + 2;
+		if (num >= list.Count)
+		{
+			return;
+		}
+		int num2 = 0;
+		int num3 = list.Count;
+		for (int i = num; i < list.Count; i++)
+		{
+			TooltipProperty prop = list[i];
+			if (IsEndOfItemSection(prop))
+			{
+				num3 = i;
+				break;
+			}
+			num2++;
+		}
+		if (num2 <= maxItems)
+		{
+			return;
+		}
+		int num4 = 0;
+		int num5 = num + maxItems;
+		for (int j = num5; j < num3; j++)
+		{
+			TooltipProperty tooltipProperty = list[j];
+			if (!string.IsNullOrEmpty(tooltipProperty.ValueLabel) && int.TryParse(tooltipProperty.ValueLabel, out var result))
+			{
+				num4 += result;
+			}
+		}
+		int num6 = num3 - num5;
+		if (num5 < list.Count && num6 > 0)
+		{
+			list.RemoveRange(num5, num6);
+			TooltipProperty item = new TooltipProperty(new TextObject("{=HAP_AndMore}...and more").ToString(), num4.ToString(), 0);
+			list.Insert(num5, item);
+		}
+	}
+
+	private static bool IsEndOfItemSection(TooltipProperty prop)
+	{
+		if (prop.TextHeight == -1)
+		{
+			return true;
+		}
+		int propertyModifier = prop.PropertyModifier;
+		if (propertyModifier == 512 || propertyModifier == 1024)
+		{
+			return true;
+		}
+		return false;
+	}
+
+	private static void MarkReservedItems(List<TooltipProperty> list, int foodHeaderIndex)
+	{
+		if (!ReservedItemService.HasAnyReserved())
+		{
+			return;
+		}
+		int num = foodHeaderIndex + 2;
+		if (num >= list.Count)
+		{
+			return;
+		}
+		for (int i = num; i < list.Count; i++)
+		{
+			TooltipProperty tooltipProperty = list[i];
+			if (IsEndOfItemSection(tooltipProperty))
+			{
+				break;
+			}
+			if (string.IsNullOrEmpty(tooltipProperty.DefinitionLabel))
+			{
+				continue;
+			}
+			ItemRoster itemRoster = MobileParty.MainParty?.ItemRoster;
+			if (itemRoster == null)
+			{
+				break;
+			}
+			for (int j = 0; j < itemRoster.Count; j++)
+			{
+				ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(j);
+				ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+				if (item != null && elementCopyAtIndex.Amount > 0 && item.IsFood)
+				{
+					string text = elementCopyAtIndex.EquipmentElement.GetModifiedItemName().ToString();
+					if (text == tooltipProperty.DefinitionLabel && ReservedItemService.IsReserved(item))
+					{
+						tooltipProperty.DefinitionLabel += " (R)";
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	private static void MarkReservedLivestock(List<TooltipProperty> list, int foodHeaderIndex)
+	{
+		if (!ReservedItemService.HasAnyReserved())
+		{
+			return;
+		}
+		int num = foodHeaderIndex + 2;
+		int num2 = -1;
+		for (int i = num; i < list.Count - 1; i++)
+		{
+			TooltipProperty tooltipProperty = list[i];
+			if (!string.IsNullOrEmpty(tooltipProperty.DefinitionLabel) && !string.IsNullOrEmpty(tooltipProperty.ValueLabel) && tooltipProperty.PropertyModifier == 0 && i + 1 < list.Count && list[i + 1].PropertyModifier == 512 && i != fo

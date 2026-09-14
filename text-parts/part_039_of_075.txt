@@ -1,0 +1,380 @@
+﻿PART 39/75
+tion of caravan purchase value that becomes tariff income for the settlement owner. Vanilla: 70%. HAP default: 30%.")]
+	[SettingPropertyGroup("{=HAP_MCM_TariffsTaxes}Tariffs and Taxes", GroupOrder = 7)]
+	public float TownTariffRate { get; set; } = 0.3f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_VillageTaxRate}Village Tax Rate", 0.05f, 1f, "0%", RequireRestart = false, HintText = "{=HAP_MCM_VillageTaxRate_Hint}Fraction of villager trade gold that becomes tax income for the settlement owner. Vanilla: 100%. HAP default: 50%.")]
+	[SettingPropertyGroup("{=HAP_MCM_TariffsTaxes}Tariffs and Taxes", GroupOrder = 7)]
+	public float VillageTaxRate { get; set; } = 0.5f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_WorkshopTaxRate}Workshop Tax Rate", 0f, 0.3f, "0%", RequireRestart = false, HintText = "{=HAP_MCM_WorkshopTaxRate_Hint}Fraction of workshop profits taxed by the settlement owner. Applies to all workshops, including those in your own towns. Default: 20%.")]
+	[SettingPropertyGroup("{=HAP_MCM_TariffsTaxes}Tariffs and Taxes", GroupOrder = 7)]
+	public float WorkshopTaxRate { get; set; } = 0.2f;
+
+	[SettingPropertyBool("{=HAP_MCM_TaxInefficiency}Tax Inefficiency", RequireRestart = false, HintText = "{=HAP_MCM_TaxInefficiency_Hint}Clans holding many fiefs lose a percentage of their tax, tariff, workshop tax, and village income. Towns count as 2 effective fiefs, castles as 1. Penalty starts after 4 effective fiefs at 4% per excess fief, capped at 50%. Applies to both player and AI.")]
+	[SettingPropertyGroup("{=HAP_MCM_TariffsTaxes}Tariffs and Taxes", GroupOrder = 7)]
+	public bool TaxInefficiencyEnabled { get; set; } = true;
+
+	[SettingPropertyBool("{=HAP_MCM_IssueEffects}Issue Effects", RequireRestart = false, HintText = "{=HAP_MCM_IssueEffects_Hint}When enabled, unresolved village issues reduce production output. Bandits, deserters, labor shortages, and similar problems penalize affected goods by 30–50%. Issues still appear and can be solved regardless of this setting.")]
+	[SettingPropertyGroup("{=HAP_MCM_Issues}Issues", GroupOrder = 8)]
+	public bool EnableIssueEffects { get; set; } = true;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_IssueClanChance}AI Issue Solving (Clan-Owned)", 0.01f, 1f, "0%", RequireRestart = false, HintText = "{=HAP_MCM_IssueClanChance_Hint}Chance an AI lord resolves an issue when entering a settlement owned by their own clan. Vanilla: 5%.")]
+	[SettingPropertyGroup("{=HAP_MCM_Issues}Issues", GroupOrder = 8)]
+	public float IssueSolvingClanOwnedChance { get; set; } = 0.5f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_IssueOtherChance}AI Issue Solving (Other)", 0.01f, 1f, "0%", RequireRestart = false, HintText = "{=HAP_MCM_IssueOtherChance_Hint}Chance an AI lord resolves an issue when entering a settlement owned by another clan in the same kingdom. Vanilla: 1%.")]
+	[SettingPropertyGroup("{=HAP_MCM_Issues}Issues", GroupOrder = 8)]
+	public float IssueSolvingOtherChance { get; set; } = 0.25f;
+
+	[SettingPropertyBool("{=HAP_MCM_HideoutClearing}Hideout Clearing", RequireRestart = false, HintText = "{=HAP_MCM_HideoutClearing_Hint}When an AI lord resolves a bandit base issue, all bandit parties at the hideout are destroyed and the hideout deactivates. Disabling reverts to vanilla behavior where bandits just change patrol orders.")]
+	[SettingPropertyGroup("{=HAP_MCM_Issues}Issues", GroupOrder = 8)]
+	public bool EnableHideoutClearing { get; set; } = true;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_LooterSpawnMult}Looter Spawn Multiplier", 0.5f, 5f, "0.0", RequireRestart = false, HintText = "{=HAP_MCM_LooterSpawnMult_Hint}Multiplier for maximum looter parties on the map. 1 = default, 2 = double. Low security areas attract more regardless of this cap.")]
+	[SettingPropertyGroup("{=HAP_MCM_Bandits}Bandits", GroupOrder = 9)]
+	public float LooterSpawnMultiplier { get; set; } = 1f;
+
+	[SettingPropertyFloatingInteger("{=HAP_MCM_DeserterSpawnMult}Deserter Spawn Multiplier", 0.5f, 5f, "0.0", RequireRestart = false, HintText = "{=HAP_MCM_DeserterSpawnMult_Hint}Multiplier for maximum deserter parties on the map. 1 = default, 2 = double.")]
+	[SettingPropertyGroup("{=HAP_MCM_Bandits}Bandits", GroupOrder = 9)]
+	public float DeserterSpawnMultiplier { get; set; } = 1f;
+
+	[SettingPropertyBool("{=HAP_MCM_BanditRaids}Bandit Village Raids", RequireRestart = false, HintText = "{=HAP_MCM_BanditRaids_Hint}Bandit parties from infested hideouts can raid nearby villages when stronger than the militia and no lords are nearby. Naval pirates raid coastal fishing villages. Uses native raid mechanics — militia defends, loot and hearth loss apply. One raid per hideout at a time.")]
+	[SettingPropertyGroup("{=HAP_MCM_Bandits}Bandits", GroupOrder = 9)]
+	public bool BanditRaidsEnabled { get; set; } = true;
+
+	[SettingPropertyDropdown("{=HAP_MCM_ForagerNotif}Castle Supply Notifications", RequireRestart = false, HintText = "{=HAP_MCM_ForagerNotif_Hint}Off: no notifications. Spawn only: announces when parties are dispatched. Spawn + Transactions: also shows every gold transaction (sales, purchases, prisoner sales) at player-owned castles.")]
+	[SettingPropertyGroup("{=HAP_MCM_GrpNotifications}Notifications", GroupOrder = 10)]
+	public Dropdown<string> ForagerNotifications { get; set; } = new Dropdown<string>(new string[3] { "{=HAP_MCM_NotifOff}Off", "{=HAP_MCM_NotifSpawn}Spawn only", "{=HAP_MCM_NotifFull}Spawn + Transactions" }, 2);
+
+	[SettingPropertyDropdown("{=HAP_MCM_SupplyLineNotif}Supply Line Notifications", RequireRestart = false, HintText = "{=HAP_MCM_SupplyLineNotif_Hint}Off: no notifications. Spawn only: announces when a supply caravan is sent. Spawn + Transactions: also shows every gold transaction (battle-loot sales, prisoner sales) for caravans from player-owned towns.")]
+	[SettingPropertyGroup("{=HAP_MCM_GrpNotifications}Notifications", GroupOrder = 10)]
+	public Dropdown<string> SupplyLineNotifications { get; set; } = new Dropdown<string>(new string[3] { "{=HAP_MCM_NotifOff}Off", "{=HAP_MCM_NotifSpawn}Spawn only", "{=HAP_MCM_NotifFull}Spawn + Transactions" }, 2);
+
+	[SettingPropertyBool("{=HAP_MCM_SettlementInfo}Settlement Information", RequireRestart = false, HintText = "{=HAP_MCM_SettlementInfo_Hint}Show passive warnings about player-owned settlements: emergency livestock requisition during food shortage, garrison desertion or starvation deaths during prolonged crisis. Disable to silence these chat-log warnings.")]
+	[SettingPropertyGroup("{=HAP_MCM_GrpNotifications}Notifications", GroupOrder = 10)]
+	public bool SettlementInformation { get; set; } = true;
+
+	[SettingPropertyBool("{=HAP_MCM_EnvMorale}Environmental Morale Effects", RequireRestart = false, HintText = "{=HAP_MCM_EnvMorale_Hint}Enable morale penalties from night marching, temperature extremes, and humidity. Cultural resistances apply.")]
+	[SettingPropertyGroup("{=HAP_MCM_Morale}Morale", GroupOrder = 11)]
+	public bool EnableEnvironmentalMorale { get; set; } = true;
+
+	[SettingPropertyBool("{=HAP_MCM_AIUpgradeConsume}AI Horse Upgrade Consumption", RequireRestart = false, HintText = "{=HAP_MCM_AIUpgradeConsume_Hint}When enabled, AI lords consume horses from inventory when upgrading troops to mounted units — matching the player requirement. Lords will replenish horses through battle loot and purchases at settlements via the herd management system.")]
+	[SettingPropertyGroup("{=HAP_MCM_GrpAIBehavior}AI Behavior", GroupOrder = 12)]
+	public bool EnableAIUpgradeItemConsumption { get; set; } = true;
+
+	[SettingPropertyDropdown("{=HAP_MCM_DebugLog}Debug Logging", RequireRestart = false, HintText = "{=HAP_MCM_DebugLog_Hint}Disabled: No logging. Debug: Logs key events to HarvestAndProduction_Debug.log. Verbose: Extremely detailed logging. Warning: Verbose generates large log files.")]
+	[SettingPropertyGroup("{=HAP_MCM_DebugDebug}Debug", GroupOrder = 99)]
+	public Dropdown<string> DebugLogging { get; set; } = new Dropdown<string>(new string[3] { "{=HAP_MCM_DebugDisabled}Disabled", "{=HAP_MCM_DebugDebug}Debug", "{=HAP_MCM_DebugVerbose}Verbose" }, 0);
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Helpers\HAPTextObjects.cs =====
+using TaleWorlds.Core;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Helpers;
+
+public static class HAPTextObjects
+{
+	public static readonly TextObject LowFoodStock = new TextObject("{=HAP_LowFoodStock}Low Food Stock");
+
+	public static readonly TextObject FoodShortage = new TextObject("{=HAP_FoodShortage}Food Shortage");
+
+	public static readonly TextObject FoodShortageDesertion = new TextObject("{=HAP_FoodShortageDesertion}Food Shortage Desertion");
+
+	public static readonly TextObject Starvation = new TextObject("{=HAP_Starvation}Starvation");
+
+	public static readonly TextObject FoodStability = new TextObject("{=HAP_FoodStability}Food Stability");
+
+	public static readonly TextObject LowProsperity = new TextObject("{=HAP_LowProsperity}Low Prosperity");
+
+	public static readonly TextObject HighLoyalty = new TextObject("{=HAP_HighLoyalty}High Loyalty");
+
+	public static readonly TextObject LowLoyalty = new TextObject("{=HAP_LowLoyalty}Low Loyalty");
+
+	public static readonly TextObject Rebellious = new TextObject("{=HAP_Rebellious}Rebellious");
+
+	public static readonly TextObject HighSecurity = new TextObject("{=HAP_HighSecurity}High Security");
+
+	public static readonly TextObject LowSecurity = new TextObject("{=HAP_LowSecurity}Low Security");
+
+	public static readonly TextObject LordsProvisions = new TextObject("{=HAP_LordsProvisions}Lord's Provisions");
+
+	public static readonly TextObject LuxuryGoods = new TextObject("{=HAP_LuxuryGoods}Goods from Market");
+
+	public static readonly TextObject LootedVillages = GameTexts.FindText("str_looted_villages");
+
+	public static readonly TextObject MarketShortage = new TextObject("{=HAP_MarketShortage}Market Shortage");
+
+	public static readonly TextObject ThrivingMarket = new TextObject("{=HAP_ThrivingMarket}Thriving Market");
+
+	public static readonly TextObject BoundSettlement = new TextObject("{=HAP_BoundSettlement}Bound Settlement");
+
+	public static readonly TextObject HarvestLevy = new TextObject("{=HAP_Policy_HarvestLevy}Harvest Levy");
+
+	public static readonly TextObject RationingDecree = new TextObject("{=HAP_Policy_RationingDecree}Rationing Decree");
+
+	public static readonly TextObject SumptuaryLaws = new TextObject("{=HAP_Policy_SumptuaryLaws}Sumptuary Laws");
+
+	public static readonly TextObject RationCuts = new TextObject("{=HAP_RationCuts}Ration Cuts");
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Main.cs =====
+using System;
+using System.IO;
+using System.Reflection;
+using Bannerlord.UIExtenderEx;
+using HarmonyLib;
+using HarvestAndProduction.Behaviors;
+using HarvestAndProduction.Helpers;
+using HarvestAndProduction.Models;
+using HarvestAndProduction.PartyComponents;
+using HarvestAndProduction.Patches;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.Core;
+using TaleWorlds.MountAndBlade;
+
+namespace HarvestAndProduction;
+
+public class Main : MBSubModuleBase
+{
+	internal static readonly string LogPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Mount and Blade II Bannerlord", "Configs", "HarvestAndProduction_Debug.log");
+
+	private static Harmony _harmony;
+
+	private readonly UIExtender _uiExtender = UIExtender.Create("HarvestAndProduction");
+
+	private bool _warSailsInitialized = false;
+
+	public static bool DebugMode => (GlobalSettings<HAPSettings>.Instance?.DebugLogging?.SelectedIndex).GetValueOrDefault() >= 1;
+
+	public static bool VerboseMode => (GlobalSettings<HAPSettings>.Instance?.DebugLogging?.SelectedIndex).GetValueOrDefault() >= 2;
+
+	public static void ClearAllCaches()
+	{
+		FoodConsumptionModel.ClearAllCaches();
+		VillageProductionModel.ClearAllCaches();
+		CustomSettlementEconomyModel.ClearCache();
+		CustomTradeItemPriceFactorModel.ClearCache();
+		VillageProductionControlBehavior.ResetControl();
+		FoodSalePatch.ClearPendingPurchases();
+		TownDefenderPartiesGuardPatch.ClearCache();
+		RebellionFoodPatch.ClearDailyTracking();
+		CaravanSurplusPurchasePatch.ClearCache();
+		CaravanHerdCapPatch.ClearCache();
+		CaravanEmergencyFoodBlockPatch.ClearCache();
+		HerderPartyComponent.ClearAllCaches();
+		StringCache.Clear();
+		VillageProductionModel.ClearAnnualProfileCache();
+		BuildingInitializer.Reset();
+		RawMaterialRegistry.Reset();
+		EmptySettlementEncounterPatch._reentrant = false;
+		ReservedItemService.ClearAll();
+		Log("All caches cleared.");
+	}
+
+	protected override void OnBeforeInitialModuleScreenSetAsRoot()
+	{
+		base.OnBeforeInitialModuleScreenSetAsRoot();
+		if (_warSailsInitialized)
+		{
+			return;
+		}
+		try
+		{
+			Type type = null;
+			Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+			foreach (Assembly assembly in assemblies)
+			{
+				type = assembly.GetType("NavalDLC.ViewModelCollection.Map.NavalSettlementMenuOverlayVM");
+				if (type != null)
+				{
+					break;
+				}
+			}
+			if (type != null)
+			{
+				string location = typeof(Main).Assembly.Location;
+				string directoryName = Path.GetDirectoryName(location);
+				string text = Path.Combine(directoryName, "HarvestAndProduction.WarSails.dll");
+				if (File.Exists(text))
+				{
+					Assembly assembly2 = Assembly.LoadFrom(text);
+					assembly2.GetType("HarvestAndProduction.WarSails.WarSailsIntegration")?.GetMethod("Initialize")?.Invoke(null, null);
+					Log("Production efficiency icon enabled (War Sails DLC detected).");
+				}
+				else
+				{
+					Log("WARNING: War Sails detected but companion DLL not found at: " + text);
+				}
+			}
+			else
+			{
+				Log("War Sails DLC not detected - production efficiency icon disabled.");
+			}
+			_warSailsInitialized = true;
+		}
+		catch (Exception ex)
+		{
+			Log("War Sails integration skipped: " + ex.Message);
+		}
+	}
+
+	protected override void OnSubModuleLoad()
+	{
+		base.OnSubModuleLoad();
+		try
+		{
+			_uiExtender.Register(typeof(Main).Assembly);
+			_uiExtender.Enable();
+			_harmony = new Harmony("HarvestAndProduction");
+			_harmony.PatchAll();
+			Log("Harvest And Production mod loaded and Harmony patches applied.");
+		}
+		catch (Exception arg)
+		{
+			Log($"ERROR loading Harvest And Production mod: {arg}");
+		}
+	}
+
+	protected override void OnGameStart(Game game, IGameStarter gameStarterObject)
+	{
+		base.OnGameStart(game, gameStarterObject);
+		try
+		{
+			if (gameStarterObject is CampaignGameStarter campaignGameStarter)
+			{
+				ClearAllCaches();
+				RawMaterialRegistry.Initialize();
+				new HAPPolicies();
+				Log("HAP policies registered.");
+				campaignGameStarter.AddModel(new FoodConsumptionModel());
+				campaignGameStarter.AddModel(new VillageProductionModel());
+				campaignGameStarter.AddModel(new CustomSettlementFoodModel());
+				campaignGameStarter.AddModel(new CustomSettlementEconomyModel());
+				campaignGameStarter.AddModel(new CustomSettlementProsperityModel());
+				campaignGameStarter.AddModel(new CustomSettlementSecurityModel());
+				campaignGameStarter.AddModel(new CustomSettlementLoyaltyModel());
+				campaignGameStarter.AddModel(new CustomSettlementMilitiaModel());
+				FieldInfo fieldInfo = AccessTools.Field(typeof(DefaultSettlementMilitiaModel), "LowLoyaltyText");
+				if (fieldInfo != null)
+				{
+					fieldInfo.SetValue(null, HAPTextObjects.Rebellious);
+				}
+				campaignGameStarter.AddModel(new CustomTradeItemPriceFactorModel());
+				campaignGameStarter.AddModel(new CustomSettlementTaxModel());
+				campaignGameStarter.AddModel(new HAPBuildingModel());
+				campaignGameStarter.AddModel(new CustomSettlementPatrolModel());
+				campaignGameStarter.AddBehavior(new VillageProductionControlBehavior());
+				campaignGameStarter.AddBehavior(new VillageSecondaryProductionBehavior());
+				campaignGameStarter.AddBehavior(new FoodConsumptionPriorityBehavior());
+				campaignGameStarter.AddBehavior(new CulturalFeatsBehavior());
+				campaignGameStarter.AddBehavior(new LivestockProductionBehavior());
+				campaignGameStarter.AddBehavior(new HarvestAndProduction_ProductionBehavior());
+				campaignGameStarter.AddBehavior(new VillageRaidImpactBehavior());
+				campaignGameStarter.AddBehavior(new TownFoodEconomyBehavior());
+				campaignGameStarter.AddBehavior(new CastleSupplyBehavior());
+				campaignGameStarter.AddBehavior(new LordCastleResupplyBehavior());
+				campaignGameStarter.AddBehavior(new AiFoodPriorityBehavior());
+				campaignGameStarter.AddBehavior(new CastleForagerBehavior());
+				campaignGameStarter.AddBehavior(new TownSupplyLineBehavior());
+				campaignGameStarter.AddBehavior(new PatrolSupplyBehavior());
+				campaignGameStarter.AddBehavior(new StarvationDesertionBehavior());
+				campaignGameStarter.AddBehavior(new CaravanFoodTradeBehavior());
+				campaignGameStarter.AddBehavior(new FishingPartyDialogueBehavior());
+				campaignGameStarter.AddBehavior(new VillagerPartyDialogueBehavior());
+				campaignGameStarter.AddBehavior(new MarketFulfillmentBehavior());
+				campaignGameStarter.AddBehavior(new TownSackBehavior());
+				campaignGameStarter.AddBehavior(new BuildingOverrideBehavior());
+				campaignGameStarter.AddBehavior(new GarrisonSupplyPressureBehavior());
+				campaignGameStarter.AddBehavior(new BanditRaidBehavior());
+				campaignGameStarter.AddBehavior(new HerderPartyCampaignBehavior());
+				campaignGameStarter.AddBehavior(new HerderPartyDialogueBehavior());
+				campaignGameStarter.AddBehavior(new LordHerdManagementBehavior());
+				if (_harmony != null)
+				{
+					VillageTooltipPatch.ApplyPatch(_harmony);
+					FishingPartyScalingPatch.Apply(_harmony);
+					FishingPartyNotificationPatch.Apply(_harmony);
+					FishingMilitiaGuardPatch.Apply(_harmony);
+					FoodTooltipPatch.ApplyPatch(_harmony);
+					FoodCapacityTooltipPatch.ApplyPatch(_harmony);
+					FoodTooltipSplitPatch.ApplyPatch(_harmony);
+					SiegeFoodTooltipPatch.ApplyPatch(_harmony);
+					ClanFinanceModelPatch.Initialize(_harmony);
+					ClanFinanceModelPatch.ApplyPatch();
+					GarrisonAutoRecruitmentPatch.Apply(_harmony);
+					CastlePatrolUIPatch.ApplyPatch(_harmony);
+					SecurityTooltipPatch.ApplyPatch(_harmony);
+					NavalRaidCompletedFix.Apply(_harmony);
+					GarrisonFoodAwareDonationPatch.ApplyPatch(_harmony);
+					RaidProductionLootPatch.Apply(_harmony);
+					WorkshopTypeSelectorPatch.Apply(_harmony);
+					AIUpgradeItemConsumptionPatch.ApplyPatch(_harmony);
+					DiscardItemsBugfixPatch.ApplyPatch(_harmony);
+					StarvationWoundingPatch.ApplyPatch(_harmony);
+				}
+				Log("Harvest And Production: All models and behaviors initialized successfully.");
+			}
+		}
+		catch (Exception arg)
+		{
+			Log($"ERROR initializing Harvest And Production: {arg}");
+		}
+	}
+
+	public static void Log(string message)
+	{
+		if (!DebugMode)
+		{
+			return;
+		}
+		try
+		{
+			Directory.CreateDirectory(Path.GetDirectoryName(LogPath));
+			string text = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+			File.AppendAllText(LogPath, "[" + text + "] " + message + Environment.NewLine);
+		}
+		catch
+		{
+		}
+	}
+
+	public static void LogVerbose(string message)
+	{
+		if (VerboseMode)
+		{
+			Log(message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\MilitiaGuardHelper.cs =====
+using System;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction;
+
+public static class MilitiaGuardHelper
+{
+	public const float MAX_GUARD_RATIO = 0.3f;
+
+	public const int MIN_GUARDS = 0;
+
+	public static void EnsureMilitiaGuards(MobileParty party, Village village)
+	{
+		try
+		{
+			if (pa

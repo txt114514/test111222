@@ -1,0 +1,641 @@
+﻿PART 53/75
+w List<MobileParty>();
+				foreach (MobileParty party in settlement.Parties)
+				{
+					if (party != null && (party.IsBandit || party.IsBanditBossParty) && !party.IsMainParty)
+					{
+						list.Add(party);
+					}
+				}
+				foreach (MobileParty item in list)
+				{
+					try
+					{
+						DestroyPartyAction.Apply(null, item);
+					}
+					catch (Exception)
+					{
+						bool flag = false;
+					}
+				}
+				bool flag2 = false;
+			}
+			catch (Exception ex2)
+			{
+				Main.Log("[AiIssue] ERROR in BanditHideoutDestructionPatch: " + ex2.Message);
+			}
+			return false;
+		}
+	}
+
+	[HarmonyPatch(typeof(IssueBase), "CompleteIssueWithAiLord")]
+	public static class AiIssueSolvedDebugPatch
+	{
+		[HarmonyPostfix]
+		public static void Postfix(IssueBase __instance, Hero issueSolver)
+		{
+			bool flag = true;
+		}
+	}
+
+	private const bool DEBUG_ISSUES = false;
+
+	public static float GetClanOwnedChance()
+	{
+		return GlobalSettings<HAPSettings>.Instance?.IssueSolvingClanOwnedChance ?? 0.05f;
+	}
+
+	public static float GetOtherChance()
+	{
+		return GlobalSettings<HAPSettings>.Instance?.IssueSolvingOtherChance ?? 0.01f;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\AIUpgradeItemConsumptionPatch.cs =====
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+public static class AIUpgradeItemConsumptionPatch
+{
+	private static bool _patchApplied;
+
+	private static Type _troopUpgradeArgsType;
+
+	private static FieldInfo _targetField;
+
+	private static FieldInfo _upgradeTargetField;
+
+	private static FieldInfo _possibleUpgradeCountField;
+
+	private static FieldInfo _upgradeGoldCostField;
+
+	private static FieldInfo _upgradeXpCostField;
+
+	private static FieldInfo _upgradeChanceField;
+
+	private static ConstructorInfo _argsConstructor;
+
+	[ThreadStatic]
+	private static CharacterObject _pendingUpgradeTarget;
+
+	[ThreadStatic]
+	private static int _pendingConsumeCount;
+
+	public static void ApplyPatch(Harmony harmony)
+	{
+		if (_patchApplied)
+		{
+			return;
+		}
+		_patchApplied = true;
+		try
+		{
+			_troopUpgradeArgsType = AccessTools.Inner(typeof(PartyUpgraderCampaignBehavior), "TroopUpgradeArgs");
+			if (_troopUpgradeArgsType == null)
+			{
+				Main.Log("[AIUpgrade] ERROR: Could not find TroopUpgradeArgs type");
+				return;
+			}
+			_targetField = AccessTools.Field(_troopUpgradeArgsType, "Target");
+			_upgradeTargetField = AccessTools.Field(_troopUpgradeArgsType, "UpgradeTarget");
+			_possibleUpgradeCountField = AccessTools.Field(_troopUpgradeArgsType, "PossibleUpgradeCount");
+			_upgradeGoldCostField = AccessTools.Field(_troopUpgradeArgsType, "UpgradeGoldCost");
+			_upgradeXpCostField = AccessTools.Field(_troopUpgradeArgsType, "UpgradeXpCost");
+			_upgradeChanceField = AccessTools.Field(_troopUpgradeArgsType, "UpgradeChance");
+			_argsConstructor = _troopUpgradeArgsType.GetConstructor(new Type[6]
+			{
+				typeof(CharacterObject),
+				typeof(CharacterObject),
+				typeof(int),
+				typeof(int),
+				typeof(int),
+				typeof(float)
+			});
+			if (_upgradeTargetField == null || _possibleUpgradeCountField == null || _argsConstructor == null)
+			{
+				Main.Log("[AIUpgrade] ERROR: Could not resolve TroopUpgradeArgs fields");
+				return;
+			}
+			MethodInfo methodInfo = AccessTools.Method(typeof(PartyUpgraderCampaignBehavior), "GetPossibleUpgradeTargets");
+			if (methodInfo != null)
+			{
+				harmony.Patch(methodInfo, null, new HarmonyMethod(AccessTools.Method(typeof(AIUpgradeItemConsumptionPatch), "GetPossibleUpgradeTargets_Postfix")));
+			}
+			MethodInfo methodInfo2 = AccessTools.Method(typeof(PartyUpgraderCampaignBehavior), "SelectPossibleUpgrade");
+			if (methodInfo2 != null)
+			{
+				harmony.Patch(methodInfo2, null, new HarmonyMethod(AccessTools.Method(typeof(AIUpgradeItemConsumptionPatch), "SelectPossibleUpgrade_Postfix")));
+			}
+			MethodInfo methodInfo3 = AccessTools.Method(typeof(PartyUpgraderCampaignBehavior), "UpgradeTroop");
+			if (methodInfo3 != null)
+			{
+				harmony.Patch(methodInfo3, null, new HarmonyMethod(AccessTools.Method(typeof(AIUpgradeItemConsumptionPatch), "UpgradeTroop_Postfix")));
+			}
+			Main.Log("[AIUpgrade] AI upgrade item consumption patches applied");
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[AIUpgrade] ERROR applying patches: " + ex.Message);
+		}
+	}
+
+	public static void GetPossibleUpgradeTargets_Postfix(PartyBase party, ref object __result)
+	{
+		try
+		{
+			HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+			if (instance == null || !instance.EnableAIUpgradeItemConsumption || party == PartyBase.MainParty || !(__result is IList { Count: not 0 } list) || party?.ItemRoster == null)
+			{
+				return;
+			}
+			for (int num = list.Count - 1; num >= 0; num--)
+			{
+				object obj = list[num];
+				CharacterObject characterObject = (CharacterObject)_upgradeTargetField.GetValue(obj);
+				ItemCategory itemCategory = characterObject?.UpgradeRequiresItemFromCategory;
+				if (itemCategory != null)
+				{
+					int num2 = CountMatchingItems(party.ItemRoster, itemCategory);
+					int num3 = (int)_possibleUpgradeCountField.GetValue(obj);
+					if (num2 <= 0)
+					{
+						list.RemoveAt(num);
+					}
+					else if (num2 < num3)
+					{
+						object value = _argsConstructor.Invoke(new object[6]
+						{
+							_targetField.GetValue(obj),
+							characterObject,
+							num2,
+							_upgradeGoldCostField.GetValue(obj),
+							_upgradeXpCostField.GetValue(obj),
+							_upgradeChanceField.GetValue(obj)
+						});
+						list[num] = value;
+					}
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[AIUpgrade] ERROR in GetPossibleUpgradeTargets_Postfix: " + ex.Message);
+		}
+	}
+
+	public static void SelectPossibleUpgrade_Postfix(object __result)
+	{
+		try
+		{
+			HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+			if (instance != null && instance.EnableAIUpgradeItemConsumption)
+			{
+				if (__result == null)
+				{
+					_pendingUpgradeTarget = null;
+					_pendingConsumeCount = 0;
+				}
+				else
+				{
+					_pendingUpgradeTarget = (CharacterObject)_upgradeTargetField.GetValue(__result);
+					_pendingConsumeCount = (int)_possibleUpgradeCountField.GetValue(__result);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			_pendingUpgradeTarget = null;
+			_pendingConsumeCount = 0;
+			Main.Log("[AIUpgrade] ERROR in SelectPossibleUpgrade_Postfix: " + ex.Message);
+		}
+	}
+
+	public static void UpgradeTroop_Postfix(PartyBase party)
+	{
+		try
+		{
+			HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+			if (instance != null && instance.EnableAIUpgradeItemConsumption && _pendingUpgradeTarget != null && _pendingConsumeCount > 0 && party != PartyBase.MainParty)
+			{
+				ItemCategory upgradeRequiresItemFromCategory = _pendingUpgradeTarget.UpgradeRequiresItemFromCategory;
+				if (upgradeRequiresItemFromCategory != null)
+				{
+					ConsumeItems(party, upgradeRequiresItemFromCategory, _pendingConsumeCount);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[AIUpgrade] ERROR in UpgradeTroop_Postfix: " + ex.Message);
+		}
+		finally
+		{
+			_pendingUpgradeTarget = null;
+			_pendingConsumeCount = 0;
+		}
+	}
+
+	private static int CountMatchingItems(ItemRoster roster, ItemCategory requiredCategory)
+	{
+		int num = 0;
+		for (int i = 0; i < roster.Count; i++)
+		{
+			ItemRosterElement itemRosterElement = roster[i];
+			ItemObject item = itemRosterElement.EquipmentElement.Item;
+			if (item != null && itemRosterElement.Amount > 0 && TroopUpgradeItemPatch.CategoriesMatch(item.ItemCategory, requiredCategory))
+			{
+				num += itemRosterElement.Amount;
+			}
+		}
+		return num;
+	}
+
+	private static void ConsumeItems(PartyBase party, ItemCategory requiredCategory, int toConsume)
+	{
+		if (party?.ItemRoster == null || toConsume <= 0)
+		{
+			return;
+		}
+		List<(int, EquipmentElement)> list = new List<(int, EquipmentElement)>();
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemRosterElement itemRosterElement = party.ItemRoster[i];
+			ItemObject item = itemRosterElement.EquipmentElement.Item;
+			if (item != null && itemRosterElement.Amount > 0 && TroopUpgradeItemPatch.CategoriesMatch(item.ItemCategory, requiredCategory))
+			{
+				list.Add((item.Value, itemRosterElement.EquipmentElement));
+			}
+		}
+		if (list.Count == 0)
+		{
+			return;
+		}
+		list.Sort(((int, EquipmentElement) a, (int, EquipmentElement) b) => a.Item1.CompareTo(b.Item1));
+		int num = toConsume;
+		foreach (var item4 in list)
+		{
+			if (num <= 0)
+			{
+				break;
+			}
+			int val = 0;
+			for (int num2 = 0; num2 < party.ItemRoster.Count; num2++)
+			{
+				ItemRosterElement itemRosterElement2 = party.ItemRoster[num2];
+				ItemObject item2 = itemRosterElement2.EquipmentElement.Item;
+				EquipmentElement item3 = item4.Item2;
+				if (item2 == item3.Item)
+				{
+					ItemModifier itemModifier = itemRosterElement2.EquipmentElement.ItemModifier;
+					item3 = item4.Item2;
+					if (itemModifier == item3.ItemModifier)
+					{
+						val = itemRosterElement2.Amount;
+						break;
+					}
+				}
+			}
+			int num3 = Math.Min(val, num);
+			if (num3 > 0)
+			{
+				party.ItemRoster.AddToCounts(item4.Item2, -num3);
+				num -= num3;
+			}
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\ArmyTooltipPatch.cs =====
+using System;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.Core.ViewModelCollection.Information;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(TooltipRefresherCollection), "RefreshArmyTooltip")]
+public class ArmyTooltipPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(PropertyBasedTooltipVM propertyBasedTooltipVM, object[] args)
+	{
+		try
+		{
+			if (propertyBasedTooltipVM != null && args != null && args.Length >= 3 && args[0] is Army { LeaderParty: { } leaderParty } army)
+			{
+				bool flag = (bool)args[1];
+				bool flag2 = (bool)args[2];
+				bool isInspected = leaderParty.IsInspected;
+				bool showDetails = (flag | isInspected) || !flag2;
+				HerdTooltipHelper.HerdCounts armyHerdCounts = HerdTooltipHelper.GetArmyHerdCounts(army);
+				if (armyHerdCounts.TotalHerd != 0)
+				{
+					HerdTooltipHelper.AddHerdTooltip(propertyBasedTooltipVM, armyHerdCounts, showDetails);
+				}
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\ArtisanProductionPatch.cs =====
+using System;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.Settlements.Workshops;
+using TaleWorlds.Library;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultWorkshopModel), "GetEffectiveConversionSpeedOfProduction")]
+public static class ArtisanProductionPatch
+{
+	private const float ARTISAN_PROSPERITY_BASELINE = 4000f;
+
+	private const float ARTISAN_MULTIPLIER_FLOOR = 0.5f;
+
+	private const float ARTISAN_MULTIPLIER_CAP = 1.5f;
+
+	private static readonly TextObject _artisanPopulationText = new TextObject("{=HAP_ArtisanPop}Artisans");
+
+	[HarmonyPostfix]
+	public static void Postfix(ref ExplainedNumber __result, Workshop workshop)
+	{
+		try
+		{
+			if (workshop?.WorkshopType == null || !workshop.WorkshopType.IsHidden)
+			{
+				return;
+			}
+			Town town = workshop.Settlement?.Town;
+			if (town != null)
+			{
+				float num = MathF.Clamp(town.Prosperity / 4000f, 0.5f, 1.5f);
+				if (!(MathF.Abs(num - 1f) < 0.001f))
+				{
+					float resultNumber = __result.ResultNumber;
+					float value = resultNumber * (num - 1f);
+					__result.Add(value, _artisanPopulationText);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ArtisanProductionPatch ERROR: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\BanditSpawnSecurityPatch.cs =====
+using HarmonyLib;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Settlements;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(BanditSpawnCampaignBehavior), "GetSpawnChanceInSettlement")]
+public static class BanditSpawnSecurityPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(Settlement settlement, ref float __result)
+	{
+		HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+		if (instance == null || instance.SecurityAffectsBanditSpawns)
+		{
+			float settlementSecurity = GetSettlementSecurity(settlement);
+			float securityMultiplier = GetSecurityMultiplier(settlementSecurity);
+			__result *= securityMultiplier;
+		}
+	}
+
+	private static float GetSettlementSecurity(Settlement settlement)
+	{
+		if (settlement == null)
+		{
+			return 60f;
+		}
+		if (settlement.IsTown)
+		{
+			return settlement.Town?.Security ?? 60f;
+		}
+		if (settlement.IsVillage)
+		{
+			Settlement settlement2 = settlement.Village?.Bound;
+			if (settlement2 == null)
+			{
+				return 60f;
+			}
+			if (settlement2.IsCastle)
+			{
+				return settlement2.Town?.Security ?? 60f;
+			}
+			if (settlement2.IsTown)
+			{
+				return settlement2.Town?.Security ?? 60f;
+			}
+		}
+		return 60f;
+	}
+
+	private static float GetSecurityMultiplier(float security)
+	{
+		if (security < 5f)
+		{
+			return 6f;
+		}
+		if (security < 20f)
+		{
+			return 4f;
+		}
+		if (security < 40f)
+		{
+			return 2f;
+		}
+		if (security < 60f)
+		{
+			return 1f;
+		}
+		if (security < 80f)
+		{
+			return 0.5f;
+		}
+		return 0.25f;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\BattleGoodsSpawnPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Core;
+using TaleWorlds.Engine;
+using TaleWorlds.Library;
+using TaleWorlds.MountAndBlade;
+using TaleWorlds.MountAndBlade.Source.Missions;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(CaravanBattleMissionHandler), "AfterStart")]
+public static class BattleGoodsSpawnPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(CaravanBattleMissionHandler __instance)
+	{
+		try
+		{
+			MapEvent playerMapEvent = MapEvent.PlayerMapEvent;
+			if (playerMapEvent == null)
+			{
+				return true;
+			}
+			MobileParty mobileParty = null;
+			HerderPartyComponent herderPartyComponent = null;
+			foreach (PartyBase involvedParty in playerMapEvent.InvolvedParties)
+			{
+				MobileParty mobileParty2 = involvedParty?.MobileParty;
+				if (mobileParty2 != null)
+				{
+					if (mobileParty2.PartyComponent is HerderPartyComponent herderPartyComponent2)
+					{
+						mobileParty = mobileParty2;
+						herderPartyComponent = herderPartyComponent2;
+						break;
+					}
+					if (mobileParty2.PartyComponent is CastleForagerPartyComponent || mobileParty2.PartyComponent is TownSupplyLinePartyComponent)
+					{
+						mobileParty = mobileParty2;
+						break;
+					}
+				}
+			}
+			if (mobileParty == null)
+			{
+				return true;
+			}
+			Mission current = Mission.Current;
+			int value = Traverse.Create(__instance).Field("_unitCount").GetValue<int>();
+			float pathOffset = Mission.ComputeSpawnPathDeploymentOffset((int)((float)value * 1.5f), current.GetInitialSpawnPath());
+			WorldFrame spawnPathFrame = current.GetSpawnPathFrame(current.DefenderTeam.Side, pathOffset);
+			Scene scene = current.Scene;
+			if (herderPartyComponent != null)
+			{
+				Traverse.Create(__instance).Field("_entity").SetValue(null);
+				string objectName = ((herderPartyComponent.AnimalType == HerderPartyComponent.HerdType.Cow) ? "cow" : "sheep");
+				ItemObject itemObject = Game.Current.ObjectManager.GetObject<ItemObject>(objectName);
+				if (itemObject != null)
+				{
+					int num = Math.Min(herderPartyComponent.AnimalCount / 2, 60);
+					if (num < 3)
+					{
+						num = Math.Min(herderPartyComponent.AnimalCount, 3);
+					}
+					Vec3 groundVec = spawnPathFrame.Origin.GetGroundVec3();
+					Vec2 vec = spawnPathFrame.Rotation.f.AsVec2.Normalized();
+					Vec2 vec2 = spawnPathFrame.Rotation.s.AsVec2.Normalized();
+					for (int i = 0; i < num; i++)
+					{
+						float x = MBRandom.RandomFloat * 6.28f;
+						float num2 = 4f + MBRandom.RandomFloat * 12f;
+						Vec2 vec3 = new Vec2(MathF.Cos(x) * num2, MathF.Sin(x) * num2);
+						Vec3 initialPosition = new Vec3(groundVec.x + vec3.x, groundVec.y + vec3.y);
+						scene.GetTerrainHeightAndNormal(initialPosition.AsVec2, out var height, out var _);
+						initialPosition.z = height;
+						ItemRosterElement rosterElement = new ItemRosterElement(itemObject);
+						Agent agent = current.SpawnMonster(rosterElement, default(ItemRosterElement), in initialPosition, new Vec2(MBRandom.RandomFloat - 0.5f, MBRandom.RandomFloat - 0.5f).Normalized());
+						agent?.SetAgentFlags(agent.GetAgentFlags() | AgentFlag.CanWander);
+					}
+				}
+				return false;
+			}
+			Traverse.Create(__instance).Field("_entity").SetValue(null);
+			int num3 = 0;
+			int num4 = 0;
+			int num5 = 0;
+			foreach (ItemRosterElement item2 in mobileParty.ItemRoster)
+			{
+				ItemObject item = item2.EquipmentElement.Item;
+				if (item != null && item.HasHorseComponent && item.HorseComponent.IsPackAnimal)
+				{
+					string stringId = item.StringId;
+					if (stringId == "mule" || stringId == "mule_unmountable")
+					{
+						num3 += item2.Amount;
+					}
+					else if (stringId == "pack_camel" || stringId == "pack_camel_unmountable")
+					{
+						num4 += item2.Amount;
+					}
+					else
+					{
+						num5 += item2.Amount;
+					}
+				}
+			}
+			int num6 = num3 + num4 + num5;
+			if (num6 > 0)
+			{
+				bool flag = num4 >= num3 && num4 >= num5;
+				bool flag2 = !flag && num5 >= num3 && num5 >= num4;
+				int num7 = Math.Min(num6, 30);
+				Vec3 groundVec2 = spawnPathFrame.Origin.GetGroundVec3();
+				Vec2 initialDirection = spawnPathFrame.Rotation.f.AsVec2.Normalized();
+				string[] array = new string[2] { "camel_saddle_a", "camel_saddle_b" };
+				string[] array2 = new string[3] { "mule_load_a", "mule_load_b", "mule_load_c" };
+				for (int j = 0; j < num7; j++)
+				{
+					float x2 = MBRandom.RandomFloat * 6.28f;
+					float num8 = 3f + MBRandom.RandomFloat * 8f;
+					Vec2 vec4 = new Vec2(MathF.Cos(x2) * num8, MathF.Sin(x2) * num8);
+					Vec3 initialPosition2 = new Vec3(groundVec2.x + vec4.x, groundVec2.y + vec4.y);
+					scene.GetTerrainHeightAndNormal(initialPosition2.AsVec2, out var height2, out var _);
+					initialPosition2.z = height2;
+					string objectName2;
+					string objectName3;
+					if (flag)
+					{
+						objectName2 = array[MBRandom.RandomInt(array.Length)];
+						objectName3 = "pack_camel_unmountable";
+					}
+					else if (flag2)
+					{
+						objectName2 = array2[MBRandom.RandomInt(array2.Length)];
+						objectName3 = "sumpter_horse";
+					}
+					else
+					{
+						objectName2 = array2[MBRandom.RandomInt(array2.Length)];
+						objectName3 = "mule_unmountable";
+					}
+					ItemRosterElement rosterElement2 = new ItemRosterElement(Game.Current.ObjectManager.GetObject<ItemObject>(objectName3));
+					ItemRosterElement harnessRosterElement = new ItemRosterElement(Game.Current.ObjectManager.GetObject<ItemObject>(objectName2));
+					Agent agent2 = current.SpawnMonster(rosterElement2, harnessRosterElement, in initialPosition2, in initialDirection);

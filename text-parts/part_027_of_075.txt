@@ -1,0 +1,660 @@
+﻿PART 27/75
+nue;
+				}
+				if (component2.OriginalClan != null && item.ActualClan != component2.OriginalClan)
+				{
+					item.ActualClan = component2.OriginalClan;
+				}
+				if (component2.HomeTown != null)
+				{
+					if (!dictionary.TryGetValue(component2.HomeTown, out var value3))
+					{
+						value3 = (dictionary[component2.HomeTown] = new List<MobileParty>());
+					}
+					value3.Add(item);
+				}
+				if (component2.DestinationTown != null && component2.State != NavalSupplyConvoyPartyComponent.ConvoyState.Returning && component2.State != NavalSupplyConvoyPartyComponent.ConvoyState.WaitingAtHome && component2.State != NavalSupplyConvoyPartyComponent.ConvoyState.Idle)
+				{
+					if (!dictionary2.TryGetValue(component2.DestinationTown, out var value4))
+					{
+						value4 = (dictionary2[component2.DestinationTown] = new List<MobileParty>());
+					}
+					value4.Add(item);
+				}
+			}
+		}
+		HashSet<MobileParty> hashSet = new HashSet<MobileParty>();
+		foreach (KeyValuePair<Settlement, List<MobileParty>> item2 in dictionary)
+		{
+			List<MobileParty> value5 = item2.Value;
+			if (value5.Count > 1)
+			{
+				value5.Sort((MobileParty a, MobileParty b) => string.CompareOrdinal(a.StringId, b.StringId));
+				for (int num = 1; num < value5.Count; num++)
+				{
+					hashSet.Add(value5[num]);
+				}
+			}
+		}
+		foreach (KeyValuePair<Settlement, List<MobileParty>> item3 in dictionary2)
+		{
+			List<MobileParty> value6 = item3.Value;
+			if (value6.Count > 1)
+			{
+				value6.Sort((MobileParty a, MobileParty b) => string.CompareOrdinal(a.StringId, b.StringId));
+				for (int num2 = 1; num2 < value6.Count; num2++)
+				{
+					hashSet.Add(value6[num2]);
+				}
+			}
+		}
+		foreach (KeyValuePair<Settlement, List<MobileParty>> item4 in dictionary)
+		{
+			foreach (MobileParty item5 in item4.Value)
+			{
+				if (!hashSet.Contains(item5))
+				{
+					_activeSupplyLines[item4.Key] = item5;
+				}
+			}
+		}
+		foreach (KeyValuePair<Settlement, List<MobileParty>> item6 in dictionary2)
+		{
+			foreach (MobileParty item7 in item6.Value)
+			{
+				if (!hashSet.Contains(item7))
+				{
+					_incomingSupply[item6.Key] = item7;
+				}
+			}
+		}
+		foreach (MobileParty item8 in hashSet)
+		{
+			if (!_partiesToDestroy.Contains(item8))
+			{
+				_partiesToDestroy.Add(item8);
+			}
+			bool flag = false;
+		}
+		foreach (MobileParty item9 in MobileParty.All)
+		{
+			if (item9 != null && item9.IsActive && (TownSupplyLinePartyComponent.IsSupplyLineParty(item9) || NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(item9)) && (item9.MemberRoster == null || item9.MemberRoster.TotalManCount <= 0) && !_partiesToDestroy.Contains(item9))
+			{
+				_partiesToDestroy.Add(item9);
+				Main.Log("[SupplyLine] Re-queued zero-troop stray " + item9.StringId + " on load");
+			}
+		}
+		bool flag2 = false;
+	}
+
+	private void CleanupStaleEntries()
+	{
+		try
+		{
+			List<Settlement> list = (from kvp in _activeSupplyLines
+				where kvp.Value == null || !kvp.Value.IsActive
+				select kvp.Key).ToList();
+			foreach (Settlement item in list)
+			{
+				_activeSupplyLines.Remove(item);
+			}
+			List<Settlement> list2 = (from kvp in _incomingSupply
+				where kvp.Value == null || !kvp.Value.IsActive
+				select kvp.Key).ToList();
+			foreach (Settlement item2 in list2)
+			{
+				_incomingSupply.Remove(item2);
+			}
+			List<Settlement> list3 = (from kvp in _lastSpawnTime
+				where kvp.Value.ElapsedDaysUntilNow > 14f
+				select kvp.Key).ToList();
+			foreach (Settlement item3 in list3)
+			{
+				_lastSpawnTime.Remove(item3);
+			}
+			List<Settlement> list4 = (from kvp in _lastFailedSpawnTimes
+				where kvp.Value.ElapsedHoursUntilNow > 48f
+				select kvp.Key).ToList();
+			foreach (Settlement item4 in list4)
+			{
+				_lastFailedSpawnTimes.Remove(item4);
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in TownSupplyLineBehavior.CleanupStaleEntries: " + ex.Message);
+		}
+	}
+
+	private void OnDailyTickTown(Town town)
+	{
+		try
+		{
+			if (town == null || town.Settlement == null || town.IsCastle)
+			{
+				return;
+			}
+			UpdateConsecutiveEmergencyDays(town);
+			HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+			if (instance != null && !instance.EnableSupplyLines)
+			{
+				return;
+			}
+			Settlement settlement = town.Settlement;
+			if (!ShouldRecipientReceive(settlement))
+			{
+				return;
+			}
+			Settlement settlement2 = FindBestDonor(settlement);
+			float num = float.MaxValue;
+			if (settlement2 != null)
+			{
+				IsReachableByLand(settlement2, settlement, out var distance);
+				num = distance / (Campaign.Current.EstimatedAverageLordPartySpeed * (float)CampaignTime.HoursInDay);
+			}
+			Settlement settlement3 = null;
+			float num2 = float.MaxValue;
+			if (IsNavalDlcActive() && settlement.HasPort && (settlement.SiegeEvent == null || !settlement.SiegeEvent.IsBlockadeActive))
+			{
+				settlement3 = FindBestNavalDonor(settlement);
+				if (settlement3 != null)
+				{
+					IsReachableByWater(settlement3, settlement, out var distance2);
+					num2 = distance2 / (Campaign.Current.EstimatedAverageLordPartySpeed * (float)CampaignTime.HoursInDay);
+				}
+			}
+			if (settlement2 != null && settlement3 != null)
+			{
+				if (num2 < num)
+				{
+					SpawnNavalSupplyConvoy(settlement3, settlement);
+					bool flag = false;
+				}
+				else
+				{
+					SpawnSupplyLineParty(settlement2, settlement);
+				}
+			}
+			else if (settlement2 != null)
+			{
+				SpawnSupplyLineParty(settlement2, settlement);
+			}
+			else if (settlement3 != null)
+			{
+				SpawnNavalSupplyConvoy(settlement3, settlement);
+			}
+			else
+			{
+				bool flag2 = false;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in TownSupplyLineBehavior.OnDailyTickTown: " + ex.Message);
+		}
+	}
+
+	private bool ShouldRecipientReceive(Settlement recipient)
+	{
+		if (recipient == null || !recipient.IsTown)
+		{
+			return false;
+		}
+		if (_incomingSupply.TryGetValue(recipient, out var value))
+		{
+			bool flag = value != null && value.IsActive && TownSupplyLinePartyComponent.IsSupplyLineParty(value);
+			if (flag)
+			{
+				TownSupplyLinePartyComponent component = TownSupplyLinePartyComponent.GetComponent(value);
+				if (component == null || component.DestinationTown != recipient || component.State == TownSupplyLinePartyComponent.SupplyLineState.Fleeing || component.State == TownSupplyLinePartyComponent.SupplyLineState.Idle)
+				{
+					flag = false;
+				}
+			}
+			if (flag)
+			{
+				return false;
+			}
+			_incomingSupply.Remove(recipient);
+		}
+		if (recipient.IsUnderSiege)
+		{
+			return false;
+		}
+		if (recipient.Town != null && recipient.Town.InRebelliousState)
+		{
+			return false;
+		}
+		if (recipient.MapFaction == null)
+		{
+			return false;
+		}
+		int num = (_consecutiveEmergencyDays.TryGetValue(recipient.StringId, out var value2) ? value2 : 0);
+		bool flag2 = num >= 3 && FoodSystemConstants.IsEmergencyMode(recipient.Town);
+		float starvationDays = StarvationDesertionBehavior.GetStarvationDays(recipient);
+		bool flag3 = starvationDays >= 7f;
+		return flag2 | flag3;
+	}
+
+	private void UpdateConsecutiveEmergencyDays(Town town)
+	{
+		if (town != null && town.Settlement != null)
+		{
+			string stringId = town.Settlement.StringId;
+			if (FoodSystemConstants.IsEmergencyMode(town))
+			{
+				_consecutiveEmergencyDays[stringId] = ((!_consecutiveEmergencyDays.TryGetValue(stringId, out var value)) ? 1 : (value + 1));
+			}
+			else if (_consecutiveEmergencyDays.ContainsKey(stringId))
+			{
+				_consecutiveEmergencyDays.Remove(stringId);
+			}
+		}
+	}
+
+	private Settlement FindBestDonor(Settlement recipient)
+	{
+		if (recipient?.MapFaction == null)
+		{
+			return null;
+		}
+		Settlement result = null;
+		float num = float.MinValue;
+		foreach (Settlement item in Settlement.All)
+		{
+			if (item != recipient && IsValidDonor(item, recipient, out var travelDays))
+			{
+				float num2 = item.Town.FoodStocks / Math.Max(travelDays, 0.25f);
+				if (num2 > num)
+				{
+					num = num2;
+					result = item;
+				}
+			}
+		}
+		return result;
+	}
+
+	private bool IsValidDonor(Settlement candidate, Settlement recipient, out float travelDays)
+	{
+		travelDays = float.MaxValue;
+		if (candidate == null || !candidate.IsTown || candidate.Town == null)
+		{
+			return false;
+		}
+		if (candidate.IsUnderSiege)
+		{
+			return false;
+		}
+		if (candidate.Town.InRebelliousState)
+		{
+			return false;
+		}
+		if (candidate.MapFaction != recipient.MapFaction)
+		{
+			return false;
+		}
+		if (_activeSupplyLines.TryGetValue(candidate, out var value))
+		{
+			if (value != null && value.IsActive)
+			{
+				return false;
+			}
+			_activeSupplyLines.Remove(candidate);
+		}
+		if (_lastSpawnTime.TryGetValue(candidate, out var value2) && value2.ElapsedHoursUntilNow < 168f)
+		{
+			return false;
+		}
+		if (_lastFailedSpawnTimes.TryGetValue(candidate, out var value3))
+		{
+			if (value3.ElapsedHoursUntilNow < 24f)
+			{
+				return false;
+			}
+			_lastFailedSpawnTimes.Remove(candidate);
+		}
+		if (candidate.Town.FoodStocks < 400f)
+		{
+			return false;
+		}
+		if (FoodSystemConstants.IsEmergencyMode(candidate.Town))
+		{
+			return false;
+		}
+		float num = FoodSystemConstants.GetEmergencyThreshold(candidate.Town) * 2f;
+		float num2 = Math.Min(300f, candidate.Town.FoodStocks - num);
+		if (num2 < 100f)
+		{
+			return false;
+		}
+		MobileParty garrisonParty = candidate.Town.GarrisonParty;
+		if (garrisonParty == null || garrisonParty.MemberRoster.TotalManCount < 100)
+		{
+			return false;
+		}
+		if (!IsReachableByLand(candidate, recipient, out var distance))
+		{
+			return false;
+		}
+		travelDays = distance / (Campaign.Current.EstimatedAverageLordPartySpeed * (float)CampaignTime.HoursInDay);
+		if (travelDays > 3f)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private bool IsReachableByLand(Settlement from, Settlement to, out float distance)
+	{
+		distance = float.MaxValue;
+		try
+		{
+			float distance2 = Campaign.Current.Models.MapDistanceModel.GetDistance(from, to, isFromPort: false, isTargetingPort: false, MobileParty.NavigationType.Default);
+			if (distance2 > 0f && distance2 < 100000000f)
+			{
+				distance = distance2;
+				return true;
+			}
+			return false;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private SupplyPlan ComputePlan(Town donor, Town recipient)
+	{
+		SupplyPlan result = default(SupplyPlan);
+		int val = Math.Max(0, recipient.FoodStocksUpperLimit() - (int)recipient.FoodStocks);
+		float num = FoodSystemConstants.GetEmergencyThreshold(donor) * 2f;
+		int val2 = Math.Max(0, (int)(donor.FoodStocks - num));
+		int num2 = Math.Min(300, Math.Min(val, val2));
+		if (num2 < 100)
+		{
+			return result;
+		}
+		int num3 = donor.GarrisonParty?.MemberRoster.TotalManCount ?? 0;
+		int num4 = Math.Min(120, (int)((float)num3 * 0.2f));
+		if (num4 < 20)
+		{
+			return result;
+		}
+		int num5 = num4 * 3;
+		if (num2 > num5)
+		{
+			num2 = num5;
+		}
+		if (num2 < 100)
+		{
+			return result;
+		}
+		int troops = Math.Max(20, (int)Math.Ceiling((float)num2 / 3f));
+		int packAnimalsTarget = Math.Max(5, Math.Min(30, (int)Math.Ceiling((float)num2 / 20f)));
+		result.Food = num2;
+		result.Troops = troops;
+		result.PackAnimalsTarget = packAnimalsTarget;
+		result.Valid = true;
+		return result;
+	}
+
+	private void SpawnSupplyLineParty(Settlement donor, Settlement recipient)
+	{
+		try
+		{
+			if ((_activeSupplyLines.TryGetValue(donor, out var value) && value != null && value.IsActive) || (_incomingSupply.TryGetValue(recipient, out var value2) && value2 != null && value2.IsActive))
+			{
+				return;
+			}
+			_activeSupplyLines.Remove(donor);
+			_incomingSupply.Remove(recipient);
+			Town town = donor.Town;
+			Town town2 = recipient.Town;
+			MobileParty mobileParty = town?.GarrisonParty;
+			if (town == null || town2 == null || mobileParty == null)
+			{
+				return;
+			}
+			SupplyPlan supplyPlan = ComputePlan(town, town2);
+			if (!supplyPlan.Valid)
+			{
+				return;
+			}
+			_supplyLineCounter++;
+			string stringId = "supply_line_party_" + donor.StringId + "_" + _supplyLineCounter;
+			MobileParty mobileParty2 = TownSupplyLinePartyComponent.CreateSupplyLineParty(stringId, donor, recipient);
+			if (mobileParty2 == null)
+			{
+				Main.Log("ERROR: Failed to create supply line party for " + donor.Name?.ToString() + " -> " + recipient.Name);
+				return;
+			}
+			TransferTroopsFromGarrison(mobileParty, mobileParty2, supplyPlan.Troops);
+			int packAnimalsTaken = TakePackAnimalsFromMarket(mobileParty2, donor, supplyPlan.PackAnimalsTarget);
+			int numberOfMenWithoutHorse = mobileParty2.Party.NumberOfMenWithoutHorse;
+			int targetCount = Math.Max(5, Math.Min(30, numberOfMenWithoutHorse / 3));
+			int num = TakeRidingMountsFromMarket(mobileParty2, donor, targetCount);
+			int num2 = supplyPlan.Food;
+			int inventoryCapacity = mobileParty2.InventoryCapacity;
+			int num3 = num2 * 10;
+			if (inventoryCapacity > 0 && inventoryCapacity < num3)
+			{
+				int num4 = inventoryCapacity / 10;
+				bool flag = false;
+				num2 = num4;
+			}
+			if (num2 < 100)
+			{
+				bool flag2 = false;
+				_lastFailedSpawnTimes[donor] = CampaignTime.Now;
+				ReturnTroopsToGarrison(mobileParty2, mobileParty);
+				DonateRemainingToSettlement(mobileParty2, donor);
+				DestroyPartyAction.Apply(null, mobileParty2);
+				return;
+			}
+			town.FoodStocks = Math.Max(0f, town.FoodStocks - (float)num2);
+			RecordDailyDispatch(donor, num2);
+			List<(ItemObject, int)> list = GenerateFoodFromTown(donor, num2);
+			foreach (var (itemObject, num5) in list)
+			{
+				if (itemObject != null && num5 > 0)
+				{
+					mobileParty2.ItemRoster.AddToCounts(itemObject, num5);
+				}
+			}
+			TownSupplyLinePartyComponent component = TownSupplyLinePartyComponent.GetComponent(mobileParty2);
+			if (component != null)
+			{
+				component.PackAnimalsTaken = packAnimalsTaken;
+				component.State = TownSupplyLinePartyComponent.SupplyLineState.TravelingToDestination;
+				component.SetDestination(recipient);
+			}
+			_activeSupplyLines[donor] = mobileParty2;
+			_incomingSupply[recipient] = mobileParty2;
+			_lastSpawnTime[donor] = CampaignTime.Now;
+			bool flag3 = false;
+			bool flag4 = donor.OwnerClan == Clan.PlayerClan;
+			bool flag5 = recipient.OwnerClan == Clan.PlayerClan;
+			int num6 = GlobalSettings<HAPSettings>.Instance?.SupplyLineNotifications?.SelectedIndex ?? 1;
+			if ((flag4 | flag5) && num6 >= 1)
+			{
+				TextObject textObject = new TextObject("{=HAP_SupplyLineSpawnNotification}{DONOR_NAME} is sending supplies to {RECIPIENT_NAME}.");
+				textObject.SetTextVariable("DONOR_NAME", donor.Name);
+				textObject.SetTextVariable("RECIPIENT_NAME", recipient.Name);
+				InformationManager.DisplayMessage(new InformationMessage(textObject.ToString(), Colors.Yellow));
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in SpawnSupplyLineParty: " + ex.Message);
+		}
+	}
+
+	private List<(ItemObject item, int amount)> GenerateFoodFromTown(Settlement town, int totalAmount)
+	{
+		List<(ItemObject, int)> list = new List<(ItemObject, int)>();
+		if (town == null || totalAmount <= 0)
+		{
+			return list;
+		}
+		MBReadOnlyList<Village> boundVillages = town.BoundVillages;
+		VillageProductionCalculatorModel villageProductionCalculatorModel = Campaign.Current?.Models?.VillageProductionCalculatorModel;
+		List<(ItemObject, float)> list2 = new List<(ItemObject, float)>();
+		if (boundVillages != null && boundVillages.Count > 0 && villageProductionCalculatorModel != null)
+		{
+			foreach (Village item4 in boundVillages)
+			{
+				if (item4?.VillageType?.Productions == null)
+				{
+					continue;
+				}
+				foreach (var production in item4.VillageType.Productions)
+				{
+					var (item, num) = production;
+					if (item == null || !item.IsFood)
+					{
+						continue;
+					}
+					float resultNumber = villageProductionCalculatorModel.CalculateDailyProductionAmount(item4, item).ResultNumber;
+					if (!(resultNumber <= 0f))
+					{
+						int num2 = list2.FindIndex(((ItemObject item, float weight) p) => p.item == item);
+						if (num2 >= 0)
+						{
+							(ItemObject, float) tuple2 = list2[num2];
+							list2[num2] = (tuple2.Item1, tuple2.Item2 + resultNumber);
+						}
+						else
+						{
+							list2.Add((item, resultNumber));
+						}
+					}
+				}
+			}
+		}
+		if (list2.Count == 0)
+		{
+			return GenerateFallbackFood(totalAmount);
+		}
+		float num3 = list2.Sum<(ItemObject, float)>(((ItemObject item, float weight) p) => p.weight);
+		foreach (var item5 in list2)
+		{
+			ItemObject item2 = item5.Item1;
+			float item3 = item5.Item2;
+			float num4 = item3 / num3;
+			int num5 = MathF.Round((float)totalAmount * num4);
+			if (num5 > 0)
+			{
+				list.Add((item2, num5));
+			}
+		}
+		if (list.Count == 0 && list2.Count > 0)
+		{
+			list.Add((list2[0].Item1, totalAmount));
+		}
+		return list;
+	}
+
+	private List<(ItemObject item, int amount)> GenerateFallbackFood(int totalAmount)
+	{
+		List<(ItemObject, int)> list = new List<(ItemObject, int)>();
+		string[] array = new string[4] { "grain", "bread", "butter", "cheese" };
+		List<ItemObject> list2 = new List<ItemObject>();
+		string[] array2 = array;
+		foreach (string objectName in array2)
+		{
+			ItemObject itemObject = MBObjectManager.Instance.GetObject<ItemObject>(objectName);
+			if (itemObject != null && itemObject.IsFood)
+			{
+				list2.Add(itemObject);
+			}
+		}
+		if (list2.Count == 0)
+		{
+			return list;
+		}
+		int num = Math.Max(1, totalAmount / list2.Count);
+		int num2 = 0;
+		for (int j = 0; j < list2.Count; j++)
+		{
+			int num3 = ((j == list2.Count - 1) ? (totalAmount - num2) : num);
+			if (num3 > 0)
+			{
+				list.Add((list2[j], num3));
+				num2 += num3;
+			}
+		}
+		return list;
+	}
+
+	private void TransferTroopsFromGarrison(MobileParty garrison, MobileParty party, int targetCount)
+	{
+		int num = 0;
+		TroopRoster memberRoster = garrison.MemberRoster;
+		List<TroopRosterElement> list = new List<TroopRosterElement>();
+		for (int i = 0; i < memberRoster.Count; i++)
+		{
+			TroopRosterElement elementCopyAtIndex = memberRoster.GetElementCopyAtIndex(i);
+			if (!elementCopyAtIndex.Character.IsHero && elementCopyAtIndex.Number > 0)
+			{
+				list.Add(elementCopyAtIndex);
+			}
+		}
+		list.Sort(delegate(TroopRosterElement a, TroopRosterElement b)
+		{
+			bool isMounted = a.Character.IsMounted;
+			bool isMounted2 = b.Character.IsMounted;
+			if (isMounted != isMounted2)
+			{
+				return isMounted2.CompareTo(isMounted);
+			}
+			int num6 = b.Character.Tier.CompareTo(a.Character.Tier);
+			return (num6 != 0) ? num6 : b.Character.TroopWage.CompareTo(a.Character.TroopWage);
+		});
+		foreach (TroopRosterElement item in list)
+		{
+			if (num >= targetCount)
+			{
+				break;
+			}
+			int troopCount = memberRoster.GetTroopCount(item.Character);
+			if (troopCount <= 0)
+			{
+				continue;
+			}
+			int num2 = 0;
+			for (int num3 = 0; num3 < memberRoster.Count; num3++)
+			{
+				if (memberRoster.GetCharacterAtIndex(num3) == item.Character)
+				{
+					num2 = memberRoster.GetElementCopyAtIndex(num3).WoundedNumber;
+					break;
+				}
+			}
+			int num4 = troopCount - num2;
+			if (num4 > 0)
+			{
+				int num5 = Math.Min(num4, targetCount - num);
+				if (num5 > 0)
+				{
+					party.MemberRoster.AddToCounts(item.Character, num5);
+					memberRoster.AddToCounts(item.Character, -num5);
+					num += num5;
+				}
+			}
+		}
+	}
+
+	private int TakePackAnimalsFromMarket(MobileParty party, Settlement donor, int targetCount)
+	{
+		if (party == null || donor?.ItemRoster == null || targetCount <= 0)
+		{
+			return 0;
+		}
+		int num = 0;
+		ItemRoster itemRoster = donor.ItemRoster;
+		int num2 = itemRoster.Count - 1;
+		while (num2 >= 0 && num < targetCount)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num2);
+			ItemObject item = elementCopyAtIndex.Eq

@@ -1,0 +1,503 @@
+﻿PART 37/75
+Initializer: " + ex.Message);
+		}
+	}
+
+	public static void Reset()
+	{
+		_initialized = false;
+	}
+
+	private static void ReinitializeRoadsAndPaths()
+	{
+		DefaultBuildingTypes.SettlementRoadsAndPaths.Initialize(new TextObject("{=HAP_RoadsName}Roads and Paths"), new TextObject("{=HAP_RoadsDesc}Maintained roads and paths improve village hearth growth."), new int[3] { 2400, 3600, 4800 }, new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>[1]
+		{
+			new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>(BuildingEffectEnum.VillageHeartsPerDay, BuildingEffectIncrementType.Add, 0.2f, 0.4f, 0.6f)
+		}, isMilitaryProject: false, 0f);
+		DefaultBuildingTypes.CastleRoadsAndPaths.Initialize(new TextObject("{=HAP_RoadsName}Roads and Paths"), new TextObject("{=HAP_RoadsDesc}Maintained roads and paths improve village hearth growth."), new int[3] { 560, 840, 1120 }, new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>[1]
+		{
+			new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>(BuildingEffectEnum.VillageHeartsPerDay, BuildingEffectIncrementType.Add, 0.2f, 0.4f, 0.6f)
+		}, isMilitaryProject: false, 0f);
+		Main.Log("Roads and Paths re-initialized: hearth-only, production% removed.");
+	}
+
+	private static void ReinitializeLandholdings()
+	{
+		DefaultBuildingTypes.CastleFarmlands.Initialize(new TextObject("{=HAP_LandholdingsName}Landholdings"), new TextObject("{=HAP_LandholdingsDesc}Managed estates and farmsteads increase bound village production."), new int[3] { 420, 630, 840 }, new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>[1]
+		{
+			new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>(BuildingEffectEnum.VillageProduction, BuildingEffectIncrementType.AddFactor, 0.05f, 0.1f, 0.15f)
+		}, isMilitaryProject: false, 0f);
+		Main.Log("Farmlands re-initialized as Landholdings: +5/10/15% village production.");
+	}
+
+	private static void ReinitializeCastleGuardHouse()
+	{
+		DefaultBuildingTypes.CastleGuardHouse.Initialize(new TextObject("{=OHEiwoHC}Guard House"), new TextObject("{=HAP_CastleGuardHouseDesc}Increases militia recruitment, prisoner limit, and provides a patrol party that improves security."), new int[3] { 350, 490, 630 }, new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>[3]
+		{
+			new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>(BuildingEffectEnum.Militia, BuildingEffectIncrementType.Add, 1f, 2f, 3f),
+			new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>(BuildingEffectEnum.PrisonCapacity, BuildingEffectIncrementType.Add, 10f, 30f, 50f),
+			new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>(BuildingEffectEnum.PatrolPartyStrength, BuildingEffectIncrementType.Add, 1f, 2f, 3f)
+		}, isMilitaryProject: true, 0f);
+		Main.Log("Castle Guard House re-initialized: added PatrolPartyStrength 1/2/3.");
+	}
+
+	private static void ReinitializeCastellansOffice()
+	{
+		DefaultBuildingTypes.CastleCastallansOffice.Initialize(new TextObject("{=kLNnFMR9}Castellan's Office"), new TextObject("{=HAP_CastellansOfficeDesc}Increases auto recruitment and slightly decreases garrison wages."), new int[3] { 560, 840, 1260 }, new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>[2]
+		{
+			new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>(BuildingEffectEnum.GarrisonWageReduction, BuildingEffectIncrementType.AddFactor, -0.05f, -0.1f, -0.15f),
+			new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>(BuildingEffectEnum.GarrisonAutoRecruitment, BuildingEffectIncrementType.Add, 1f, 2f, 4f)
+		}, isMilitaryProject: true, 0f);
+		Main.Log("Castellan's Office re-initialized: wages -5/-10/-15%, auto-recruit 1/2/4.");
+	}
+
+	private static void ReinitializeTownBarracks()
+	{
+		DefaultBuildingTypes.SettlementBarracks.Initialize(new TextObject("{=x2B0OjhI}Barracks"), new TextObject("{=HAP_BarracksDesc}Lodgings for garrison troops. Each level increases garrison limit."), new int[3] { 1800, 3000, 4200 }, new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>[1]
+		{
+			new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>(BuildingEffectEnum.GarrisonCapacity, BuildingEffectIncrementType.Add, 50f, 100f, 150f)
+		}, isMilitaryProject: true, 0f);
+		Main.Log("Town Barracks re-initialized: capacity 50/100/150, wage reduction removed.");
+	}
+
+	private static void ReinitializeCastleBarracks()
+	{
+		DefaultBuildingTypes.CastleBarracks.Initialize(new TextObject("{=x2B0OjhI}Barracks"), new TextObject("{=HAP_BarracksDesc}Lodgings for garrison troops. Each level increases garrison limit."), new int[3] { 420, 700, 1120 }, new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>[1]
+		{
+			new Tuple<BuildingEffectEnum, BuildingEffectIncrementType, float, float, float>(BuildingEffectEnum.GarrisonCapacity, BuildingEffectIncrementType.Add, 30f, 60f, 90f)
+		}, isMilitaryProject: true, 0f);
+		Main.Log("Castle Barracks re-initialized: capacity 30/60/90, wage reduction removed.");
+	}
+
+	private static void InjectLandholdingsIntoTowns()
+	{
+		int num = 0;
+		foreach (Town allTown in Town.AllTowns)
+		{
+			bool flag = false;
+			foreach (Building building in allTown.Buildings)
+			{
+				if (building.BuildingType == DefaultBuildingTypes.CastleFarmlands)
+				{
+					flag = true;
+					break;
+				}
+			}
+			if (!flag)
+			{
+				Building item = new Building(DefaultBuildingTypes.CastleFarmlands, allTown);
+				allTown.Buildings.Add(item);
+				num++;
+			}
+		}
+		if (num > 0)
+		{
+			Main.Log($"Landholdings injected into {num} towns (save compatibility).");
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Debug\DebugMorconFoodBehavior.cs =====
+using System.Collections.Generic;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.ComponentInterfaces;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Debug;
+
+public class DebugMorconFoodBehavior : CampaignBehaviorBase
+{
+	private const string TARGET_LORD_ID = "lord_3_1";
+
+	private int _tickCounter = 0;
+
+	private Dictionary<string, int> _inventorySnapshot = new Dictionary<string, int>();
+
+	private Settlement _lastEnteredSettlement = null;
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.HourlyTickPartyEvent.AddNonSerializedListener(this, OnHourlyTickParty);
+		CampaignEvents.SettlementEntered.AddNonSerializedListener(this, OnSettlementEntered);
+		CampaignEvents.OnSettlementLeftEvent.AddNonSerializedListener(this, OnSettlementLeft);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+	}
+
+	private MobileParty FindTargetParty()
+	{
+		foreach (MobileParty item in MobileParty.All)
+		{
+			if (item.LeaderHero != null && item.LeaderHero.StringId == "lord_3_1")
+			{
+				return item;
+			}
+		}
+		return null;
+	}
+
+	private void OnHourlyTickParty(MobileParty party)
+	{
+		if (party.LeaderHero != null && !(party.LeaderHero.StringId != "lord_3_1"))
+		{
+			_tickCounter++;
+			if (_tickCounter % 6 == 0)
+			{
+				LogPartyFoodStatus(party, "HOURLY CHECK");
+			}
+		}
+	}
+
+	private void OnSettlementEntered(MobileParty party, Settlement settlement, Hero hero)
+	{
+		if (party != null && party.LeaderHero != null && !(party.LeaderHero.StringId != "lord_3_1"))
+		{
+			Main.Log("[DEBUG MORCON] ========== ENTERED SETTLEMENT ==========");
+			Main.Log($"[DEBUG MORCON] Settlement: {settlement.Name} (IsTown: {settlement.IsTown}, IsVillage: {settlement.IsVillage})");
+			_inventorySnapshot = CaptureInventorySnapshot(party);
+			_lastEnteredSettlement = settlement;
+			LogPartyFoodStatus(party, "ON ENTER");
+			LogSettlementFoodStatus(settlement);
+			LogBuyingConditions(party, settlement);
+			Main.Log("[DEBUG MORCON] ==========================================");
+		}
+	}
+
+	private void LogPartyFoodStatus(MobileParty party, string context)
+	{
+		Main.Log("[DEBUG MORCON] --- " + context + " ---");
+		Main.Log($"[DEBUG MORCON] Party: {party.Name}");
+		Main.Log($"[DEBUG MORCON] PartyTradeGold: {party.PartyTradeGold}");
+		Main.Log($"[DEBUG MORCON] TotalFoodAtInventory: {party.TotalFoodAtInventory}");
+		Main.Log($"[DEBUG MORCON] ItemRoster.TotalFood: {party.ItemRoster.TotalFood}");
+		Main.Log($"[DEBUG MORCON] FoodChange (daily): {party.FoodChange:F2}");
+		Main.Log($"[DEBUG MORCON] IsStarving: {party.Party.IsStarving}");
+		Main.Log($"[DEBUG MORCON] MemberRoster Count: {party.MemberRoster.TotalManCount}");
+		Main.Log($"[DEBUG MORCON] Wounded Count: {party.MemberRoster.TotalWounded}");
+		float num = ((party.FoodChange < 0f) ? ((float)party.ItemRoster.TotalFood / (0f - party.FoodChange)) : 999f);
+		Main.Log($"[DEBUG MORCON] Days of food remaining: {num:F1}");
+		Main.Log("[DEBUG MORCON] Food items in inventory:");
+		int num2 = 0;
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = party.ItemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0)
+			{
+				bool isFood = item.IsFood;
+				bool flag = item.HasHorseComponent && item.HorseComponent.IsLiveStock;
+				if (isFood | flag)
+				{
+					num2++;
+					Main.Log($"[DEBUG MORCON]   - {item.Name}: {elementCopyAtIndex.Amount} (IsFood: {isFood}, IsLivestock: {flag}, Value: {item.Value})");
+				}
+			}
+		}
+		if (num2 == 0)
+		{
+			Main.Log("[DEBUG MORCON]   (NO FOOD ITEMS!)");
+		}
+		if (party.CurrentSettlement != null)
+		{
+			Main.Log($"[DEBUG MORCON] Currently IN: {party.CurrentSettlement.Name}");
+			return;
+		}
+		Main.Log("[DEBUG MORCON] Currently on map (not in settlement)");
+		if (party.TargetSettlement != null)
+		{
+			Main.Log($"[DEBUG MORCON] Target Settlement: {party.TargetSettlement.Name}");
+		}
+	}
+
+	private void LogSettlementFoodStatus(Settlement settlement)
+	{
+		Main.Log("[DEBUG MORCON] --- SETTLEMENT FOOD STATUS ---");
+		Main.Log($"[DEBUG MORCON] Settlement ItemRoster.TotalFood: {settlement.ItemRoster.TotalFood}");
+		if (settlement.IsTown)
+		{
+			Main.Log($"[DEBUG MORCON] Town Gold: {settlement.Town.Gold}");
+		}
+		Main.Log("[DEBUG MORCON] FOOD items in settlement:");
+		int num = 0;
+		for (int i = 0; i < settlement.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = settlement.ItemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && item.IsFood)
+			{
+				num++;
+				int num2 = settlement.SettlementComponent?.GetItemPrice(elementCopyAtIndex.EquipmentElement) ?? 0;
+				Main.Log($"[DEBUG MORCON]   - {item.Name}: {elementCopyAtIndex.Amount} (Price: {num2}, Value: {item.Value})");
+			}
+		}
+		if (num == 0)
+		{
+			Main.Log("[DEBUG MORCON]   (NO FOOD IN SETTLEMENT!)");
+		}
+		Main.Log("[DEBUG MORCON] LIVESTOCK items in settlement:");
+		int num3 = 0;
+		for (int j = 0; j < settlement.ItemRoster.Count; j++)
+		{
+			ItemRosterElement elementCopyAtIndex2 = settlement.ItemRoster.GetElementCopyAtIndex(j);
+			ItemObject item2 = elementCopyAtIndex2.EquipmentElement.Item;
+			if (item2 != null && elementCopyAtIndex2.Amount > 0 && item2.HasHorseComponent && item2.HorseComponent.IsLiveStock)
+			{
+				num3++;
+				int num4 = settlement.SettlementComponent?.GetItemPrice(elementCopyAtIndex2.EquipmentElement) ?? 0;
+				Main.Log($"[DEBUG MORCON]   - {item2.Name}: {elementCopyAtIndex2.Amount} (Price: {num4}, Value: {item2.Value}, MeatCount: {item2.HorseComponent.MeatCount})");
+			}
+		}
+		if (num3 == 0)
+		{
+			Main.Log("[DEBUG MORCON]   (NO LIVESTOCK IN SETTLEMENT!)");
+		}
+	}
+
+	private void LogBuyingConditions(MobileParty party, Settlement settlement)
+	{
+		Main.Log("[DEBUG MORCON] --- BUYING CONDITIONS CHECK ---");
+		bool flag = party.LeaderHero != null;
+		Main.Log($"[DEBUG MORCON] Has LeaderHero: {flag}");
+		bool flag2 = settlement.IsTown || settlement.IsVillage;
+		Main.Log($"[DEBUG MORCON] Is Town or Village: {flag2}");
+		bool flag3 = Campaign.Current.Models.MobilePartyFoodConsumptionModel.DoesPartyConsumeFood(party);
+		Main.Log($"[DEBUG MORCON] DoesPartyConsumeFood: {flag3}");
+		bool flag4 = party.Army == null || party.AttachedTo == null || party.Army.LeaderParty == party;
+		Main.Log(string.Format("[DEBUG MORCON] Army check passed: {0} (Army: {1}, AttachedTo: {2})", flag4, (party.Army != null) ? party.Army.Name.ToString() : "none", (party.AttachedTo != null) ? party.AttachedTo.Name.ToString() : "none"));
+		bool flag5 = settlement.IsVillage || (party.MapFaction != null && !party.MapFaction.IsAtWarWith(settlement.MapFaction));
+		Main.Log($"[DEBUG MORCON] Faction check passed: {flag5}");
+		if (!flag5 && settlement.IsTown)
+		{
+			Main.Log("[DEBUG MORCON]   Party faction: " + ((party.MapFaction != null) ? party.MapFaction.Name.ToString() : "null"));
+			Main.Log("[DEBUG MORCON]   Settlement faction: " + ((settlement.MapFaction != null) ? settlement.MapFaction.Name.ToString() : "null"));
+			Main.Log($"[DEBUG MORCON]   At war: {party.MapFaction?.IsAtWarWith(settlement.MapFaction) ?? false}");
+		}
+		bool flag6 = settlement.ItemRoster.TotalFood > 0;
+		Main.Log($"[DEBUG MORCON] Settlement has food (TotalFood > 0): {flag6}");
+		PartyFoodBuyingModel partyFoodBuyingModel = Campaign.Current.Models.PartyFoodBuyingModel;
+		float num = (settlement.IsVillage ? partyFoodBuyingModel.MinimumDaysFoodToLastWhileBuyingFoodFromVillage : partyFoodBuyingModel.MinimumDaysFoodToLastWhileBuyingFoodFromTown);
+		Main.Log($"[DEBUG MORCON] MinimumDaysToLast: {num}");
+		float num2 = ((party.FoodChange < 0f) ? ((float)party.TotalFoodAtInventory / (0f - party.FoodChange)) : 999f);
+		Main.Log($"[DEBUG MORCON] Current days of food: {num2:F1}");
+		float num3 = num - num2;
+		Main.Log($"[DEBUG MORCON] Days needed to reach minimum: {num3:F1}");
+		if (num3 > 0f && party.FoodChange < 0f)
+		{
+			int num4 = (int)((0f - party.FoodChange) * num3);
+			Main.Log($"[DEBUG MORCON] Food items to buy: {num4}");
+		}
+		else
+		{
+			Main.Log("[DEBUG MORCON] Party doesn't need to buy (has enough days or positive food change)");
+		}
+		bool flag7 = flag & flag2 & flag3 & flag4 & flag5 & flag6;
+		Main.Log($"[DEBUG MORCON] WOULD TRY TO BUY: {flag7}");
+	}
+
+	private Dictionary<string, int> CaptureInventorySnapshot(MobileParty party)
+	{
+		Dictionary<string, int> dictionary = new Dictionary<string, int>();
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = party.ItemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0)
+			{
+				bool isFood = item.IsFood;
+				bool flag = item.HasHorseComponent && item.HorseComponent.IsLiveStock;
+				if (isFood | flag)
+				{
+					dictionary[item.StringId] = elementCopyAtIndex.Amount;
+				}
+			}
+		}
+		return dictionary;
+	}
+
+	private void LogPurchasedItems(MobileParty party, string context)
+	{
+		if (_inventorySnapshot.Count == 0)
+		{
+			return;
+		}
+		Main.Log("[DEBUG MORCON] --- ITEMS PURCHASED (" + context + ") ---");
+		Dictionary<string, int> dictionary = CaptureInventorySnapshot(party);
+		bool flag = false;
+		foreach (KeyValuePair<string, int> item in dictionary)
+		{
+			int num = (_inventorySnapshot.ContainsKey(item.Key) ? _inventorySnapshot[item.Key] : 0);
+			int num2 = item.Value - num;
+			if (num2 > 0)
+			{
+				flag = true;
+				ItemObject itemObject = Game.Current.ObjectManager.GetObject<ItemObject>(item.Key);
+				string text = itemObject?.Name?.ToString() ?? item.Key;
+				bool flag2 = itemObject != null && itemObject.HasHorseComponent && itemObject.HorseComponent.IsLiveStock;
+				Main.Log(string.Format("[DEBUG MORCON]   + {0}: {1} (now has {2}) [{3}]", text, num2, item.Value, flag2 ? "LIVESTOCK" : "FOOD"));
+			}
+		}
+		if (!flag)
+		{
+			Main.Log("[DEBUG MORCON]   (NO FOOD/LIVESTOCK PURCHASED)");
+		}
+	}
+
+	private void OnSettlementLeft(MobileParty party, Settlement settlement)
+	{
+		if (party != null && party.LeaderHero != null && !(party.LeaderHero.StringId != "lord_3_1"))
+		{
+			Main.Log("[DEBUG MORCON] ========== LEFT SETTLEMENT ==========");
+			Main.Log($"[DEBUG MORCON] Settlement: {settlement.Name}");
+			LogPurchasedItems(party, "ON LEAVE");
+			LogPartyFoodStatus(party, "ON LEAVE");
+			_inventorySnapshot.Clear();
+			_lastEnteredSettlement = null;
+			Main.Log("[DEBUG MORCON] ==========================================");
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\FoodSystemConstants.cs =====
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction;
+
+public static class FoodSystemConstants
+{
+	public const float EMERGENCY_THRESHOLD_PERCENT = 0.2f;
+
+	public const float MARKET_RELEASE_THRESHOLD_1 = 0.2f;
+
+	public const float MARKET_RELEASE_THRESHOLD_2 = 0.4f;
+
+	public const float MARKET_RELEASE_THRESHOLD_3 = 0.6f;
+
+	public const float MARKET_RELEASE_THRESHOLD_4 = 0.8f;
+
+	public const float MARKET_RELEASE_PERCENT_1 = 0.1f;
+
+	public const float MARKET_RELEASE_PERCENT_2 = 0.2f;
+
+	public const float MARKET_RELEASE_PERCENT_3 = 0.4f;
+
+	public const float MARKET_RELEASE_PERCENT_4 = 0.6f;
+
+	public const float MARKET_WELL_STOCKED_DAYS = 10f;
+
+	public const float MARKET_OVERSATURATED_DAYS = 30f;
+
+	public static bool IsEmergencyMode(Town town)
+	{
+		if (town == null)
+		{
+			return false;
+		}
+		float num = 0.2f;
+		Kingdom kingdom = town.Settlement?.OwnerClan?.Kingdom;
+		if (kingdom != null && HAPPolicies.FaminePreventionAct != null && kingdom.ActivePolicies.Contains(HAPPolicies.FaminePreventionAct))
+		{
+			num = 0.3f;
+		}
+		float num2 = (float)town.FoodStocksUpperLimit() * num;
+		return town.FoodStocks < num2;
+	}
+
+	public static float GetEmergencyThreshold(Town town)
+	{
+		if (town == null)
+		{
+			return 30f;
+		}
+		float num = 0.2f;
+		Kingdom kingdom = town.Settlement?.OwnerClan?.Kingdom;
+		if (kingdom != null && HAPPolicies.FaminePreventionAct != null && kingdom.ActivePolicies.Contains(HAPPolicies.FaminePreventionAct))
+		{
+			num = 0.3f;
+		}
+		return (float)town.FoodStocksUpperLimit() * num;
+	}
+
+	public static float GetMarketReleasePercent(Town town)
+	{
+		if (town == null)
+		{
+			return 0f;
+		}
+		int num = town.FoodStocksUpperLimit();
+		if (num <= 0)
+		{
+			return 0f;
+		}
+		if (IsEmergencyMode(town))
+		{
+			return 0f;
+		}
+		float num2 = town.FoodStocks / (float)num;
+		float num3;
+		if (num2 >= 0.8f)
+		{
+			num3 = 0.6f;
+		}
+		else if (num2 >= 0.6f)
+		{
+			num3 = 0.4f;
+		}
+		else if (num2 >= 0.4f)
+		{
+			num3 = 0.2f;
+		}
+		else
+		{
+			if (!(num2 >= 0.2f))
+			{
+				return 0f;
+			}
+			num3 = 0.1f;
+		}
+		if (town.IsTown && num3 > 0f)
+		{
+			float num4 = CountMarketFood(town.Settlement);
+			float num5 = town.Prosperity / 80f + ((town.GarrisonParty != null) ? ((float)town.GarrisonParty.Party.NumberOfAllMembers / 40f) : 0f);
+			if (num5 > 0f)
+			{
+				float num6 = num4 / num5;
+				if (num6 >= 30f)
+				{
+					num3 = 0f;
+				}
+				else if (num6 > 10f)
+				{
+					float num7 = (num6 - 10f) / 20f;
+					num3 *= 1f - num7;
+				}
+			}
+		}
+		return num3;
+	}
+
+	private static float CountMarketFood(Settlement settlement)
+	{
+		if (settlement == null)
+		{
+			return 0f;
+		}
+		ItemRoster itemRoster = settlement.ItemRoster;
+		if (itemRoster == null)
+		{
+			return 0f;
+		}
+		float num = 0f;
+		for (int i = 0; i < itemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRos

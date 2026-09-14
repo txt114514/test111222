@@ -1,0 +1,634 @@
+﻿PART 59/75
+!(_settlementField.GetValue(base.ViewModel) is Settlement { IsTown: not false, Town: not null } settlement))
+			{
+				return;
+			}
+			bool flag = !CampaignUIHelper.IsSettlementInformationHidden(settlement, out var _);
+			Workshop[] workshops = settlement.Town.Workshops;
+			if (workshops == null)
+			{
+				return;
+			}
+			Workshop[] array = workshops;
+			foreach (Workshop workshop in array)
+			{
+				if (workshop?.WorkshopType != null && !workshop.WorkshopType.IsHidden)
+				{
+					string iconId = WorkshopIconPatch.GetIconId(workshop.WorkshopType.StringId);
+					bool isScouted = flag || workshop.Owner == Hero.MainHero;
+					_workshopItems.Add(new EncyclopediaWorkshopItemVM(iconId, workshop, isScouted));
+				}
+			}
+			HasWorkshops = _workshopItems.Count > 0;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in EncyclopediaSettlementPageMixin: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\EncyclopediaSettlementPageWorkshopsPatch.cs =====
+using System.Xml;
+using Bannerlord.UIExtenderEx.Attributes;
+using Bannerlord.UIExtenderEx.Prefabs2;
+
+namespace HarvestAndProduction.Patches;
+
+[PrefabExtension("EncyclopediaSettlementPage", "descendant::NavigatableGridWidget[@Id='NotablesGrid']")]
+internal sealed class EncyclopediaSettlementPageWorkshopsPatch : PrefabExtensionInsertPatch
+{
+	private readonly XmlDocument _document;
+
+	public override InsertType Type => InsertType.Append;
+
+	public EncyclopediaSettlementPageWorkshopsPatch()
+	{
+		_document = new XmlDocument();
+		_document.LoadXml("<ListPanel IsVisible=\"@HasWorkshops\" WidthSizePolicy=\"StretchToParent\" HeightSizePolicy=\"CoverChildren\" StackLayout.LayoutMethod=\"VerticalTopToBottom\">  <Children>    <EncyclopediaDivider Id=\"WorkshopsDivider\" MarginTop=\"30\" Parameter.Title=\"@WorkshopsText\" Parameter.ItemList=\"..\\WorkshopsGrid\" GamepadNavigationIndex=\"0\"/>    <NavigatableGridWidget Id=\"WorkshopsGrid\" DataSource=\"{WorkshopItems}\" WidthSizePolicy=\"StretchToParent\" HeightSizePolicy=\"CoverChildren\" SuggestedWidth=\"350\" HorizontalAlignment=\"Left\" MarginTop=\"10\" DefaultCellWidth=\"80\" DefaultCellHeight=\"60\" ColumnCount=\"7\" MarginLeft=\"15\">      <ItemTemplate>        <BrushWidget WidthSizePolicy=\"Fixed\" HeightSizePolicy=\"Fixed\" SuggestedWidth=\"70\" SuggestedHeight=\"50\" MarginLeft=\"5\" MarginRight=\"5\" MarginTop=\"5\" MarginBottom=\"5\" Brush=\"Encyclopedia.SubPage.Element\">          <Children>            <ShopVisualIconBrushWidget WidthSizePolicy=\"Fixed\" HeightSizePolicy=\"Fixed\" SuggestedWidth=\"35\" SuggestedHeight=\"26\" VerticalAlignment=\"Center\" HorizontalAlignment=\"Center\" Brush=\"TownManamgement.Shop.Icon.Brush\" ShopId=\"@ShopId\"/>            <HintWidget WidthSizePolicy=\"StretchToParent\" HeightSizePolicy=\"StretchToParent\" Command.HoverBegin=\"ExecuteBeginHint\" Command.HoverEnd=\"ExecuteEndHint\" />          </Children>        </BrushWidget>      </ItemTemplate>    </NavigatableGridWidget>  </Children></ListPanel>");
+	}
+
+	[PrefabExtensionXmlDocument(false)]
+	public XmlDocument GetPrefabExtension()
+	{
+		return _document;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\FindItemToBuyPatch.cs =====
+using System;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultPartyFoodBuyingModel), "FindItemToBuy")]
+public static class FindItemToBuyPatch
+{
+	private const int NORMAL_PRICE_CAP = 160;
+
+	private const int STARVING_PRICE_CAP = 240;
+
+	[HarmonyPrefix]
+	public static bool Prefix(MobileParty mobileParty, Settlement settlement, out ItemRosterElement itemElement, out float itemElementsPrice)
+	{
+		itemElement = ItemRosterElement.Invalid;
+		itemElementsPrice = 0f;
+		if (mobileParty == null || settlement == null)
+		{
+			return false;
+		}
+		bool flag = mobileParty.Party != null && mobileParty.Party.IsStarving;
+		int num = (flag ? 240 : 160);
+		float num2 = 0f;
+		SettlementComponent settlementComponent = settlement.SettlementComponent;
+		int num3 = -1;
+		for (int i = 0; i < settlement.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = settlement.ItemRoster.GetElementCopyAtIndex(i);
+			if (elementCopyAtIndex.Amount <= 0)
+			{
+				continue;
+			}
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item == null)
+			{
+				continue;
+			}
+			bool flag2 = item.HasHorseComponent && item.HorseComponent.IsLiveStock;
+			if (!item.IsFood && !flag2)
+			{
+				continue;
+			}
+			int itemPrice = settlementComponent.GetItemPrice(elementCopyAtIndex.EquipmentElement, mobileParty);
+			int itemValue = elementCopyAtIndex.EquipmentElement.ItemValue;
+			int num4 = (flag2 ? (itemPrice / item.HorseComponent.MeatCount) : itemPrice);
+			int val = (flag2 ? (itemValue / item.HorseComponent.MeatCount) : itemValue);
+			bool flag3 = flag2 || num4 < num;
+			bool flag4 = mobileParty.PartyTradeGold >= itemPrice;
+			if (!(flag3 & flag4))
+			{
+				continue;
+			}
+			float num5 = (float)(num - num4) / (float)num;
+			float num6 = (float)(100 - Math.Min(val, 100)) / 100f;
+			float num7 = num5 * num5 * num6 * num6;
+			if (flag && num7 < 0.1f)
+			{
+				num7 = 0.1f;
+			}
+			if (flag2)
+			{
+				if (!flag)
+				{
+					continue;
+				}
+				num7 *= 0.3f;
+			}
+			if (num7 > 0f)
+			{
+				if (MBRandom.RandomFloat * (num2 + num7) >= num2)
+				{
+					num3 = i;
+					itemElementsPrice = itemPrice;
+				}
+				num2 += num7;
+			}
+		}
+		if (num3 != -1)
+		{
+			itemElement = settlement.ItemRoster.GetElementCopyAtIndex(num3);
+		}
+		return false;
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\FindNonAttachedNpcPartiesPatch.cs =====
+using System;
+using System.Collections.Generic;
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameComponents;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Library;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(DefaultEncounterModel), "FindNonAttachedNpcPartiesWhoWillJoinPlayerEncounter")]
+public static class FindNonAttachedNpcPartiesPatch
+{
+	[HarmonyPostfix]
+	public static void Postfix(List<MobileParty> partiesToJoinPlayerSide, List<MobileParty> partiesToJoinEnemySide)
+	{
+		try
+		{
+			Clan playerClan = Clan.PlayerClan;
+			if (playerClan == null)
+			{
+				return;
+			}
+			IFaction mapFaction = playerClan.MapFaction;
+			if (mapFaction == null)
+			{
+				return;
+			}
+			float num = Campaign.Current.Models.EncounterModel.GetEncounterJoiningRadius;
+			Vec2 vec = MobileParty.MainParty.Position.ToVec2();
+			MapEvent playerMapEvent = MapEvent.PlayerMapEvent;
+			if (playerMapEvent != null && (playerMapEvent.IsBlockade || playerMapEvent.IsBlockadeSallyOut) && playerMapEvent.MapEventSettlement != null && playerMapEvent.MapEventSettlement.HasPort)
+			{
+				vec = playerMapEvent.MapEventSettlement.PortPosition.ToVec2();
+				num *= 3f;
+			}
+			foreach (MobileParty item in MobileParty.All)
+			{
+				if (item == null || !item.IsActive || item.MapEvent != null || item.CurrentSettlement != null || item.MapFaction == null)
+				{
+					continue;
+				}
+				bool flag = CastleForagerPartyComponent.IsForagerParty(item);
+				bool flag2 = TownSupplyLinePartyComponent.IsSupplyLineParty(item);
+				bool flag3 = NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(item);
+				if ((!flag && !flag2 && !flag3) || item.MemberRoster.TotalManCount <= 0 || vec.Distance(item.Position.ToVec2()) > num)
+				{
+					continue;
+				}
+				if (flag3)
+				{
+					MapEvent playerMapEvent2 = MapEvent.PlayerMapEvent;
+					if (playerMapEvent2 == null || (!playerMapEvent2.IsBlockade && !playerMapEvent2.IsBlockadeSallyOut))
+					{
+						continue;
+					}
+				}
+				if (!flag3 && (flag | flag2))
+				{
+					MapEvent playerMapEvent3 = MapEvent.PlayerMapEvent;
+					if (playerMapEvent3 != null && (playerMapEvent3.IsBlockade || playerMapEvent3.IsBlockadeSallyOut))
+					{
+						continue;
+					}
+				}
+				IFaction mapFaction2 = item.MapFaction;
+				bool flag4 = mapFaction2 == mapFaction;
+				bool flag5 = (flag | flag3 | flag2) && item.Party?.Owner?.Clan == playerClan;
+				if (flag4 | flag5)
+				{
+					if (!partiesToJoinPlayerSide.Contains(item))
+					{
+						partiesToJoinPlayerSide.Add(item);
+					}
+				}
+				else if (FactionManager.IsAtWarAgainstFaction(mapFaction2, mapFaction) && !partiesToJoinEnemySide.Contains(item))
+				{
+					partiesToJoinEnemySide.Add(item);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in FindNonAttachedNpcPartiesPatch: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\FishingMilitiaGuardPatch.cs =====
+using System;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.Party.PartyComponents;
+
+namespace HarvestAndProduction.Patches;
+
+public static class FishingMilitiaGuardPatch
+{
+	private static bool _applied;
+
+	public static void Apply(Harmony harmony)
+	{
+		if (_applied)
+		{
+			return;
+		}
+		try
+		{
+			Type type = AccessTools.TypeByName("NavalDLC.FishingPartyComponent");
+			if (type == null)
+			{
+				return;
+			}
+			MethodInfo methodInfo = AccessTools.Method(type, "OnMobilePartySetOnCreation");
+			if (methodInfo != null)
+			{
+				harmony.Patch(methodInfo, null, new HarmonyMethod(typeof(FishingMilitiaGuardPatch), "OnMobilePartySetOnCreation_Postfix"));
+			}
+			Type type2 = AccessTools.TypeByName("NavalDLC.CampaignBehaviors.FishingPartyCampaignBehavior");
+			if (type2 != null)
+			{
+				MethodInfo methodInfo2 = AccessTools.Method(type2, "TryReinforceParty");
+				if (methodInfo2 != null)
+				{
+					harmony.Patch(methodInfo2, null, new HarmonyMethod(typeof(FishingMilitiaGuardPatch), "TryReinforceParty_Postfix"));
+				}
+			}
+			_applied = true;
+			Main.Log("FishingMilitiaGuardPatch: Applied militia guard patches for fishing parties");
+		}
+		catch (Exception ex)
+		{
+			Main.Log("FishingMilitiaGuardPatch ERROR: " + ex.Message);
+		}
+	}
+
+	public static void OnMobilePartySetOnCreation_Postfix(object __instance)
+	{
+		try
+		{
+			if (__instance is VillagerPartyComponent { Village: not null, MobileParty: not null } villagerPartyComponent)
+			{
+				MilitiaGuardHelper.EnsureMilitiaGuards(villagerPartyComponent.MobileParty, villagerPartyComponent.Village);
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in FishingMilitiaGuardPatch.OnMobilePartySetOnCreation_Postfix: " + ex.Message);
+		}
+	}
+
+	public static void TryReinforceParty_Postfix(object __0)
+	{
+		try
+		{
+			if (__0 is VillagerPartyComponent { Village: not null, MobileParty: not null } villagerPartyComponent)
+			{
+				MilitiaGuardHelper.EnsureMilitiaGuards(villagerPartyComponent.MobileParty, villagerPartyComponent.Village);
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in FishingMilitiaGuardPatch.TryReinforceParty_Postfix: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\FishingPartyNotificationPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+public static class FishingPartyNotificationPatch
+{
+	private static bool _applied;
+
+	[ThreadStatic]
+	private static List<ItemRosterElement> _pendingItems;
+
+	[ThreadStatic]
+	private static MobileParty _pendingParty;
+
+	[ThreadStatic]
+	private static Settlement _pendingVillageSettlement;
+
+	[ThreadStatic]
+	private static int _pendingTradeGold;
+
+	public static void Apply(Harmony harmony)
+	{
+		if (_applied)
+		{
+			return;
+		}
+		try
+		{
+			Type type = AccessTools.TypeByName("NavalDLC.CampaignBehaviors.FishingPartyCampaignBehavior");
+			if (!(type == null))
+			{
+				MethodInfo methodInfo = AccessTools.Method(type, "OnDropOff");
+				if (methodInfo == null)
+				{
+					Main.Log("FishingPartyNotificationPatch: OnDropOff method not found");
+					return;
+				}
+				harmony.Patch(methodInfo, new HarmonyMethod(typeof(FishingPartyNotificationPatch), "OnDropOff_Prefix"), new HarmonyMethod(typeof(FishingPartyNotificationPatch), "OnDropOff_Postfix"));
+				_applied = true;
+				Main.Log("FishingPartyNotificationPatch: Patched OnDropOff for village fishing notifications");
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("FishingPartyNotificationPatch ERROR: " + ex.Message);
+		}
+	}
+
+	public static void OnDropOff_Prefix(object fishingParty)
+	{
+		try
+		{
+			_pendingItems = null;
+			_pendingParty = null;
+			_pendingVillageSettlement = null;
+			if (fishingParty == null || !(fishingParty.GetType().GetProperty("MobileParty")?.GetValue(fishingParty) is MobileParty mobileParty))
+			{
+				return;
+			}
+			Village village = fishingParty.GetType().GetProperty("Village")?.GetValue(fishingParty) as Village;
+			if (village?.Settlement == null)
+			{
+				return;
+			}
+			List<ItemRosterElement> list = new List<ItemRosterElement>();
+			for (int i = 0; i < mobileParty.ItemRoster.Count; i++)
+			{
+				ItemRosterElement elementCopyAtIndex = mobileParty.ItemRoster.GetElementCopyAtIndex(i);
+				if (elementCopyAtIndex.Amount > 0 && elementCopyAtIndex.EquipmentElement.Item != null)
+				{
+					list.Add(elementCopyAtIndex);
+				}
+			}
+			_pendingParty = mobileParty;
+			_pendingVillageSettlement = village.Settlement;
+			_pendingTradeGold = mobileParty.PartyTradeGold;
+			if (list.Count > 0)
+			{
+				_pendingItems = list;
+			}
+		}
+		catch
+		{
+		}
+	}
+
+	public static void OnDropOff_Postfix()
+	{
+		try
+		{
+			if (_pendingParty == null || _pendingVillageSettlement == null)
+			{
+				return;
+			}
+			if (_pendingTradeGold > 0)
+			{
+				Village village = _pendingVillageSettlement.Village;
+				if (village != null)
+				{
+					float villageTaxRatio = Campaign.Current.Models.SettlementTaxModel.GetVillageTaxRatio(village);
+					int num = MBRandom.RoundRandomized((float)_pendingTradeGold * villageTaxRatio);
+					if (num > 0)
+					{
+						village.TradeTaxAccumulated += num;
+					}
+					int num2 = _pendingTradeGold - num;
+					if (num2 > 0)
+					{
+						village.ChangeGold(num2);
+					}
+				}
+				_pendingParty.PartyTradeGold = 0;
+			}
+			if (_pendingItems == null)
+			{
+				return;
+			}
+			foreach (ItemRosterElement pendingItem in _pendingItems)
+			{
+				CampaignEventDispatcher.Instance.OnItemSold(_pendingVillageSettlement.Party, _pendingParty.Party, pendingItem, pendingItem.Amount, _pendingVillageSettlement);
+			}
+		}
+		catch
+		{
+		}
+		finally
+		{
+			_pendingItems = null;
+			_pendingParty = null;
+			_pendingVillageSettlement = null;
+			_pendingTradeGold = 0;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\FishingPartyScalingPatch.cs =====
+using System;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+using TaleWorlds.ObjectSystem;
+
+namespace HarvestAndProduction.Patches;
+
+public static class FishingPartyScalingPatch
+{
+	private static bool _patchesApplied;
+
+	public static void Apply(Harmony harmony)
+	{
+		if (_patchesApplied)
+		{
+			return;
+		}
+		try
+		{
+			Type type = AccessTools.TypeByName("NavalDLC.CampaignBehaviors.FishingPartyCampaignBehavior");
+			if (!(type == null))
+			{
+				MethodInfo methodInfo = AccessTools.Method(type, "GetIdealFishingPartyCount");
+				if (methodInfo != null)
+				{
+					harmony.Patch(methodInfo, null, new HarmonyMethod(typeof(FishingPartyScalingPatch), "GetIdealFishingPartyCount_Postfix"));
+					Main.Log("FishingPartyScalingPatch: Patched GetIdealFishingPartyCount");
+				}
+				MethodInfo methodInfo2 = AccessTools.Method(type, "CatchFish");
+				if (methodInfo2 != null)
+				{
+					harmony.Patch(methodInfo2, new HarmonyMethod(typeof(FishingPartyScalingPatch), "CatchFish_Prefix"), new HarmonyMethod(typeof(FishingPartyScalingPatch), "CatchFish_Postfix"));
+					Main.Log("FishingPartyScalingPatch: Patched CatchFish (4x multiplier)");
+				}
+				_patchesApplied = true;
+				Main.Log("FishingPartyScalingPatch: All patches applied successfully");
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("FishingPartyScalingPatch ERROR: " + ex.Message);
+		}
+	}
+
+	public static void GetIdealFishingPartyCount_Postfix(Village village, ref int __result)
+	{
+		if (village == null)
+		{
+			return;
+		}
+		try
+		{
+			float hearth = village.Hearth;
+			int num = ((hearth >= 800f) ? 3 : ((hearth >= 400f) ? 2 : ((hearth >= 200f) ? 1 : 0)));
+			int num2 = Math.Min(2, village.GetHearthLevel() + 1);
+			int val = __result - num2;
+			__result = num + Math.Max(0, val);
+		}
+		catch
+		{
+		}
+	}
+
+	public static void CatchFish_Prefix(object fishingParty, out int __state)
+	{
+		__state = 0;
+		try
+		{
+			PropertyInfo property = fishingParty.GetType().GetProperty("MobileParty");
+			if (property != null && property.GetValue(fishingParty) is MobileParty mobileParty)
+			{
+				ItemObject itemObject = MBObjectManager.Instance.GetObject<ItemObject>("fish");
+				if (itemObject != null)
+				{
+					__state = mobileParty.ItemRoster.GetItemNumber(itemObject);
+				}
+			}
+		}
+		catch
+		{
+			__state = 0;
+		}
+	}
+
+	public static void CatchFish_Postfix(object fishingParty, int __state)
+	{
+		try
+		{
+			PropertyInfo property = fishingParty.GetType().GetProperty("MobileParty");
+			if (property == null || !(property.GetValue(fishingParty) is MobileParty mobileParty))
+			{
+				return;
+			}
+			ItemObject itemObject = MBObjectManager.Instance.GetObject<ItemObject>("fish");
+			if (itemObject == null)
+			{
+				return;
+			}
+			int itemNumber = mobileParty.ItemRoster.GetItemNumber(itemObject);
+			int num = itemNumber - __state;
+			if (num > 0)
+			{
+				int val = num * 3;
+				float num2 = mobileParty.InventoryCapacity;
+				float totalWeightCarried = mobileParty.TotalWeightCarried;
+				float num3 = ((itemObject.Weight > 0f) ? itemObject.Weight : 10f);
+				int num4 = (int)((num2 - totalWeightCarried) / num3);
+				if (num4 > 0)
+				{
+					int number = Math.Min(val, num4);
+					mobileParty.ItemRoster.AddToCounts(itemObject, number);
+				}
+			}
+		}
+		catch
+		{
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\FoodCapacityTooltipPatch.cs =====
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.Core.ViewModelCollection.Information;
+
+namespace HarvestAndProduction.Patches;
+
+public static class FoodCapacityTooltipPatch
+{
+	private static bool _patchApplied;
+
+	public static void ApplyPatch(Harmony harmony)
+	{
+		if (_patchApplied)
+		{
+			return;
+		}
+		try
+		{
+			MethodInfo method = typeof(CampaignUIHelper).GetMethod("GetTownFoodTooltip", BindingFlags.Static | BindingFlags.Public);
+			MethodInfo method2 = typeof(FoodCapacityTooltipPatch).GetMethod("Postfix", BindingFlags.Static | BindingFlags.Public);
+			if (method != null && method2 != null)
+			{
+				harmony.Patch(method, null, new HarmonyMethod(method2));
+				_patchApplied = true;
+				Main.Log("FoodCapacityTooltipPatch: Patched GetTownFoodTooltip");
+			}
+			else
+			{
+				Main.Log($"FoodCapacityTooltipPatch: Method 

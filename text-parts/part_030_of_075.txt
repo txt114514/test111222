@@ -1,0 +1,641 @@
+﻿PART 30/75
+Town;
+		bool flag = destinationTown != null && town != null && IsSameFactionAsOriginNaval(destinationTown, component);
+		int totalDeposited = 0;
+		List<(EquipmentElement, int)> list = null;
+		if (flag)
+		{
+			list = DepositFoodToTownGeneric(party, town, out totalDeposited);
+			if (totalDeposited > 0)
+			{
+				component.FoodDelivered += totalDeposited;
+				RecordDailySupply(destinationTown, totalDeposited);
+				FireSuppliedNotification(party, town, list);
+			}
+		}
+		bool flag2 = component.HomeTown == null || !IsSameFactionAsOriginNaval(component.HomeTown, component);
+		if (flag2 & flag)
+		{
+			ReturnShipsToPort(party, destinationTown);
+			DonateRemainingToSettlement(party, destinationTown);
+			QueueNavalForDisband(party, component, destinationTown);
+			bool flag3 = false;
+		}
+		else
+		{
+			component.State = NavalSupplyConvoyPartyComponent.ConvoyState.Returning;
+			if (component.HomeTown != null)
+			{
+				component.SetDestination(component.HomeTown);
+			}
+			else
+			{
+				component.State = NavalSupplyConvoyPartyComponent.ConvoyState.Fleeing;
+			}
+		}
+	}
+
+	private void ProcessNavalReturning(MobileParty party, NavalSupplyConvoyPartyComponent component)
+	{
+		Settlement homeTown = component.HomeTown;
+		if (homeTown == null || !IsSameFactionAsOriginNaval(homeTown, component))
+		{
+			component.State = NavalSupplyConvoyPartyComponent.ConvoyState.Fleeing;
+			bool flag = false;
+		}
+		else if (homeTown.SiegeEvent != null && homeTown.SiegeEvent.IsBlockadeActive)
+		{
+			if (component.WaitStartTime == CampaignTime.Never)
+			{
+				component.WaitStartTime = CampaignTime.Now;
+			}
+			if (component.WaitStartTime.ElapsedHoursUntilNow > 72f)
+			{
+				bool flag2 = false;
+				component.WaitStartTime = CampaignTime.Never;
+				component.State = NavalSupplyConvoyPartyComponent.ConvoyState.Fleeing;
+				return;
+			}
+			float num = party.Position.ToVec2().DistanceSquared(homeTown.GatePosition.ToVec2());
+			float num2 = Campaign.Current.Models.EncounterModel.GetEncounterJoiningRadius * 2f;
+			if (num <= num2 * num2)
+			{
+				component.SetHoldPosition();
+			}
+			else
+			{
+				party.SetMoveGoToPoint(homeTown.PortPosition, MobileParty.NavigationType.Naval);
+			}
+		}
+		else
+		{
+			if (component.WaitStartTime != CampaignTime.Never && component.State == NavalSupplyConvoyPartyComponent.ConvoyState.Returning)
+			{
+				component.WaitStartTime = CampaignTime.Never;
+			}
+			if (party.TargetSettlement != homeTown)
+			{
+				component.SetDestination(homeTown);
+			}
+			if (HasArrivedAtSettlement(party, homeTown))
+			{
+				component.State = NavalSupplyConvoyPartyComponent.ConvoyState.WaitingAtHome;
+				component.WaitStartTime = CampaignTime.Now;
+				bool flag3 = false;
+			}
+		}
+	}
+
+	private void ProcessNavalWaitingAtHome(MobileParty party, NavalSupplyConvoyPartyComponent component)
+	{
+		if (!(component.WaitStartTime.ElapsedHoursUntilNow < 2f))
+		{
+			Settlement homeTown = component.HomeTown;
+			if (homeTown == null || !IsSameFactionAsOriginNaval(homeTown, component))
+			{
+				component.State = NavalSupplyConvoyPartyComponent.ConvoyState.Fleeing;
+				return;
+			}
+			ConvertCarriedFoodBackToStocks(party, homeTown);
+			ReturnShipsToPort(party, homeTown);
+			DonateRemainingToSettlement(party, homeTown);
+			QueueNavalForDisband(party, component, homeTown);
+			bool flag = false;
+		}
+	}
+
+	private void ProcessNavalFleeing(MobileParty party, NavalSupplyConvoyPartyComponent component)
+	{
+		Settlement destinationTown = component.DestinationTown;
+		if (destinationTown != null && HasArrivedAtSettlement(party, destinationTown))
+		{
+			if (IsSettlementUnderAttack(destinationTown))
+			{
+				Settlement settlement = FindNearestFriendlyPortTown(party, component);
+				if (settlement != null)
+				{
+					component.DestinationTown = settlement;
+					component.SetDestination(settlement);
+				}
+				else
+				{
+					ForceDestroyNavalConvoy(party, component);
+				}
+			}
+			else
+			{
+				ConvertCarriedFoodBackToStocks(party, destinationTown);
+				ReturnShipsToPort(party, destinationTown);
+				DonateRemainingToSettlement(party, destinationTown);
+				QueueNavalForDisband(party, component, destinationTown);
+				bool flag = false;
+			}
+		}
+		else if (destinationTown == null || !IsPortSafeForFlee(party, destinationTown))
+		{
+			Settlement settlement2 = FindNearestFriendlyPortTown(party, component);
+			if (settlement2 != null)
+			{
+				component.DestinationTown = settlement2;
+				component.SetDestination(settlement2);
+			}
+			else
+			{
+				ForceDestroyNavalConvoy(party, component);
+			}
+		}
+		else if (party.TargetSettlement != destinationTown)
+		{
+			component.SetDestination(destinationTown);
+		}
+	}
+
+	private void ProcessNavalHolding(MobileParty party, NavalSupplyConvoyPartyComponent component)
+	{
+		if (component.WaitStartTime.ElapsedHoursUntilNow > 72f)
+		{
+			bool flag = false;
+			component.State = NavalSupplyConvoyPartyComponent.ConvoyState.Returning;
+			if (component.HomeTown != null)
+			{
+				component.SetDestination(component.HomeTown);
+			}
+			else
+			{
+				component.State = NavalSupplyConvoyPartyComponent.ConvoyState.Fleeing;
+			}
+			return;
+		}
+		Settlement destinationTown = component.DestinationTown;
+		if (destinationTown != null && IsSameFactionAsOriginNaval(destinationTown, component))
+		{
+			if (destinationTown.SiegeEvent == null || !destinationTown.SiegeEvent.IsBlockadeActive)
+			{
+				bool flag2 = false;
+				component.State = NavalSupplyConvoyPartyComponent.ConvoyState.TravelingToDestination;
+				component.SetDestination(destinationTown);
+			}
+			else
+			{
+				if (party.MapEvent != null)
+				{
+					return;
+				}
+				if (destinationTown.SiegeEvent?.BesiegerCamp?.LeaderParty != null)
+				{
+					MobileParty leaderParty = destinationTown.SiegeEvent.BesiegerCamp.LeaderParty;
+					float getEncounterJoiningRadius = Campaign.Current.Models.EncounterModel.GetEncounterJoiningRadius;
+					float num = getEncounterJoiningRadius * 3f * (getEncounterJoiningRadius * 3f);
+					Vec2 vec = destinationTown.PortPosition.ToVec2();
+					foreach (MobileParty item in MobileParty.All)
+					{
+						if (item == party || !item.IsActive || item.MapFaction != party.MapFaction || item.MapEvent == null || (!item.MapEvent.IsBlockade && !item.MapEvent.IsBlockadeSallyOut) || !item.MapEvent.InvolvedParties.Contains(leaderParty.Party) || vec.DistanceSquared(item.Position.ToVec2()) > num)
+						{
+							continue;
+						}
+						party.SetMoveEngageParty(leaderParty, MobileParty.NavigationType.Naval);
+						bool flag3 = false;
+						return;
+					}
+				}
+				if (party.DefaultBehavior != AiBehavior.PatrolAroundPoint)
+				{
+					party.SetMovePatrolAroundPoint(destinationTown.PortPosition, MobileParty.NavigationType.Naval);
+				}
+			}
+		}
+		else
+		{
+			component.State = ((component.HomeTown != null && IsSameFactionAsOriginNaval(component.HomeTown, component)) ? NavalSupplyConvoyPartyComponent.ConvoyState.Returning : NavalSupplyConvoyPartyComponent.ConvoyState.Fleeing);
+		}
+	}
+
+	private bool IsSameFactionAsOriginNaval(Settlement settlement, NavalSupplyConvoyPartyComponent component)
+	{
+		if (settlement == null || settlement.MapFaction == null)
+		{
+			return false;
+		}
+		IFaction faction = component?.OriginalClan?.MapFaction;
+		if (faction == null)
+		{
+			return false;
+		}
+		return settlement.MapFaction == faction;
+	}
+
+	private List<(EquipmentElement, int)> DepositFoodToTownGeneric(MobileParty party, Town town, out int totalDeposited)
+	{
+		totalDeposited = 0;
+		List<(EquipmentElement, int)> list = new List<(EquipmentElement, int)>();
+		if (town == null)
+		{
+			return list;
+		}
+		int num = town.FoodStocksUpperLimit();
+		float num2 = (float)num - town.FoodStocks;
+		if (num2 <= 0f)
+		{
+			return list;
+		}
+		ItemRoster itemRoster = party.ItemRoster;
+		int num3 = itemRoster.Count - 1;
+		while (num3 >= 0 && (float)totalDeposited < num2)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num3);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && (item.IsFood || item.StringId.StartsWith("meat_")))
+			{
+				int num4 = Math.Min(elementCopyAtIndex.Amount, (int)(num2 - (float)totalDeposited));
+				if (num4 > 0)
+				{
+					itemRoster.AddToCounts(item, -num4);
+					town.FoodStocks += num4;
+					totalDeposited += num4;
+					list.Add((elementCopyAtIndex.EquipmentElement, num4));
+				}
+			}
+			num3--;
+		}
+		if (town.FoodStocks > (float)num)
+		{
+			town.FoodStocks = num;
+		}
+		return list;
+	}
+
+	private Settlement FindNearestFriendlyPortTown(MobileParty party, NavalSupplyConvoyPartyComponent component)
+	{
+		if (party?.MapFaction == null)
+		{
+			return null;
+		}
+		IFaction faction = component?.OriginalClan?.MapFaction ?? party.MapFaction;
+		Settlement result = null;
+		float num = float.MaxValue;
+		foreach (Settlement item in Settlement.All)
+		{
+			if (item.IsTown && item.HasPort && item.MapFaction == faction && IsPortSafeForFlee(party, item))
+			{
+				float num2 = item.Position.DistanceSquared(party.GetPosition2D);
+				if (num2 < num)
+				{
+					num = num2;
+					result = item;
+				}
+			}
+		}
+		return result;
+	}
+
+	private bool IsPortSafeForFlee(MobileParty party, Settlement settlement)
+	{
+		if (settlement == null || party == null || party.MapFaction == null)
+		{
+			return false;
+		}
+		if (!settlement.IsTown || !settlement.HasPort)
+		{
+			return false;
+		}
+		if (settlement.MapFaction == null)
+		{
+			return false;
+		}
+		if (FactionManager.IsAtWarAgainstFaction(party.MapFaction, settlement.MapFaction))
+		{
+			return false;
+		}
+		if (settlement.Town != null && settlement.Town.InRebelliousState)
+		{
+			return false;
+		}
+		if (settlement.SiegeEvent != null && settlement.SiegeEvent.IsBlockadeActive)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private void HandleFleeFromEnemyNaval(MobileParty party, NavalSupplyConvoyPartyComponent component, MobileParty threat)
+	{
+		Vec2 vec = party.Position.ToVec2();
+		Vec2 vec2 = threat.Position.ToVec2();
+		Vec2 direction = vec - vec2;
+		float lengthSquared = direction.LengthSquared;
+		if (lengthSquared < 0.001f)
+		{
+			direction = Vec2.One;
+		}
+		direction.Normalize();
+		Settlement settlement = FindNearestFriendlyPortInDirection(party, component, direction);
+		if (settlement != null)
+		{
+			component.ThreatParty = threat;
+			component.SetDestination(settlement);
+			return;
+		}
+		settlement = FindNearestFriendlyPortTown(party, component);
+		if (settlement != null)
+		{
+			component.ThreatParty = threat;
+			component.SetDestination(settlement);
+		}
+		else
+		{
+			party.SetMoveModeHold();
+		}
+	}
+
+	private Settlement FindNearestFriendlyPortInDirection(MobileParty party, NavalSupplyConvoyPartyComponent component, Vec2 direction)
+	{
+		if (party?.MapFaction == null)
+		{
+			return null;
+		}
+		IFaction faction = component?.OriginalClan?.MapFaction ?? party.MapFaction;
+		Settlement result = null;
+		float num = float.MinValue;
+		Vec2 getPosition2D = party.GetPosition2D;
+		foreach (Settlement item in Settlement.All)
+		{
+			if (item.IsTown && item.HasPort && item.MapFaction == faction && IsPortSafeForFlee(party, item))
+			{
+				Vec2 vb = item.GatePosition.ToVec2() - getPosition2D;
+				float num2 = vb.Length;
+				if (num2 < 1f)
+				{
+					num2 = 1f;
+				}
+				vb.Normalize();
+				float num3 = Vec2.DotProduct(direction, vb);
+				float num4 = num3 * 50f - num2;
+				if (num4 > num)
+				{
+					num = num4;
+					result = item;
+				}
+			}
+		}
+		return result;
+	}
+
+	private void HandleTrappedNavalConvoy(MobileParty party, NavalSupplyConvoyPartyComponent component)
+	{
+		Settlement currentSettlement = party.CurrentSettlement;
+		if (currentSettlement != null && IsSameFactionAsOriginNaval(currentSettlement, component))
+		{
+			ConvertCarriedFoodBackToStocks(party, currentSettlement);
+			ReturnShipsToPort(party, currentSettlement);
+			DonateRemainingToSettlement(party, currentSettlement);
+			QueueNavalForDisband(party, component, currentSettlement);
+		}
+		else
+		{
+			ForceDestroyNavalConvoy(party, component);
+		}
+	}
+
+	private void QueueNavalForDisband(MobileParty party, NavalSupplyConvoyPartyComponent component, Settlement disbandSettlement)
+	{
+		component.State = NavalSupplyConvoyPartyComponent.ConvoyState.Idle;
+		if (!_partiesToDestroy.Contains(party))
+		{
+			_partiesToDestroy.Add(party);
+		}
+		if (disbandSettlement != null)
+		{
+			_partiesToReturnTroops[party] = disbandSettlement;
+		}
+		else
+		{
+			_partiesToReturnTroops.Remove(party);
+		}
+	}
+
+	private void ForceDestroyNavalConvoy(MobileParty party, NavalSupplyConvoyPartyComponent component)
+	{
+		try
+		{
+			if (party.Party.PrisonRoster != null && party.Party.PrisonRoster.TotalManCount > 0)
+			{
+				List<Hero> list = new List<Hero>();
+				foreach (TroopRosterElement item in party.Party.PrisonRoster.GetTroopRoster())
+				{
+					if (item.Character?.HeroObject != null)
+					{
+						list.Add(item.Character.HeroObject);
+					}
+				}
+				foreach (Hero item2 in list)
+				{
+					EndCaptivityAction.ApplyByEscape(item2);
+				}
+				if (party.Party.PrisonRoster.TotalManCount > 0)
+				{
+					party.Party.PrisonRoster.Clear();
+				}
+			}
+			List<Ship> list2 = new List<Ship>(party.Ships);
+			foreach (Ship item3 in list2)
+			{
+				try
+				{
+					DestroyShipAction.ApplyByDiscard(item3);
+				}
+				catch
+				{
+				}
+			}
+			party.ItemRoster.Clear();
+			party.MemberRoster.Clear();
+			if (component?.HomeTown != null && _activeSupplyLines.TryGetValue(component.HomeTown, out var value) && value == party)
+			{
+				_activeSupplyLines.Remove(component.HomeTown);
+				_lastSpawnTime[component.HomeTown] = CampaignTime.Now - CampaignTime.Hours(96f);
+			}
+			if (component?.DestinationTown != null && _incomingSupply.TryGetValue(component.DestinationTown, out var value2) && value2 == party)
+			{
+				_incomingSupply.Remove(component.DestinationTown);
+			}
+			if (party.IsActive && !_partiesToDestroy.Contains(party))
+			{
+				_partiesToDestroy.Add(party);
+			}
+			_partiesToReturnTroops.Remove(party);
+			bool flag = false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in ForceDestroyNavalConvoy: " + ex.Message);
+		}
+	}
+
+	private List<(EquipmentElement, int)> DepositFoodToTown(MobileParty party, TownSupplyLinePartyComponent component, out int totalDeposited)
+	{
+		totalDeposited = 0;
+		List<(EquipmentElement, int)> list = new List<(EquipmentElement, int)>();
+		Town town = component.DestinationTown?.Town;
+		if (town == null)
+		{
+			return list;
+		}
+		int num = town.FoodStocksUpperLimit();
+		float num2 = (float)num - town.FoodStocks;
+		if (num2 <= 0f)
+		{
+			return list;
+		}
+		ItemRoster itemRoster = party.ItemRoster;
+		int num3 = itemRoster.Count - 1;
+		while (num3 >= 0 && (float)totalDeposited < num2)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num3);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && (item.IsFood || item.StringId.StartsWith("meat_")))
+			{
+				int num4 = Math.Min(elementCopyAtIndex.Amount, (int)(num2 - (float)totalDeposited));
+				if (num4 > 0)
+				{
+					itemRoster.AddToCounts(item, -num4);
+					town.FoodStocks += num4;
+					totalDeposited += num4;
+					list.Add((elementCopyAtIndex.EquipmentElement, num4));
+				}
+			}
+			num3--;
+		}
+		if (town.FoodStocks > (float)num)
+		{
+			town.FoodStocks = num;
+		}
+		return list;
+	}
+
+	private void ConvertCarriedFoodBackToStocks(MobileParty party, Settlement settlement)
+	{
+		Town town = settlement?.Town;
+		if (town == null)
+		{
+			return;
+		}
+		int num = town.FoodStocksUpperLimit();
+		float num2 = (float)num - town.FoodStocks;
+		int num3 = 0;
+		ItemRoster itemRoster = party.ItemRoster;
+		for (int num4 = itemRoster.Count - 1; num4 >= 0; num4--)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num4);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0 && (item.IsFood || item.StringId.StartsWith("meat_")))
+			{
+				int num5 = Math.Min(elementCopyAtIndex.Amount, (int)Math.Max(0f, num2));
+				int num6 = elementCopyAtIndex.Amount - num5;
+				if (num5 > 0)
+				{
+					itemRoster.AddToCounts(item, -num5);
+					town.FoodStocks += num5;
+					num2 -= (float)num5;
+					num3 += num5;
+				}
+				if (num6 > 0 && settlement.ItemRoster != null)
+				{
+					itemRoster.AddToCounts(item, -num6);
+					settlement.ItemRoster.AddToCounts(item, num6);
+				}
+			}
+		}
+		if (town.FoodStocks > (float)num)
+		{
+			town.FoodStocks = num;
+		}
+		if (num3 > 0)
+		{
+			RecordDailyReturn(settlement, num3);
+		}
+	}
+
+	private void DonateRemainingToSettlement(MobileParty party, Settlement settlement)
+	{
+		if (settlement?.ItemRoster == null)
+		{
+			return;
+		}
+		ItemRoster itemRoster = party.ItemRoster;
+		for (int num = itemRoster.Count - 1; num >= 0; num--)
+		{
+			ItemRosterElement elementCopyAtIndex = itemRoster.GetElementCopyAtIndex(num);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0)
+			{
+				settlement.ItemRoster.AddToCounts(item, elementCopyAtIndex.Amount);
+				itemRoster.AddToCounts(item, -elementCopyAtIndex.Amount);
+			}
+		}
+	}
+
+	private void HandleDisbandPrisoners(MobileParty party, TownSupplyLinePartyComponent component)
+	{
+		TroopRoster prisonRoster = party.Party.PrisonRoster;
+		if (prisonRoster == null || prisonRoster.TotalManCount == 0)
+		{
+			return;
+		}
+		Settlement currentSettlement = party.CurrentSettlement;
+		if (currentSettlement != null && (currentSettlement.IsTown || currentSettlement.IsCastle) && IsSameFactionAsOrigin(currentSettlement, component))
+		{
+			List<CharacterObject> list = new List<CharacterObject>();
+			foreach (TroopRosterElement item in prisonRoster.GetTroopRoster())
+			{
+				if (item.Character?.HeroObject != null)
+				{
+					list.Add(item.Character);
+				}
+			}
+			foreach (CharacterObject item2 in list)
+			{
+				TransferPrisonerAction.Apply(item2, party.Party, currentSettlement.Party);
+			}
+			TroopRoster prisonRoster2 = currentSettlement.Party.PrisonRoster;
+			TroopRoster troopRoster = TroopRoster.CreateDummyTroopRoster();
+			int num = 0;
+			for (int num2 = prisonRoster.Count - 1; num2 >= 0; num2--)
+			{
+				TroopRosterElement elementCopyAtIndex = prisonRoster.GetElementCopyAtIndex(num2);
+				if (elementCopyAtIndex.Number > 0)
+				{
+					troopRoster.AddToCounts(elementCopyAtIndex.Character, elementCopyAtIndex.Number);
+					prisonRoster2.AddToCounts(elementCopyAtIndex.Character, elementCopyAtIndex.Number);
+					prisonRoster.AddToCounts(elementCopyAtIndex.Character, -elementCopyAtIndex.Number);
+					num += elementCopyAtIndex.Number;
+				}
+			}
+			int num3 = num + list.Count;
+			if (num3 > 0)
+			{
+				if (num > 0)
+				{
+					CampaignEventDispatcher.Instance.OnPrisonerSold(party.Party, currentSettlement.Party, troopRoster);
+				}
+				bool flag = false;
+			}
+			return;
+		}
+		if (currentSettlement != null && currentSettlement.IsTown && !FactionManager.IsAtWarAgainstFaction(party.MapFaction, currentSettlement.MapFaction))
+		{
+			List<CharacterObject> list2 = new List<CharacterObject>();
+			foreach (TroopRosterElement item3 in prisonRoster.GetTroopRoster())
+			{
+				if (item3.Character?.HeroObject != null)
+				{
+					list2.Add(item3.Character);
+				}
+			}
+			foreach (CharacterObject item4 in list2)
+			{
+				TransferPrisonerAction.Apply(item4, party.Party, currentSettlement.Party);
+			}
+			int totalManCount = prisonRoster.TotalManCount;
+			int partyTradeGold = party.PartyTradeGold;
+			if (totalManCount > 0)
+			{

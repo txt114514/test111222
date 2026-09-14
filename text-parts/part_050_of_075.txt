@@ -1,0 +1,598 @@
+﻿PART 50/75
+te float GetHerbSeasonalMultiplier(CampaignTime.Seasons season, ClimateZone climate)
+	{
+		if (climate == ClimateZone.Tropical || climate == ClimateZone.Desert)
+		{
+			return season switch
+			{
+				CampaignTime.Seasons.Spring => 1.2f, 
+				CampaignTime.Seasons.Summer => 1.4f, 
+				CampaignTime.Seasons.Autumn => 1.4f, 
+				CampaignTime.Seasons.Winter => 1f, 
+				_ => 1f, 
+			};
+		}
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 1.5f, 
+			CampaignTime.Seasons.Summer => 1.8f, 
+			CampaignTime.Seasons.Autumn => 1f, 
+			CampaignTime.Seasons.Winter => 0.1f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetStrawSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 0.2f, 
+			CampaignTime.Seasons.Summer => 1.4f, 
+			CampaignTime.Seasons.Autumn => 2.6f, 
+			CampaignTime.Seasons.Winter => 0f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetCharcoalSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 0.8f, 
+			CampaignTime.Seasons.Summer => 1.1f, 
+			CampaignTime.Seasons.Autumn => 1f, 
+			CampaignTime.Seasons.Winter => 0.9f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetCutStoneSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 1f, 
+			CampaignTime.Seasons.Summer => 1f, 
+			CampaignTime.Seasons.Autumn => 1f, 
+			CampaignTime.Seasons.Winter => 1f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetGoldOreSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		return season switch
+		{
+			CampaignTime.Seasons.Spring => 1f, 
+			CampaignTime.Seasons.Summer => 1f, 
+			CampaignTime.Seasons.Autumn => 1f, 
+			CampaignTime.Seasons.Winter => 1f, 
+			_ => 1f, 
+		};
+	}
+
+	private float GetNutsSeasonalMultiplier(CampaignTime.Seasons season)
+	{
+		switch (season)
+		{
+		case CampaignTime.Seasons.Autumn:
+			return 4f;
+		case CampaignTime.Seasons.Spring:
+		case CampaignTime.Seasons.Summer:
+		case CampaignTime.Seasons.Winter:
+			return 0f;
+		default:
+			return 1f;
+		}
+	}
+
+	public static void ClearAllCaches()
+	{
+		_climateCache.Clear();
+		_customItems.Clear();
+		_itemsInitialized = false;
+		_ranchCounts = null;
+		_navalDLCInitialized = false;
+		_blessingsOfTheSeaPerk = null;
+		_portAuthorityPerk = null;
+		_maritimeWealEdictPolicy = null;
+		_bolsterTheFyrdPolicy = null;
+		Main.Log("Village production model caches cleared");
+	}
+
+	public static void PreWarmClimateCaches()
+	{
+		if (Campaign.Current == null || Campaign.Current.MapSceneWrapper == null)
+		{
+			Main.Log("PreWarmClimateCaches: Campaign/MapScene not ready, skipping (will lazy-fill later)");
+			return;
+		}
+		foreach (Village item in Village.All)
+		{
+			GetClimateZoneForVillage(item);
+		}
+		Main.Log($"Village production model caches pre-warmed: {_climateCache.Count} villages");
+		BuildRanchCountCache();
+	}
+
+	public static void BuildRanchCountCache()
+	{
+		Dictionary<string, int> dictionary = new Dictionary<string, int>();
+		foreach (Settlement item in Settlement.All)
+		{
+			if (item.Village == null)
+			{
+				continue;
+			}
+			string text = item.Village.VillageType?.StringId;
+			if (text != null && _horseRanchTypeIds.Contains(text))
+			{
+				if (dictionary.ContainsKey(text))
+				{
+					dictionary[text]++;
+				}
+				else
+				{
+					dictionary[text] = 1;
+				}
+			}
+		}
+		Dictionary<string, int> dictionary2 = new Dictionary<string, int>();
+		foreach (KeyValuePair<string, int> item2 in dictionary)
+		{
+			int value = 1;
+			_ranchTerritoryFactor.TryGetValue(item2.Key, out value);
+			if (value < 1)
+			{
+				value = 1;
+			}
+			dictionary2[item2.Key] = Math.Max(1, item2.Value / value);
+		}
+		_ranchCounts = new Dictionary<string, int>();
+		foreach (Settlement item3 in Settlement.All)
+		{
+			if (item3.Village != null)
+			{
+				string text2 = item3.Village.VillageType?.StringId;
+				if (text2 != null && dictionary2.ContainsKey(text2))
+				{
+					_ranchCounts[item3.StringId] = dictionary2[text2];
+				}
+			}
+		}
+		foreach (KeyValuePair<string, int> item4 in dictionary)
+		{
+			int num = dictionary2[item4.Key];
+			int value2 = 1;
+			_ranchTerritoryFactor.TryGetValue(item4.Key, out value2);
+			if (value2 < 1)
+			{
+				value2 = 1;
+			}
+			float num2 = 1f / (float)Math.Pow(num, 0.30000001192092896);
+			float num3 = 1f / (float)Math.Pow(num, 0.20000000298023224);
+		}
+	}
+
+	private static float GetRanchCountMultiplier(Village village)
+	{
+		if (_ranchCounts == null || village?.Settlement == null)
+		{
+			return 1f;
+		}
+		if (!_ranchCounts.TryGetValue(village.Settlement.StringId, out var value) || value <= 1)
+		{
+			return 1f;
+		}
+		HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+		float num = ((instance != null && instance.EnableAIUpgradeItemConsumption) ? 0.2f : 0.3f);
+		return 1f / (float)Math.Pow(value, num);
+	}
+
+	private static void ApplyExternalModifiers(Village village, ref ExplainedNumber result)
+	{
+		List<ExternalTooltipEntry> externalTooltipEntries = GetExternalTooltipEntries(village);
+		if (externalTooltipEntries.Count == 0)
+		{
+			return;
+		}
+		foreach (ExternalTooltipEntry item in externalTooltipEntries)
+		{
+			if (item.Factor != 0f)
+			{
+				result.AddFactor(item.Factor, new TextObject(item.Label));
+			}
+		}
+	}
+
+	public static void RegisterTooltipProvider(ExternalTooltipProvider provider)
+	{
+		if (provider != null && !_externalProviders.Contains(provider))
+		{
+			_externalProviders.Add(provider);
+			Main.Log($"External tooltip provider registered (total: {_externalProviders.Count})");
+		}
+	}
+
+	public static List<ExternalTooltipEntry> GetExternalTooltipEntries(Village village)
+	{
+		List<ExternalTooltipEntry> list = new List<ExternalTooltipEntry>();
+		foreach (ExternalTooltipProvider externalProvider in _externalProviders)
+		{
+			try
+			{
+				List<ExternalTooltipEntry> list2 = externalProvider(village);
+				if (list2 != null)
+				{
+					list.AddRange(list2);
+				}
+			}
+			catch (Exception ex)
+			{
+				Main.Log("ERROR in external tooltip provider: " + ex.Message);
+			}
+		}
+		return list;
+	}
+
+	public VillageEfficiencyBreakdown GetVillageEfficiencyBreakdown(Village village)
+	{
+		VillageEfficiencyBreakdown villageEfficiencyBreakdown = new VillageEfficiencyBreakdown();
+		try
+		{
+			if (village == null)
+			{
+				return villageEfficiencyBreakdown;
+			}
+			ClimateZone climateZone = (villageEfficiencyBreakdown.Climate = GetClimateZone(village));
+			villageEfficiencyBreakdown.Season = CampaignTime.Now.GetSeasonOfYear;
+			float num = Math.Min(village.Hearth, 1000f) / 1000f;
+			villageEfficiencyBreakdown.HearthMultiplier = 0.25f + num * num * 0.75f;
+			villageEfficiencyBreakdown.IsHearthCapped = village.Hearth >= 1000f;
+			villageEfficiencyBreakdown.McmMultiplier = GlobalSettings<HAPSettings>.Instance?.GlobalProductionMultiplier ?? 1f;
+			villageEfficiencyBreakdown.IssueMultiplier = 1f;
+			float num2 = 0f;
+			int num3 = 0;
+			foreach (string customItemId in _customItemIds)
+			{
+				if (!CanVillageProduceItem(village, customItemId))
+				{
+					continue;
+				}
+				float climateMultiplier = GetClimateMultiplier(climateZone, village, customItemId);
+				if (climateMultiplier == 0f)
+				{
+					continue;
+				}
+				float seasonalMultiplier = GetSeasonalMultiplier(customItemId, climateZone);
+				if (seasonalMultiplier != 0f)
+				{
+					float scalingFactor = CalculateScalingFactor(village, customItemId);
+					ItemObject itemObject = null;
+					itemObject = ((!_customItems.TryGetValue(customItemId, out var value)) ? Game.Current?.ObjectManager?.GetObject<ItemObject>(customItemId) : value);
+					float issueMultiplier = 1f;
+					if (itemObject != null)
+					{
+						issueMultiplier = GetIssueEffectMultiplier(village, itemObject);
+					}
+					ItemEfficiencyInfo itemEfficiencyInfo = new ItemEfficiencyInfo
+					{
+						ItemId = customItemId,
+						ItemName = (itemObject?.Name?.ToString() ?? customItemId),
+						ClimateMultiplier = climateMultiplier,
+						SeasonalMultiplier = seasonalMultiplier,
+						HearthMultiplier = villageEfficiencyBreakdown.HearthMultiplier,
+						McmMultiplier = villageEfficiencyBreakdown.McmMultiplier,
+						IssueMultiplier = issueMultiplier,
+						ScalingFactor = scalingFactor
+					};
+					float perkAndBuildingBonus = 0f;
+					if (itemObject != null)
+					{
+						ExplainedNumber production = new ExplainedNumber(100f);
+						ApplyAllProductionBonuses(village, itemObject, ref production);
+						perkAndBuildingBonus = (production.ResultNumber - 100f) / 100f;
+					}
+					itemEfficiencyInfo.PerkAndBuildingBonus = perkAndBuildingBonus;
+					villageEfficiencyBreakdown.Items.Add(itemEfficiencyInfo);
+					num2 += itemEfficiencyInfo.TotalEfficiency;
+					num3++;
+				}
+			}
+			if (village.VillageType?.Productions != null)
+			{
+				foreach (var (itemObject2, num4) in village.VillageType.Productions)
+				{
+					if (itemObject2 == null)
+					{
+						continue;
+					}
+					string stringId = itemObject2.StringId;
+					if (_customItemIds.Contains(stringId))
+					{
+						continue;
+					}
+					string stringId2 = village.VillageType.StringId;
+					bool flag = false;
+					if (_nativeProductionRules.ContainsKey(stringId) && _nativeProductionRules[stringId].Contains(stringId2))
+					{
+						flag = true;
+					}
+					if (!flag)
+					{
+						SecondaryProductionType secondaryType = VillageSecondaryProductionBehavior.GetSecondaryType(village);
+						if (secondaryType != SecondaryProductionType.None && _secondaryProductionItems.ContainsKey(secondaryType) && _secondaryProductionItems[secondaryType].Contains(stringId))
+						{
+							flag = true;
+						}
+					}
+					if (!flag)
+					{
+						continue;
+					}
+					float nativeClimateMultiplier = GetNativeClimateMultiplier(stringId, climateZone);
+					if (nativeClimateMultiplier != 0f)
+					{
+						float nativeSeasonalMultiplier = GetNativeSeasonalMultiplier(stringId, climateZone);
+						if (nativeSeasonalMultiplier != 0f)
+						{
+							float issueEffectMultiplier = GetIssueEffectMultiplier(village, itemObject2);
+							ItemEfficiencyInfo itemEfficiencyInfo2 = new ItemEfficiencyInfo
+							{
+								ItemId = stringId,
+								ItemName = (itemObject2.Name?.ToString() ?? stringId),
+								ClimateMultiplier = nativeClimateMultiplier,
+								SeasonalMultiplier = nativeSeasonalMultiplier,
+								HearthMultiplier = villageEfficiencyBreakdown.HearthMultiplier,
+								McmMultiplier = villageEfficiencyBreakdown.McmMultiplier,
+								IssueMultiplier = issueEffectMultiplier,
+								ScalingFactor = GetRanchCountMultiplier(village)
+							};
+							ExplainedNumber production2 = new ExplainedNumber(100f);
+							ApplyAllProductionBonuses(village, itemObject2, ref production2);
+							itemEfficiencyInfo2.PerkAndBuildingBonus = (production2.ResultNumber - 100f) / 100f;
+							villageEfficiencyBreakdown.Items.Add(itemEfficiencyInfo2);
+							num2 += itemEfficiencyInfo2.TotalEfficiency;
+							num3++;
+						}
+					}
+				}
+			}
+			if (village.Settlement != null)
+			{
+				foreach (Hero item2 in SettlementHelper.GetAllHeroesOfSettlement(village.Settlement, includePrisoners: false))
+				{
+					if (item2.Issue == null || item2.MapFaction != village.Settlement.MapFaction)
+					{
+						continue;
+					}
+					string name = item2.Issue.GetType().Name;
+					string text = item2.Issue.Title?.ToString();
+					if (string.IsNullOrEmpty(text))
+					{
+						continue;
+					}
+					IssueEffectInfo issueEffectInfo = new IssueEffectInfo();
+					issueEffectInfo.IssueName = text;
+					issueEffectInfo.Multiplier = 1f;
+					foreach (ItemEfficiencyInfo item3 in villageEfficiencyBreakdown.Items)
+					{
+						ItemObject itemObject3 = null;
+						itemObject3 = ((!_customItems.TryGetValue(item3.ItemId, out var value2)) ? Game.Current?.ObjectManager?.GetObject<ItemObject>(item3.ItemId) : value2);
+						if (itemObject3 == null)
+						{
+							continue;
+						}
+						float singleIssueMultiplier = GetSingleIssueMultiplier(name, itemObject3, item2);
+						if (singleIssueMultiplier < 0.99f)
+						{
+							string item = GetItemCategoryDisplayName(item3.ItemId) ?? item3.ItemName;
+							if (!issueEffectInfo.AffectedItemNames.Contains(item))
+							{
+								issueEffectInfo.AffectedItemNames.Add(item);
+							}
+							if (singleIssueMultiplier < issueEffectInfo.Multiplier)
+							{
+								issueEffectInfo.Multiplier = singleIssueMultiplier;
+							}
+						}
+					}
+					if (issueEffectInfo.AffectedItemNames.Count > 0)
+					{
+						villageEfficiencyBreakdown.IssueEffects.Add(issueEffectInfo);
+					}
+				}
+			}
+			SecondaryProductionType secondaryType2 = VillageSecondaryProductionBehavior.GetSecondaryType(village);
+			if (secondaryType2 != SecondaryProductionType.None && _secondaryProductionItems.ContainsKey(secondaryType2))
+			{
+				HashSet<string> hashSet = new HashSet<string>();
+				foreach (ItemEfficiencyInfo item4 in villageEfficiencyBreakdown.Items)
+				{
+					hashSet.Add(item4.ItemId);
+				}
+				foreach (string item5 in _secondaryProductionItems[secondaryType2])
+				{
+					if (hashSet.Contains(item5))
+					{
+						continue;
+					}
+					ItemObject itemObject4 = Game.Current?.ObjectManager?.GetObject<ItemObject>(item5);
+					if (itemObject4 == null)
+					{
+						continue;
+					}
+					float nativeClimateMultiplier2 = GetNativeClimateMultiplier(item5, climateZone);
+					if (nativeClimateMultiplier2 != 0f && (!_nativeSecondaryClimateItemMultipliers.ContainsKey(secondaryType2) || !_nativeSecondaryClimateItemMultipliers[secondaryType2].ContainsKey(climateZone) || !_nativeSecondaryClimateItemMultipliers[secondaryType2][climateZone].ContainsKey(item5) || _nativeSecondaryClimateItemMultipliers[secondaryType2][climateZone][item5] != 0f))
+					{
+						float nativeSeasonalMultiplier2 = GetNativeSeasonalMultiplier(item5, climateZone);
+						if (nativeSeasonalMultiplier2 != 0f)
+						{
+							float issueEffectMultiplier2 = GetIssueEffectMultiplier(village, itemObject4);
+							ItemEfficiencyInfo itemEfficiencyInfo3 = new ItemEfficiencyInfo
+							{
+								ItemId = item5,
+								ItemName = (itemObject4.Name?.ToString() ?? item5),
+								ClimateMultiplier = nativeClimateMultiplier2,
+								SeasonalMultiplier = nativeSeasonalMultiplier2,
+								HearthMultiplier = villageEfficiencyBreakdown.HearthMultiplier,
+								McmMultiplier = villageEfficiencyBreakdown.McmMultiplier,
+								IssueMultiplier = issueEffectMultiplier2,
+								ScalingFactor = GetRanchCountMultiplier(village)
+							};
+							float num5 = 0f;
+							ExplainedNumber production3 = new ExplainedNumber(100f);
+							ApplyAllProductionBonuses(village, itemObject4, ref production3);
+							num5 = (production3.ResultNumber - 100f) / 100f;
+							itemEfficiencyInfo3.PerkAndBuildingBonus = num5;
+							villageEfficiencyBreakdown.Items.Add(itemEfficiencyInfo3);
+							num2 += itemEfficiencyInfo3.TotalEfficiency;
+							num3++;
+						}
+					}
+				}
+			}
+			villageEfficiencyBreakdown.AverageEfficiency = ((num3 > 0) ? (num2 / (float)num3) : 0f);
+			float num6 = 1f;
+			foreach (ItemEfficiencyInfo item6 in villageEfficiencyBreakdown.Items)
+			{
+				if (item6.IssueMultiplier < num6)
+				{
+					num6 = item6.IssueMultiplier;
+				}
+			}
+			villageEfficiencyBreakdown.IssueMultiplier = num6;
+			float num7 = 0f;
+			foreach (ItemEfficiencyInfo item7 in villageEfficiencyBreakdown.Items)
+			{
+				num7 += item7.PerkAndBuildingBonus;
+			}
+			villageEfficiencyBreakdown.PerkAndBuildingBonus = ((villageEfficiencyBreakdown.Items.Count > 0) ? (num7 / (float)villageEfficiencyBreakdown.Items.Count) : 0f);
+			villageEfficiencyBreakdown.Items.Sort((ItemEfficiencyInfo a, ItemEfficiencyInfo b) => b.SeasonalMultiplier.CompareTo(a.SeasonalMultiplier));
+			List<ExternalTooltipEntry> externalTooltipEntries = GetExternalTooltipEntries(village);
+			if (externalTooltipEntries.Count > 0)
+			{
+				float num8 = 1f;
+				foreach (ExternalTooltipEntry item8 in externalTooltipEntries)
+				{
+					num8 *= 1f + item8.Factor;
+				}
+				villageEfficiencyBreakdown.AverageEfficiency *= num8;
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in GetVillageEfficiencyBreakdown: " + ex.Message);
+		}
+		return villageEfficiencyBreakdown;
+	}
+
+	public static void ClearAnnualProfileCache()
+	{
+		_annualProfileCache.Clear();
+		_annualProfileCacheYear = -1;
+	}
+
+	public Dictionary<ItemCategory, float> GetAnnualProductionProfile(Village village)
+	{
+		if (village == null || !IsVillageValid(village))
+		{
+			return new Dictionary<ItemCategory, float>();
+		}
+		int num = (int)CampaignTime.Now.ToYears;
+		if (num != _annualProfileCacheYear)
+		{
+			_annualProfileCache.Clear();
+			_annualProfileCacheYear = num;
+		}
+		string stringId = village.StringId;
+		if (_annualProfileCache.TryGetValue(stringId, out var value))
+		{
+			return value;
+		}
+		Dictionary<ItemCategory, float> dictionary = new Dictionary<ItemCategory, float>();
+		ClimateZone climateZone = GetClimateZone(village);
+		if (_itemsInitialized)
+		{
+			foreach (string customItemId in _customItemIds)
+			{
+				if (!CanVillageProduceItem(village, customItemId))
+				{
+					continue;
+				}
+				float climateMultiplier = GetClimateMultiplier(climateZone, village, customItemId);
+				if (climateMultiplier <= 0f)
+				{
+					continue;
+				}
+				float num2 = 0f;
+				for (int i = 0; i < AllSeasons.Length; i++)
+				{
+					num2 += GetSeasonalMultiplierForSeason(customItemId, climateZone, AllSeasons[i]);
+				}
+				float num3 = num2 / 4f;
+				if (!(num3 <= 0f))
+				{
+					float baseProductionAmount = GetBaseProductionAmount(village, customItemId);
+					float weight = baseProductionAmount * climateMultiplier * num3;
+					ItemObject itemObject = null;
+					itemObject = ((!_customItems.TryGetValue(customItemId, out var value2)) ? Game.Current?.ObjectManager?.GetObject<ItemObject>(customItemId) : value2);
+					if (itemObject?.ItemCategory != null)
+					{
+						AddToProfile(dictionary, itemObject.ItemCategory, weight);
+					}
+				}
+			}
+		}
+		if (village.VillageType?.Productions != null)
+		{
+			string stringId2 = village.VillageType.StringId;
+			foreach (var (itemObject2, num4) in village.VillageType.Productions)
+			{
+				if (itemObject2 == null)
+				{
+					continue;
+				}
+				string stringId3 = itemObject2.StringId;
+				if (_customItemIds.Contains(stringId3))
+				{
+					continue;
+				}
+				bool flag = false;
+				if (_nativeProductionRules.ContainsKey(stringId3) && _nativeProductionRules[stringId3].Contains(stringId2))
+				{
+					flag = true;
+				}
+				if (!flag)
+				{
+					SecondaryProductionType secondaryType = VillageSecondaryProductionBehavior.GetSecondaryType(village);
+					if (secondaryType != SecondaryProductionType.None && _secondaryProductionItems.ContainsKey(secondaryType) && _secondaryProductionItems[secondaryType].Contains(stringId3))
+					{
+						flag = true;
+					}
+				}
+				if (!flag)
+				{
+					continue;
+				}
+				float nativeClimateMultiplier = GetNativeClimateMultiplier(stringId3, climateZone);
+				if (nativeClimateMultiplier <= 0f)
+				{
+					continue;
+				}
+				float num5 = 0f;
+				for (int j = 0; j < AllSeasons.Length; j++)
+				{
+					num5 += GetNativeSeasonalMultiplierForSeason(stringId3, climateZone, AllSeasons[j]);
+				}
+				float num6 = num5 / 4f;
+				if (!(num6 <= 0f))
+				{
+					float weight2 = num4 * nativeClimateMultiplier * num6 * GetRanchCountMultiplier(village);
+					AddToProfile(dictionary, itemObject2.ItemCategory, weight2);
+					if (itemObject2.ItemCategory == DefaultItemCategories.Cow)
+					{
+						AddToProfile(dictionary, DefaultItemCategories.Hides, weight2);
+					}
+					if (itemObject2.ItemCategory == DefaultItemCategories.Sheep)
+					{
+	

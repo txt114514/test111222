@@ -1,0 +1,677 @@
+﻿PART 54/75
+
+					agent2?.SetAgentFlags((AgentFlag)((uint)agent2.GetAgentFlags() & 0xFFFDFFFFu));
+				}
+			}
+			return false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in HAPBattleGoodsSpawnPatch: " + ex.Message);
+			return true;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\BuildingTooltipPatch.cs =====
+using System;
+using System.Collections;
+using System.Reflection;
+using HarmonyLib;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem.Settlements.Buildings;
+using TaleWorlds.CampaignSystem.ViewModelCollection;
+using TaleWorlds.CampaignSystem.ViewModelCollection.GameMenu.TownManagement;
+using TaleWorlds.Core.ViewModelCollection.Information;
+using TaleWorlds.Localization;
+
+namespace HarvestAndProduction.Patches;
+
+public static class BuildingTooltipPatch
+{
+	[HarmonyPatch(typeof(TooltipRefresherCollection))]
+	public static class TooltipPatch
+	{
+		[HarmonyPostfix]
+		[HarmonyPatch("RefreshBuildingTooltip")]
+		public static void RefreshBuildingTooltip_Postfix(PropertyBasedTooltipVM propertyBasedTooltipVM, object[] args)
+		{
+			try
+			{
+				if (!(args[0] is Building building))
+				{
+					return;
+				}
+				string text = building.BuildingType?.StringId;
+				if (string.IsNullOrEmpty(text))
+				{
+					return;
+				}
+				bool flag = GlobalSettings<HAPSettings>.Instance?.EnableArtificialFoodBonus ?? false;
+				string text2 = null;
+				if (text == "building_settlement_waterworks" && !flag)
+				{
+					text2 = new TextObject("{=HAP_WaterworksDesc}Waterways and sanitation, decrease food spoilage.").ToString();
+				}
+				else if (text == "building_castle_granary")
+				{
+					text2 = new TextObject("{=HAP_GranaryDesc}Increases food storage limits and decreases food spoilage.").ToString();
+				}
+				else if (text == "building_castle_farmlands")
+				{
+					text2 = ((!flag) ? new TextObject("{=HAP_LandholdingsDesc}Managed estates and farmsteads increase bound village production.").ToString() : new TextObject("{=HAP_LandholdingsDescArtificial}Managed estates and farmsteads provide daily food.").ToString());
+				}
+				if (text2 != null)
+				{
+					ModifyTooltipDescription(propertyBasedTooltipVM, building.Explanation.ToString(), text2);
+				}
+				int spoilageReductionPerLevel = GetSpoilageReductionPerLevel(text);
+				if (spoilageReductionPerLevel != 0)
+				{
+					int currentLevel = building.CurrentLevel;
+					if (currentLevel > 1)
+					{
+						int variable = (currentLevel - 1) * spoilageReductionPerLevel;
+						TextObject textObject = new TextObject("{=HAP_SpoilageBonus}{PERCENT}% reduced food spoilage");
+						textObject.SetTextVariable("PERCENT", variable);
+						propertyBasedTooltipVM.AddProperty("", textObject.ToString());
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				Main.Log("ERROR in BuildingTooltipPatch.RefreshBuildingTooltip: " + ex.Message);
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(SettlementProjectVM))]
+	public static class SettlementProjectPatch
+	{
+		[HarmonyPostfix]
+		[HarmonyPatch("GetBonusText")]
+		public static void GetBonusText_Postfix(ref string __result, Building building, int level)
+		{
+			try
+			{
+				if (building == null)
+				{
+					return;
+				}
+				string text = building.BuildingType?.StringId;
+				if (string.IsNullOrEmpty(text))
+				{
+					return;
+				}
+				if (text == "building_castle_farmlands")
+				{
+					HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+					if (instance != null && instance.EnableArtificialFoodBonus && level >= 1 && level <= 3)
+					{
+						int variable = level * 6;
+						TextObject textObject = new TextObject("{=HAP_LandholdingsFoodBonus}+{AMOUNT} food");
+						textObject.SetTextVariable("AMOUNT", variable);
+						TextObject textObject2 = level switch
+						{
+							1 => new TextObject("{=PJZ8QYgA}L-I : {BONUS}"), 
+							2 => new TextObject("{=9i0wnjJK}L-II : {BONUS}"), 
+							_ => new TextObject("{=pRP2sOWP}L-III : {BONUS}"), 
+						};
+						textObject2.SetTextVariable("BONUS", textObject);
+						__result = textObject2.ToString();
+					}
+				}
+				else
+				{
+					if (string.IsNullOrEmpty(__result))
+					{
+						return;
+					}
+					int spoilageReductionPerLevel = GetSpoilageReductionPerLevel(text);
+					if (spoilageReductionPerLevel != 0 && level >= 1 && level <= 3)
+					{
+						int variable2 = level * spoilageReductionPerLevel;
+						TextObject textObject3 = new TextObject("{=HAP_SpoilageBonus}{PERCENT}% reduced food spoilage");
+						textObject3.SetTextVariable("PERCENT", variable2);
+						bool flag = GlobalSettings<HAPSettings>.Instance?.EnableArtificialFoodBonus ?? false;
+						if (text == "building_settlement_waterworks" && !flag)
+						{
+							TextObject textObject4 = level switch
+							{
+								1 => new TextObject("{=PJZ8QYgA}L-I : {BONUS}"), 
+								2 => new TextObject("{=9i0wnjJK}L-II : {BONUS}"), 
+								_ => new TextObject("{=pRP2sOWP}L-III : {BONUS}"), 
+							};
+							textObject4.SetTextVariable("BONUS", textObject3);
+							__result = textObject4.ToString();
+						}
+						else
+						{
+							__result = __result + "\n" + textObject3.ToString();
+						}
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				Main.Log("ERROR in BuildingTooltipPatch.GetBonusText: " + ex.Message);
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(Building))]
+	public static class WaterworksEffectPatch
+	{
+		[HarmonyPrefix]
+		[HarmonyPatch("AddEffectOfBuilding")]
+		public static bool AddEffectOfBuilding_Prefix(Building __instance, BuildingEffectEnum buildingEffect)
+		{
+			try
+			{
+				if (buildingEffect != BuildingEffectEnum.FoodConsumption && buildingEffect != BuildingEffectEnum.VillageProduction)
+				{
+					return true;
+				}
+				if (buildingEffect == BuildingEffectEnum.FoodConsumption && __instance.BuildingType == DefaultBuildingTypes.SettlementWaterworks)
+				{
+					HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+					if (instance == null || !instance.EnableArtificialFoodBonus)
+					{
+						return false;
+					}
+				}
+				if (buildingEffect == BuildingEffectEnum.VillageProduction && __instance.BuildingType == DefaultBuildingTypes.CastleFarmlands)
+				{
+					HAPSettings? instance2 = GlobalSettings<HAPSettings>.Instance;
+					if (instance2 != null && instance2.EnableArtificialFoodBonus)
+					{
+						return false;
+					}
+				}
+				return true;
+			}
+			catch (Exception ex)
+			{
+				Main.Log("ERROR in WaterworksEffectPatch: " + ex.Message);
+				return true;
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(SettlementProjectVM))]
+	public static class SettlementProjectDescriptionPatch
+	{
+		[HarmonyPostfix]
+		[HarmonyPatch("RefreshValues")]
+		public static void RefreshValues_Postfix(SettlementProjectVM __instance)
+		{
+			try
+			{
+				PropertyInfo property = typeof(SettlementProjectVM).GetProperty("Building", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				if (property == null || !(property.GetValue(__instance) is Building building))
+				{
+					return;
+				}
+				string text = building.BuildingType?.StringId;
+				if (string.IsNullOrEmpty(text))
+				{
+					return;
+				}
+				bool flag = GlobalSettings<HAPSettings>.Instance?.EnableArtificialFoodBonus ?? false;
+				string text2 = null;
+				if (text == "building_settlement_waterworks" && !flag)
+				{
+					text2 = new TextObject("{=HAP_WaterworksDesc}Waterways and sanitation, decrease food spoilage.").ToString();
+				}
+				else if (text == "building_castle_granary")
+				{
+					text2 = new TextObject("{=HAP_GranaryDesc}Increases food storage limits and decreases food spoilage.").ToString();
+				}
+				else if (text == "building_castle_farmlands")
+				{
+					text2 = ((!flag) ? new TextObject("{=HAP_LandholdingsDesc}Managed estates and farmsteads increase bound village production.").ToString() : new TextObject("{=HAP_LandholdingsDescArtificial}Managed estates and farmsteads provide daily food.").ToString());
+				}
+				if (text2 != null)
+				{
+					PropertyInfo property2 = typeof(SettlementProjectVM).GetProperty("Explanation", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+					if (property2 != null && property2.CanWrite)
+					{
+						property2.SetValue(__instance, text2);
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				Main.Log("ERROR in SettlementProjectDescriptionPatch.RefreshValues: " + ex.Message);
+			}
+		}
+	}
+
+	[HarmonyPatch(typeof(Building))]
+	public static class LandholdingsTownCostPatch
+	{
+		private const float TOWN_COST_MULTIPLIER = 4f;
+
+		[HarmonyPostfix]
+		[HarmonyPatch("GetConstructionCost")]
+		public static void GetConstructionCost_Postfix(Building __instance, ref int __result)
+		{
+			try
+			{
+				if (__instance.BuildingType == DefaultBuildingTypes.CastleFarmlands && __instance.Town != null && __instance.Town.IsTown)
+				{
+					__result = (int)((float)__result * 4f);
+				}
+			}
+			catch (Exception ex)
+			{
+				Main.Log("ERROR in LandholdingsTownCostPatch: " + ex.Message);
+			}
+		}
+	}
+
+	private const int TOWN_SPOILAGE_REDUCTION_PER_LEVEL = 20;
+
+	private const int CASTLE_SPOILAGE_REDUCTION_PER_LEVEL = 10;
+
+	private static int GetSpoilageReductionPerLevel(string buildingId)
+	{
+		bool flag = GlobalSettings<HAPSettings>.Instance?.EnableArtificialFoodBonus ?? false;
+		if (buildingId == "building_castle_granary")
+		{
+			return 10;
+		}
+		if (buildingId == "building_settlement_waterworks" && !flag)
+		{
+			return 20;
+		}
+		return 0;
+	}
+
+	private static void ModifyTooltipDescription(PropertyBasedTooltipVM tooltipVM, string originalText, string newText)
+	{
+		try
+		{
+			PropertyInfo property = typeof(PropertyBasedTooltipVM).GetProperty("TooltipPropertyList", BindingFlags.Instance | BindingFlags.Public);
+			if (property == null)
+			{
+				property = typeof(PropertyBasedTooltipVM).GetProperty("Properties", BindingFlags.Instance | BindingFlags.Public);
+			}
+			if (!(property != null) || !(property.GetValue(tooltipVM) is IEnumerable enumerable))
+			{
+				return;
+			}
+			foreach (object item in enumerable)
+			{
+				if (item is TooltipProperty tooltipProperty && tooltipProperty.ValueLabel == originalText)
+				{
+					tooltipProperty.ValueLabel = newText;
+					break;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in ModifyTooltipDescription: " + ex.Message);
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\CalculateFoodCountToBuyPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction.Models;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Party;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(PartiesBuyFoodCampaignBehavior), "CalculateFoodCountToBuy")]
+public static class CalculateFoodCountToBuyPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(MobileParty mobileParty, float minimumDaysToLast, ref int __result)
+	{
+		if (!(Campaign.Current?.Models?.MobilePartyFoodConsumptionModel is FoodConsumptionModel foodConsumptionModel))
+		{
+			return true;
+		}
+		try
+		{
+			float aIPlanningFoodChange = foodConsumptionModel.GetAIPlanningFoodChange(mobileParty);
+			if (aIPlanningFoodChange >= -1E-05f)
+			{
+				__result = 0;
+				return false;
+			}
+			int num = mobileParty.TotalFoodAtInventory;
+			if (mobileParty.Army != null && mobileParty.Army.LeaderParty == mobileParty)
+			{
+				foreach (MobileParty attachedParty in mobileParty.Army.LeaderParty.AttachedParties)
+				{
+					if (attachedParty != null && attachedParty != mobileParty)
+					{
+						num += attachedParty.TotalFoodAtInventory;
+					}
+				}
+			}
+			float num2 = (float)num / (0f - aIPlanningFoodChange);
+			if (num2 >= minimumDaysToLast)
+			{
+				__result = 0;
+				return false;
+			}
+			int num3 = 0;
+			float num4 = num2;
+			while (num4 < minimumDaysToLast && num3 < 500)
+			{
+				num3 += 10;
+				float aIPlanningFoodChange2 = foodConsumptionModel.GetAIPlanningFoodChange(mobileParty, num3);
+				int num5 = num + num3;
+				num4 = (float)num5 / (0f - aIPlanningFoodChange2);
+			}
+			__result = num3;
+			return false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("CalculateFoodCountToBuyPatch error: " + ex.Message);
+			return true;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\CaravanBattleVisualsPatch.cs =====
+using System;
+using HarmonyLib;
+using HarvestAndProduction.PartyComponents;
+using SandBox;
+using TaleWorlds.CampaignSystem.MapEvents;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.Core;
+using TaleWorlds.MountAndBlade;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(SandBoxMissions), "OpenBattleMission", new Type[] { typeof(MissionInitializerRecord) })]
+public static class CaravanBattleVisualsPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix(MissionInitializerRecord rec, ref Mission __result)
+	{
+		try
+		{
+			MapEvent playerMapEvent = MapEvent.PlayerMapEvent;
+			if (playerMapEvent == null)
+			{
+				return true;
+			}
+			if (playerMapEvent.IsSiegeAssault || playerMapEvent.IsSiegeOutside || playerMapEvent.IsSallyOut)
+			{
+				return true;
+			}
+			bool flag = false;
+			foreach (PartyBase involvedParty in playerMapEvent.InvolvedParties)
+			{
+				MobileParty mobileParty = involvedParty?.MobileParty;
+				if (mobileParty == null || (!(mobileParty.PartyComponent is CastleForagerPartyComponent) && !(mobileParty.PartyComponent is TownSupplyLinePartyComponent)))
+				{
+					continue;
+				}
+				flag = true;
+				break;
+			}
+			if (!flag)
+			{
+				return true;
+			}
+			__result = SandBoxMissions.OpenCaravanBattleMission(rec, isCaravan: true);
+			return false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in CaravanBattleVisualsPatch: " + ex.Message);
+			return true;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\CaravanEmergencyFoodBlockPatch.cs =====
+using System;
+using System.Collections.Generic;
+using HarmonyLib;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Extensions;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(CaravansCampaignBehavior), "BuyCategory")]
+public static class CaravanEmergencyFoodBlockPatch
+{
+	private const bool DEBUG_FOOD_BLOCK = false;
+
+	private const bool BLOCK_LIVESTOCK_IN_EMERGENCY = true;
+
+	private static HashSet<ItemCategory> _protectedCategories;
+
+	public static void ClearCache()
+	{
+		_protectedCategories = null;
+	}
+
+	private static void EnsureProtectedCategories()
+	{
+		if (_protectedCategories != null)
+		{
+			return;
+		}
+		HashSet<ItemCategory> hashSet = new HashSet<ItemCategory>();
+		foreach (ItemCategory item in ItemCategories.All)
+		{
+			if (item != null && item.IsValid && item.Properties == ItemCategory.Property.BonusToFoodStores)
+			{
+				hashSet.Add(item);
+			}
+		}
+		HashSet<ItemCategory> hashSet2 = new HashSet<ItemCategory>();
+		HashSet<ItemCategory> hashSet3 = new HashSet<ItemCategory>();
+		foreach (ItemObject item2 in Items.All)
+		{
+			if (item2 == null)
+			{
+				continue;
+			}
+			ItemCategory itemCategory = item2.GetItemCategory();
+			if (itemCategory == null)
+			{
+				continue;
+			}
+			if (item2.IsFood && !item2.HasHorseComponent)
+			{
+				hashSet.Add(itemCategory);
+			}
+			if (item2.HasHorseComponent)
+			{
+				if (item2.HorseComponent.IsLiveStock)
+				{
+					hashSet2.Add(itemCategory);
+				}
+				else
+				{
+					hashSet3.Add(itemCategory);
+				}
+			}
+		}
+		bool flag = true;
+		hashSet2.ExceptWith(hashSet3);
+		hashSet.UnionWith(hashSet2);
+		_protectedCategories = hashSet;
+		Main.Log("[EmergencyFood] Built protected category cache: " + $"{hashSet.Count} categories");
+	}
+
+	private static bool IsProtectedCategory(ItemCategory category)
+	{
+		if (category == null)
+		{
+			return false;
+		}
+		EnsureProtectedCategories();
+		return _protectedCategories.Contains(category);
+	}
+
+	[HarmonyPrefix]
+	public static bool Prefix(MobileParty caravanParty, Town town, ItemCategory category)
+	{
+		try
+		{
+			if (town == null || category == null)
+			{
+				return true;
+			}
+			if (!IsProtectedCategory(category))
+			{
+				return true;
+			}
+			if (!FoodSystemConstants.IsEmergencyMode(town))
+			{
+				return true;
+			}
+			bool flag = false;
+			return false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("[EmergencyFood] ERROR in BuyCategory prefix: " + ex.Message);
+			return true;
+		}
+	}
+}
+
+===== END FILE =====
+
+===== FILE: HarvestAndProduction\HarvestAndProduction\Patches\CaravanEmergencySalePatch.cs =====
+using System;
+using System.Collections.Generic;
+using HarmonyLib;
+using MCM.Abstractions.Base.Global;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Actions;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
+using TaleWorlds.CampaignSystem.Extensions;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
+using TaleWorlds.Core;
+
+namespace HarvestAndProduction.Patches;
+
+[HarmonyPatch(typeof(CaravansCampaignBehavior), "SellGoods", new Type[]
+{
+	typeof(MobileParty),
+	typeof(Town),
+	typeof(float),
+	typeof(bool)
+})]
+public static class CaravanEmergencySalePatch
+{
+	private const bool DEBUG_EMERGENCY_SALE = false;
+
+	private const float MIN_PRICE_FACTOR = 1f;
+
+	private const float GOLD_RESERVE_FRACTION = 0.1f;
+
+	private const float PACK_ANIMAL_CAPACITY = 100f;
+
+	private const int PRIORITY_STAPLE_FOOD = 0;
+
+	private const int PRIORITY_LUXURY_FOOD = 1;
+
+	private const int PRIORITY_LIVESTOCK = 2;
+
+	private const int PRIORITY_PACK_ANIMAL = 3;
+
+	private const int PRIORITY_NONE = int.MaxValue;
+
+	private static int GetEmergencyPriority(ItemObject item)
+	{
+		if (item == null)
+		{
+			return int.MaxValue;
+		}
+		if (item.HasHorseComponent)
+		{
+			if (item.HorseComponent.IsLiveStock)
+			{
+				return 2;
+			}
+			if (item.HorseComponent.IsPackAnimal)
+			{
+				return 3;
+			}
+			return int.MaxValue;
+		}
+		ItemCategory itemCategory = item.GetItemCategory();
+		if (itemCategory != null && itemCategory.Properties == ItemCategory.Property.BonusToFoodStores)
+		{
+			return 0;
+		}
+		if (item.IsFood)
+		{
+			return 1;
+		}
+		return int.MaxValue;
+	}
+
+	[HarmonyPrefix]
+	public static void Prefix(MobileParty mobileParty, Town town)
+	{
+		try
+		{
+			if (mobileParty == null || town == null || town.Owner == null || !mobileParty.IsCaravan || !FoodSystemConstants.IsEmergencyMode(town))
+			{
+				return;
+			}
+			float num = GlobalSettings<HAPSettings>.Instance?.TownGoldPerProsperity ?? 12f;
+			int num2 = (int)(town.Prosperity * num * 0.1f);
+			if (town.Gold <= num2)
+			{
+				return;
+			}
+			List<(int, int, ItemRosterElement)> list = new List<(int, int, ItemRosterElement)>();
+			for (int i = 0; i < mobileParty.ItemRoster.Count; i++)
+			{
+				ItemRosterElement elementCopyAtIndex = mobileParty.ItemRoster.GetElementCopyAtIndex(i);
+				ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+				if (item == null || elementCopyAtIndex.Amount <= 0)
+				{
+					continue;
+				}
+				int emergencyPriority = GetEmergencyPriority(item);
+				if (emergencyPriority != int.MaxValue)
+				{
+					ItemCategory itemCategory = item.GetItemCategory();
+					if (itemCategory != null && !(town.MarketData.GetPriceFactor(itemCategory) < 1f))
+					{
+						list.Add((emergencyPriority, item.Value, elementCopyAtIndex));
+					}
+				}
+			}
+			if (list.Count == 0)
+			{
+				return;
+			}
+			list.Sort(delegate((int, int, ItemRosterElement) a, (int, int, ItemRosterElement) b)
+			{
+				int num8 = a.Item1.CompareTo(b.Item1);
+				return (num8 != 0) ? num8 : a.Item2.CompareTo(b.Item2);

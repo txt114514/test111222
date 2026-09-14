@@ -1,0 +1,702 @@
+﻿PART 43/75
+ivityCache["cider"] = 0.5f;
+			_humiditySensitivityCache["ale"] = 0.5f;
+			_humiditySensitivityCache["mead"] = 0.5f;
+			_humiditySensitivityCache["honey"] = 0.1f;
+			_humiditySensitivityCache["meat_sausage"] = 0.1f;
+			_humiditySensitivityCache["meat_ham"] = 0.1f;
+			_humiditySensitivityCache["meat_beef"] = 0.1f;
+			_humiditySensitivityCache["meat_hare"] = 0.1f;
+			_humiditySensitivityCache["meat_poultry"] = 0.1f;
+			_humiditySensitivityCache["meat_poultry_cooked"] = 0.1f;
+			_humiditySensitivityCache["meat_mutton"] = 0.1f;
+			_humiditySensitivityCache["meat_mutton_cooked"] = 0.1f;
+			_humiditySensitivityCache["meat_pork"] = 0.1f;
+			_humiditySensitivityCache["meat_pork_cooked"] = 0.1f;
+			_humiditySensitivityCache["meat"] = 0.1f;
+			_humiditySensitivityCache["fish"] = 0.1f;
+			_humiditySensitivityCache["crab"] = 0.1f;
+			_humiditySensitivityCache["lobster"] = 0.1f;
+			_humiditySensitivityCache["lobster_cooked"] = 0.1f;
+			_foodCachesInitialized = true;
+		}
+	}
+
+	public static void ClearRealisticWeatherCache()
+	{
+		_realisticWeatherType = null;
+		_realisticWeatherSearched = false;
+		_realisticWeatherManager = null;
+		_realisticWeatherUnavailable = false;
+		_weatherEventPositionsProperty = null;
+	}
+
+	private static void DetectNavalDLC()
+	{
+		if (_navalDLCSearched)
+		{
+			return;
+		}
+		_navalDLCSearched = true;
+		try
+		{
+			Type type = null;
+			Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+			foreach (Assembly assembly in assemblies)
+			{
+				type = assembly.GetType("NavalDLC.CharacterDevelopment.NavalPerks");
+				if (type != null)
+				{
+					break;
+				}
+			}
+			if (!(type != null))
+			{
+				return;
+			}
+			Type nestedType = type.GetNestedType("Boatswain");
+			if (nestedType != null)
+			{
+				PropertyInfo property = nestedType.GetProperty("SmoothOperator", BindingFlags.Static | BindingFlags.Public);
+				if (property != null)
+				{
+					_smoothOperatorPerk = property.GetValue(null) as PerkObject;
+					_navalDLCAvailable = _smoothOperatorPerk != null;
+					Main.Log($"War Sails DLC detected: SmoothOperator perk found = {_navalDLCAvailable}");
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("Naval DLC detection failed (DLC probably not installed): " + ex.Message);
+			_navalDLCAvailable = false;
+		}
+	}
+
+	public static void ClearNavalDLCCache()
+	{
+		_navalDLCSearched = false;
+		_navalDLCAvailable = false;
+		_smoothOperatorPerk = null;
+	}
+
+	public static void ClearAllCaches()
+	{
+		_consumptionCache.Clear();
+		_cacheTime = CampaignTime.Zero;
+		_herdCountCache.Clear();
+		_processedToday.Clear();
+		_lastClearTime = CampaignTime.Never;
+		_mainPartySpoilageFraction = 0f;
+		_totalMethodCalls = 0;
+		_lastLogTime = CampaignTime.Zero;
+		_stackTracePrintCount = 0;
+		_environmentalCache.Conditions.Clear();
+		_environmentalCache.CacheDay = CampaignTime.Zero;
+		_foodCachesInitialized = false;
+		_spoilageByItem.Clear();
+		_humidityByItem.Clear();
+		ClearRealisticWeatherCache();
+		ClearNavalDLCCache();
+	}
+
+	public static void MarkPartyAsProcessed(MobileParty party)
+	{
+		lock (_processedLock)
+		{
+			_processedToday.Add(party);
+		}
+	}
+
+	public static void ClearProcessedIfNewDay()
+	{
+		lock (_processedLock)
+		{
+			if (_lastClearTime.ToDays != CampaignTime.Now.ToDays)
+			{
+				_processedToday.Clear();
+				_lastClearTime = CampaignTime.Now;
+			}
+		}
+	}
+
+	public static bool IsPartyProcessedToday(MobileParty party)
+	{
+		lock (_processedLock)
+		{
+			return _processedToday.Contains(party);
+		}
+	}
+
+	public static float GetMainPartySpoilageFraction()
+	{
+		return _mainPartySpoilageFraction;
+	}
+
+	public override bool DoesPartyConsumeFood(MobileParty mobileParty)
+	{
+		if (mobileParty == null)
+		{
+			return false;
+		}
+		if (TownSupplyLinePartyComponent.IsSupplyLineParty(mobileParty))
+		{
+			return false;
+		}
+		if (NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(mobileParty))
+		{
+			return false;
+		}
+		if (CastleForagerPartyComponent.IsForagerParty(mobileParty))
+		{
+			return false;
+		}
+		if (mobileParty.LeaderHero == null)
+		{
+			return false;
+		}
+		return mobileParty.IsActive && (mobileParty.LeaderHero == null || mobileParty.LeaderHero.IsLord || mobileParty.LeaderHero.Clan == Clan.PlayerClan || mobileParty.LeaderHero.IsMinorFactionHero) && !mobileParty.IsGarrison && !mobileParty.IsCaravan && !mobileParty.IsBandit && !mobileParty.IsMilitia && !mobileParty.IsPatrolParty && !mobileParty.IsVillager;
+	}
+
+	private int GetCowCountForAIBonus(MobileParty party)
+	{
+		if (party == null || party.ItemRoster == null)
+		{
+			return 0;
+		}
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemObject itemAtIndex = party.ItemRoster.GetItemAtIndex(i);
+			if (itemAtIndex != null && itemAtIndex.StringId == "cow")
+			{
+				return party.ItemRoster.GetElementNumber(i);
+			}
+		}
+		return 0;
+	}
+
+	private int GetPoultryCountForAIBonus(MobileParty party)
+	{
+		if (party == null || party.ItemRoster == null)
+		{
+			return 0;
+		}
+		int num = 0;
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemObject itemAtIndex = party.ItemRoster.GetItemAtIndex(i);
+			if (itemAtIndex != null)
+			{
+				string stringId = itemAtIndex.StringId;
+				if (stringId == "chicken_product" || stringId == "goose_product")
+				{
+					num += party.ItemRoster.GetElementNumber(i);
+				}
+			}
+		}
+		return num;
+	}
+
+	private void ApplyAILivestockProductionBonus(MobileParty party, ref ExplainedNumber result, bool includeDescription)
+	{
+		if (party != null && !party.IsMainParty)
+		{
+			int cowCountForAIBonus = GetCowCountForAIBonus(party);
+			int poultryCountForAIBonus = GetPoultryCountForAIBonus(party);
+			int totalHealthyCount = party.MemberRoster.TotalHealthyCount;
+			cowCountForAIBonus = Math.Min(cowCountForAIBonus, totalHealthyCount * 5);
+			poultryCountForAIBonus = Math.Min(poultryCountForAIBonus, totalHealthyCount * 15);
+			float num = 0f;
+			float num2 = 0f;
+			if (cowCountForAIBonus >= 4)
+			{
+				num = (float)(cowCountForAIBonus / 4) / 4f;
+			}
+			if (poultryCountForAIBonus >= 8)
+			{
+				num2 = (float)(poultryCountForAIBonus / 8) / 4f;
+			}
+			float num3 = num + num2;
+			if (num3 > 0.001f)
+			{
+				num3 = (float)Math.Ceiling(num3 * 100f) / 100f;
+				result.Add(num3, includeDescription ? new TextObject("{=ai_livestock_prod}Livestock Production") : null);
+			}
+		}
+	}
+
+	public float GetAIPlanningFoodChange(MobileParty party, int additionalFoodToBuy = 0)
+	{
+		if (party == null || party.Party == null)
+		{
+			return 0f;
+		}
+		float num = CalculateSinglePartyPlanningConsumption(party, additionalFoodToBuy);
+		if (party.Army != null && party.Army.LeaderParty == party)
+		{
+			foreach (MobileParty attachedParty in party.Army.LeaderParty.AttachedParties)
+			{
+				if (attachedParty != null && attachedParty != party)
+				{
+					num += CalculateSinglePartyPlanningConsumption(attachedParty);
+				}
+			}
+		}
+		return Math.Min(0f, num);
+	}
+
+	private float CalculateSinglePartyPlanningConsumption(MobileParty party, int additionalFoodToBuy = 0)
+	{
+		if (party == null || party.Party == null)
+		{
+			return 0f;
+		}
+		int val = party.Party.NumberOfAllMembers + party.Party.NumberOfPrisoners / 2;
+		val = Math.Max(1, val);
+		HAPSettings instance = GlobalSettings<HAPSettings>.Instance;
+		float num = instance?.TroopFoodMultiplier ?? 1f;
+		float num2 = (0f - (float)val) / (float)NumberOfMenOnMapToEatOneFood * num;
+		float num3 = CalculateStaticHorseConsumption(party);
+		int totalFood = party.ItemRoster.TotalFood;
+		int num4 = totalFood + additionalFoodToBuy;
+		float num5 = 1.15f;
+		float num6 = instance?.SpoilageMultiplier ?? 1f;
+		float val2 = (0f - (float)num4) * 0.12f * num5 * num6 / (float)NumberOfMenOnMapToEatOneFood;
+		float val3 = num2 * 0.3f;
+		val2 = Math.Max(val2, val3);
+		float consumption = num2 + num3 + val2;
+		consumption = ApplyPlanningPerks(party, consumption);
+		return Math.Min(0f, consumption);
+	}
+
+	private float CalculateStaticHorseConsumption(MobileParty party)
+	{
+		if (party == null || party.MemberRoster == null)
+		{
+			return 0f;
+		}
+		HAPSettings instance = GlobalSettings<HAPSettings>.Instance;
+		float num = instance?.MountFoodMultiplier ?? 1f;
+		float num2 = instance?.LivestockFoodMultiplier ?? 1f;
+		int num3 = 0;
+		int num4 = 0;
+		int num5 = 0;
+		int num6 = 0;
+		int num7 = 0;
+		int num8 = 0;
+		int num9 = 0;
+		int num10 = 0;
+		for (int i = 0; i < party.MemberRoster.Count; i++)
+		{
+			CharacterObject characterAtIndex = party.MemberRoster.GetCharacterAtIndex(i);
+			if (!characterAtIndex.IsMounted || characterAtIndex.Equipment == null)
+			{
+				continue;
+			}
+			int elementNumber = party.MemberRoster.GetElementNumber(i);
+			EquipmentElement horse = characterAtIndex.Equipment.Horse;
+			if (horse.Item == null || !horse.Item.HasHorseComponent)
+			{
+				continue;
+			}
+			bool flag = IsCamel(horse.Item);
+			switch (horse.Item.ItemCategory?.StringId ?? "")
+			{
+			case "noble_horse":
+				if (flag)
+				{
+					num10 += elementNumber;
+				}
+				else
+				{
+					num6 += elementNumber;
+				}
+				break;
+			case "war_horse":
+				if (flag)
+				{
+					num8 += elementNumber;
+				}
+				else
+				{
+					num4 += elementNumber;
+				}
+				break;
+			case "sumpter_horse":
+				if (flag)
+				{
+					num9 += elementNumber;
+				}
+				else
+				{
+					num5 += elementNumber;
+				}
+				break;
+			default:
+				if (flag)
+				{
+					num7 += elementNumber;
+				}
+				else
+				{
+					num3 += elementNumber;
+				}
+				break;
+			}
+		}
+		int num11 = 0;
+		int num12 = 0;
+		int num13 = 0;
+		int num14 = 0;
+		int num15 = 0;
+		int num16 = 0;
+		int num17 = 0;
+		int num18 = 0;
+		int num19 = 0;
+		int num20 = 0;
+		int num21 = 0;
+		for (int j = 0; j < party.ItemRoster.Count; j++)
+		{
+			ItemObject itemAtIndex = party.ItemRoster.GetItemAtIndex(j);
+			if (!itemAtIndex.HasHorseComponent)
+			{
+				continue;
+			}
+			int elementNumber2 = party.ItemRoster.GetElementNumber(j);
+			string text = itemAtIndex.StringId?.ToLower() ?? "";
+			switch (text)
+			{
+			default:
+				if (!(text == "chicken_product"))
+				{
+					if (text == "sheep" || text == "hog")
+					{
+						num21 += elementNumber2;
+						break;
+					}
+					bool flag2 = IsCamel(itemAtIndex);
+					switch (itemAtIndex.ItemCategory?.StringId ?? "")
+					{
+					case "noble_horse":
+						if (flag2)
+						{
+							num18 += elementNumber2;
+						}
+						else
+						{
+							num14 += elementNumber2;
+						}
+						break;
+					case "war_horse":
+						if (flag2)
+						{
+							num16 += elementNumber2;
+						}
+						else
+						{
+							num12 += elementNumber2;
+						}
+						break;
+					case "sumpter_horse":
+						if (flag2)
+						{
+							num17 += elementNumber2;
+						}
+						else
+						{
+							num13 += elementNumber2;
+						}
+						break;
+					case "horse":
+						if (flag2)
+						{
+							num15 += elementNumber2;
+						}
+						else
+						{
+							num11 += elementNumber2;
+						}
+						break;
+					default:
+						if (itemAtIndex.HorseComponent != null && itemAtIndex.HorseComponent.IsLiveStock)
+						{
+							num19 += elementNumber2;
+						}
+						break;
+					}
+					break;
+				}
+				goto case "cat";
+			case "cat":
+			case "dog":
+			case "chicken":
+			case "hare":
+			case "goose":
+			case "goose_product":
+				num20 += elementNumber2;
+				break;
+			}
+		}
+		float num22 = (0f - ((float)(num3 + num7) * 1.25f + (float)(num5 + num9) * 1f + (float)(num4 + num8) * 1.5f + (float)(num6 + num10) * 2f)) / (float)NumberOfMenOnMapToEatOneFood * 1f * num;
+		float num23 = (0f - ((float)(num11 + num15) * 1.25f + (float)(num13 + num17) * 1f + (float)(num12 + num16) * 1.5f + (float)(num14 + num18) * 2f)) / (float)NumberOfMenOnMapToEatOneFood * 1f * num;
+		float num24 = (0f - ((float)num19 * 1f + (float)num20 * 0.2f + (float)num21 * 0.4f)) / (float)NumberOfMenOnMapToEatOneFood * 1f * num2;
+		return num22 + num23 + num24;
+	}
+
+	private float ApplyPlanningPerks(MobileParty party, float consumption)
+	{
+		if (party == null)
+		{
+			return consumption;
+		}
+		if (party.HasPerk(DefaultPerks.Athletics.Spartan))
+		{
+			consumption *= 1f + DefaultPerks.Athletics.Spartan.PrimaryBonus;
+		}
+		if (party.HasPerk(DefaultPerks.Steward.WarriorsDiet, checkSecondaryRole: true))
+		{
+			consumption *= 1f + DefaultPerks.Steward.WarriorsDiet.SecondaryBonus;
+		}
+		return consumption;
+	}
+
+	public static HerdCounts GetHerdCounts(MobileParty party)
+	{
+		if (party == null)
+		{
+			return default(HerdCounts);
+		}
+		if (_herdCountCache.TryGetValue(party, out var value))
+		{
+			return value;
+		}
+		return CalculateAndCacheHerdCounts(party);
+	}
+
+	private static HerdCounts CalculateAndCacheHerdCounts(MobileParty party)
+	{
+		HerdCounts herdCounts = default(HerdCounts);
+		if (party == null || party.ItemRoster == null)
+		{
+			return herdCounts;
+		}
+		int num = 0;
+		int num2 = 0;
+		int num3 = 0;
+		for (int i = 0; i < party.ItemRoster.Count; i++)
+		{
+			ItemObject itemAtIndex = party.ItemRoster.GetItemAtIndex(i);
+			if (itemAtIndex.HasHorseComponent)
+			{
+				int elementNumber = party.ItemRoster.GetElementNumber(i);
+				HorseComponent horseComponent = itemAtIndex.HorseComponent;
+				if (horseComponent.IsLiveStock)
+				{
+					num3 += elementNumber;
+				}
+				else if (horseComponent.IsPackAnimal)
+				{
+					num2 += elementNumber;
+				}
+				else if (horseComponent.IsRideable)
+				{
+					num += elementNumber;
+				}
+			}
+		}
+		herdCounts.Mounts = num;
+		herdCounts.PackAnimals = num2;
+		herdCounts.Livestock = num3;
+		herdCounts.TotalHerd = num + num2 + num3;
+		_herdCountCache[party] = herdCounts;
+		return herdCounts;
+	}
+
+	public override ExplainedNumber CalculateDailyBaseFoodConsumptionf(MobileParty party, bool includeDescription = false)
+	{
+		if (party == null || party.Party == null)
+		{
+			return new ExplainedNumber(0f, includeDescription);
+		}
+		if (CastleForagerPartyComponent.IsForagerParty(party))
+		{
+			return new ExplainedNumber(0f, includeDescription);
+		}
+		if (TownSupplyLinePartyComponent.IsSupplyLineParty(party))
+		{
+			return new ExplainedNumber(0f, includeDescription);
+		}
+		if (NavalSupplyConvoyPartyComponent.IsNavalSupplyConvoy(party))
+		{
+			return new ExplainedNumber(0f, includeDescription);
+		}
+		bool flag = false;
+		if (_cacheTime != CampaignTime.Now)
+		{
+			_consumptionCache.Clear();
+			_cacheTime = CampaignTime.Now;
+		}
+		if (_consumptionCache.TryGetValue(party, out var value))
+		{
+			if (!includeDescription)
+			{
+				return new ExplainedNumber(value.ResultNumber);
+			}
+			if (value.DetailedResult.HasValue)
+			{
+				return value.DetailedResult.Value;
+			}
+		}
+		int num = party.Party.NumberOfAllMembers + party.Party.NumberOfPrisoners / 2;
+		num = ((num < 1) ? 1 : num);
+		HAPSettings instance = GlobalSettings<HAPSettings>.Instance;
+		float num2 = instance?.TroopFoodMultiplier ?? 1f;
+		ExplainedNumber result = new ExplainedNumber((0f - (float)num) / (float)NumberOfMenOnMapToEatOneFood * num2, includeDescription);
+		CalculatePerkEffects(party, ref result);
+		ExplainedNumber result2 = new ExplainedNumber(result.ResultNumber, includeDescription);
+		EnvironmentalConditions environmentalConditionsCached = GetEnvironmentalConditionsCached(party);
+		if (CulturalFeatsBehavior.HasAseraiFastingTraditions(party) && environmentalConditionsCached.Temperature >= 30f)
+		{
+			float resultNumber = result2.ResultNumber;
+			float value2 = resultNumber * -0.3f;
+			result2.Add(value2, includeDescription ? new TextObject("{=HAP_AseraiFastingBonus}Aserai Fasting Traditions") : null);
+		}
+		if (CulturalFeatsBehavior.HasEmpireStandardizedRations(party))
+		{
+			float resultNumber2 = result2.ResultNumber;
+			float value3 = resultNumber2 * -0.1f;
+			result2.Add(value3, includeDescription ? new TextObject("{=HAP_EmpireRationsBonus}Standardized Rations") : null);
+		}
+		if (!party.IsMainParty && CulturalFeatsBehavior.HasBattanianForestForagers(party))
+		{
+			result2.Add(result2.ResultNumber * -0.05f);
+		}
+		_totalMethodCalls++;
+		if (party.IsMainParty)
+		{
+			bool flag2 = false;
+			bool flag3 = false;
+			if (_lastLogTime == CampaignTime.Zero)
+			{
+				flag3 = true;
+			}
+			else
+			{
+				float num3 = (float)(CampaignTime.Now - _lastLogTime).ToDays;
+				flag3 = num3 >= LOG_INTERVAL_DAYS;
+			}
+			bool flag4 = false;
+		}
+		CalculateMountedTroopConsumption(party, ref result2, includeDescription, environmentalConditionsCached.Temperature);
+		CalculateInventoryHorseConsumption(party, ref result2, includeDescription, environmentalConditionsCached.Temperature);
+		float num4 = 0f;
+		try
+		{
+			float num5 = CalculateSpoilageModifier(environmentalConditionsCached);
+			bool flag5 = false;
+			if (TryGetSturgianWinterStoresModifier(party, environmentalConditionsCached.Temperature, out var modifier))
+			{
+				num5 = modifier;
+				flag5 = true;
+			}
+			float num6 = 0f;
+			ItemRoster itemRoster = party.ItemRoster;
+			float num7;
+			if (environmentalConditionsCached.Humidity < 30f)
+			{
+				num7 = 0.9f;
+			}
+			else if (environmentalConditionsCached.Humidity < 70f)
+			{
+				num7 = 0.9f + (environmentalConditionsCached.Humidity - 30f) / 40f * 0.1f;
+			}
+			else
+			{
+				num7 = 1f + (environmentalConditionsCached.Humidity - 70f) / 30f * 0.2f;
+				num7 = Math.Min(1.2f, num7);
+			}
+			float num8 = (IsPartyInDustStorm(party) ? 2f : 1f);
+			bool flag6 = party.CurrentSettlement != null && (party.CurrentSettlement.IsTown || party.CurrentSettlement.IsCastle);
+			if (flag6)
+			{
+				num8 = 1f;
+			}
+			bool flag7 = CulturalFeatsBehavior.HasNordPreservedProvisions(party);
+			for (int i = 0; i < itemRoster.Count; i++)
+			{
+				ItemObject itemAtIndex = itemRoster.GetItemAtIndex(i);
+				if (!itemAtIndex.IsFood)
+				{
+					continue;
+				}
+				int elementNumber = itemRoster.GetElementNumber(i);
+				float num9 = GetFoodTypeSpoilageRate(itemAtIndex);
+				if (flag7)
+				{
+					switch (StringCache.GetLowerCase(itemAtIndex.StringId))
+					{
+					case "meat":
+					case "meat_beef":
+					case "meat_poultry":
+					case "meat_mutton":
+					case "meat_pork":
+					case "meat_hare":
+					case "fish":
+						num9 *= 0.5f;
+						break;
+					}
+				}
+				float humiditySensitivity = GetHumiditySensitivity(itemAtIndex);
+				float num10 = 1f + (num7 - 1f) * humiditySensitivity;
+				float num11;
+				if (flag5)
+				{
+					num11 = 0f;
+				}
+				else
+				{
+					float num12 = 0.25f * Math.Min(1f, num5);
+					float num13 = 1f - num12;
+					num11 = num5 * num13 + num10 * num12;
+				}
+				if (flag6 && num11 > 1f)
+				{
+					num11 = 1f + (num11 - 1f) * 0.5f;
+				}
+				float num14 = num9 * num11;
+				num14 *= num8;
+				float num15 = (float)elementNumber * num14 / 20f;
+				num6 += num15;
+			}
+			float num16 = instance?.SpoilageMultiplier ?? 1f;
+			num6 *= num16;
+			Kingdom kingdom = party?.LeaderHero?.Clan?.Kingdom;
+			if (kingdom != null && HAPPolicies.SaltTax != null && kingdom.ActivePolicies.Contains(HAPPolicies.SaltTax))
+			{
+				num6 *= 1.05f;
+			}
+			if (num6 > 0f)
+			{
+				result2.Add(0f - num6, includeDescription ? _partySpoilageText : null);
+			}
+			if (party.IsMainParty)
+			{
+				num4 = num6;
+			}
+		}
+		catch (Exception ex)
+		{
+			string text = party?.Name?.ToString() ?? "Unknown";
+			Main.Log("SPOILAGE ERROR for party " + text + ": " + ex.Message);
+		}
+		ApplyAILivestockProductionBonus(party, ref result2, includeDescription);
+		if (party.IsCurrentlyAtSea)
+		{
+			DetectNavalDLC();
+			if (_navalDLCAvailable)
+			{
+				float resultNumber3 = result.ResultNumber;
+				result2.Add(resultNumber3 * -0.2f, includeDescription ? _seaFoodReductionText : null);
+				if (_smoothOperatorPerk != null)
+				{
+					ExplainedNumber stat = new ExplainedNumber(resul

@@ -1,0 +1,705 @@
+﻿PART 5/75
+	private Settlement FindSafeDestinationInDirection(MobileParty party, Vec2 direction)
+	{
+		Settlement result = null;
+		float num = float.MinValue;
+		Vec2 vec = party.Position.ToVec2();
+		foreach (Settlement item in Settlement.All)
+		{
+			if (item.MapFaction != null && !FactionManager.IsAtWarAgainstFaction(party.MapFaction, item.MapFaction) && !item.IsUnderSiege && !item.IsUnderRaid && (item.IsTown || item.IsCastle) && (item.MapFaction == party.MapFaction || !item.IsCastle))
+			{
+				Vec2 vec2 = item.GatePosition.ToVec2();
+				Vec2 vb = vec2 - vec;
+				float num2 = vb.Length;
+				if (num2 < 1f)
+				{
+					num2 = 1f;
+				}
+				vb.Normalize();
+				float num3 = Vec2.DotProduct(direction, vb);
+				float num4 = num3 * 50f - num2;
+				if (num4 > num)
+				{
+					num = num4;
+					result = item;
+				}
+			}
+		}
+		return result;
+	}
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.HourlyTickPartyEvent.AddNonSerializedListener(this, OnHourlyTickParty);
+		CampaignEvents.HourlyTickEvent.AddNonSerializedListener(this, ProcessDestroyQueue);
+		CampaignEvents.DailyTickEvent.AddNonSerializedListener(this, ProcessDestroyQueue);
+		CampaignEvents.MapEventEnded.AddNonSerializedListener(this, OnMapEventEnded);
+		CampaignEvents.DailyTickSettlementEvent.AddNonSerializedListener(this, OnDailyTickSettlement);
+		CampaignEvents.SettlementEntered.AddNonSerializedListener(this, OnSettlementEntered);
+		CampaignEvents.MobilePartyDestroyed.AddNonSerializedListener(this, OnMobilePartyDestroyed);
+		CampaignEvents.OnGameLoadedEvent.AddNonSerializedListener(this, OnGameLoaded);
+		CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(this, OnSessionLaunched);
+		CampaignEvents.WeeklyTickEvent.AddNonSerializedListener(this, CleanupStaleEntries);
+		CampaignEvents.MapEventStarted.AddNonSerializedListener(this, OnMapEventStarted);
+		CampaignEvents.WarDeclared.AddNonSerializedListener(this, OnWarDeclared);
+		CampaignEvents.SettlementEntered.AddNonSerializedListener(this, OnSettlementEnteredForPrisoners);
+		CampaignEvents.OnSiegeEventStartedEvent.AddNonSerializedListener(this, OnSiegeEventStarted);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		dataStore.SyncData("HarvestAndProduction_ForagerCounter", ref _foragerCounter);
+		if (dataStore.IsLoading)
+		{
+			_activeForagers.Clear();
+			_lastSpawnTime.Clear();
+			_partiesToDestroy.Clear();
+			_partiesToReturnTroops.Clear();
+			PendingForagerTroopNotifications.Clear();
+			_interactedForagers.Clear();
+			DailyForagerSupplyTotals.Clear();
+			_lastResetDay = -1;
+		}
+	}
+
+	private void OnGameLoaded(CampaignGameStarter starter)
+	{
+		RebuildForagerTracking();
+	}
+
+	private void CleanupStaleEntries()
+	{
+		try
+		{
+			List<Settlement> list = new List<Settlement>();
+			foreach (KeyValuePair<Settlement, MobileParty> activeForager in _activeForagers)
+			{
+				if (activeForager.Value == null || !activeForager.Value.IsActive)
+				{
+					list.Add(activeForager.Key);
+				}
+			}
+			foreach (Settlement item in list)
+			{
+				_activeForagers.Remove(item);
+			}
+			List<Settlement> list2 = new List<Settlement>();
+			foreach (KeyValuePair<Settlement, CampaignTime> item2 in _lastSpawnTime)
+			{
+				if (item2.Value.ElapsedDaysUntilNow > 7f)
+				{
+					list2.Add(item2.Key);
+				}
+			}
+			foreach (Settlement item3 in list2)
+			{
+				_lastSpawnTime.Remove(item3);
+			}
+			bool flag = false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in CastleForagerBehavior.CleanupStaleEntries: " + ex.Message);
+		}
+	}
+
+	private int GetForagerTroopCount(int garrisonCount)
+	{
+		if (garrisonCount >= 200)
+		{
+			return 30;
+		}
+		if (garrisonCount >= 100)
+		{
+			return 20;
+		}
+		return 10;
+	}
+
+	private int GetMinTroopsBeforeRefill(int garrisonCount)
+	{
+		if (garrisonCount >= 200)
+		{
+			return 22;
+		}
+		if (garrisonCount >= 100)
+		{
+			return 15;
+		}
+		return 7;
+	}
+
+	private int GetMaxPackAnimals(int partySize)
+	{
+		if (partySize >= 30)
+		{
+			return 10;
+		}
+		if (partySize >= 20)
+		{
+			return 7;
+		}
+		return 5;
+	}
+
+	private void OnDailyTickSettlement(Settlement settlement)
+	{
+		try
+		{
+			HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+			if ((instance == null || instance.EnableCastleForagers) && settlement.IsCastle && ShouldSpawnForager(settlement))
+			{
+				Settlement settlement2 = FindBestTarget(settlement);
+				if (settlement2 == null)
+				{
+					bool flag = false;
+				}
+				else
+				{
+					SpawnForagerParty(settlement, settlement2);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in CastleForagerBehavior.OnDailyTickSettlement: " + ex.Message);
+		}
+	}
+
+	private bool ShouldSpawnForager(Settlement castle)
+	{
+		if (_activeForagers.TryGetValue(castle, out var value))
+		{
+			if (value != null && value.IsActive)
+			{
+				return false;
+			}
+			_activeForagers.Remove(castle);
+			bool flag = false;
+		}
+		foreach (MobileParty item in _partiesToDestroy)
+		{
+			if (item == null || !item.IsActive || CastleForagerPartyComponent.GetForagerComponent(item)?.HomeCastle != castle)
+			{
+				continue;
+			}
+			bool flag2 = false;
+			return false;
+		}
+		if (_lastSpawnTime.TryGetValue(castle, out var value2) && value2.ElapsedHoursUntilNow < 48f)
+		{
+			return false;
+		}
+		Town town = castle.Town;
+		if (town == null)
+		{
+			return false;
+		}
+		int num = town.FoodStocksUpperLimit();
+		if (!FoodSystemConstants.IsEmergencyMode(town))
+		{
+			return false;
+		}
+		MobileParty garrisonParty = town.GarrisonParty;
+		if (garrisonParty == null)
+		{
+			return false;
+		}
+		float starvationDays = StarvationDesertionBehavior.GetStarvationDays(castle);
+		int num2 = ((starvationDays > 0f) ? 20 : 50);
+		if (garrisonParty.MemberRoster.TotalManCount < num2)
+		{
+			return false;
+		}
+		Hero hero = castle.OwnerClan?.Leader;
+		if (hero == null || hero.Gold < 500)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private Settlement FindBestTarget(Settlement castle)
+	{
+		List<(Settlement, float, bool)> list = new List<(Settlement, float, bool)>();
+		if (castle.BoundVillages != null)
+		{
+			foreach (Village boundVillage in castle.BoundVillages)
+			{
+				if (boundVillage?.Settlement != null && IsValidTarget(castle, boundVillage.Settlement, out var distance))
+				{
+					(int food, int livestockMeat) tuple = CountFoodAndLivestock(boundVillage.Settlement);
+					int item = tuple.food;
+					int item2 = tuple.livestockMeat;
+					bool item3 = item >= 5;
+					float item4 = distance * 0.5f;
+					list.Add((boundVillage.Settlement, item4, item3));
+				}
+			}
+		}
+		if (GetForagerBudgetForCastle(castle) > 0)
+		{
+			foreach (Settlement item8 in Settlement.All)
+			{
+				if (item8.IsTown && IsValidTarget(castle, item8, out var distance2))
+				{
+					(int food, int livestockMeat) tuple2 = CountFoodAndLivestock(item8);
+					int item5 = tuple2.food;
+					int item6 = tuple2.livestockMeat;
+					bool item7 = item5 >= 5;
+					list.Add((item8, distance2, item7));
+				}
+			}
+		}
+		if (list.Count == 0)
+		{
+			return null;
+		}
+		float bestRealFoodScore = float.MaxValue;
+		foreach (var item9 in list)
+		{
+			if (item9.Item3 && item9.Item2 < bestRealFoodScore)
+			{
+				bestRealFoodScore = item9.Item2;
+			}
+		}
+		list.Sort(delegate((Settlement settlement, float score, bool hasRealFood) a, (Settlement settlement, float score, bool hasRealFood) b)
+		{
+			if (a.hasRealFood && !b.hasRealFood)
+			{
+				if (b.score < bestRealFoodScore * 0.5f)
+				{
+					return 1;
+				}
+				return -1;
+			}
+			return (!a.hasRealFood && b.hasRealFood) ? ((!(a.score < bestRealFoodScore * 0.5f)) ? 1 : (-1)) : a.score.CompareTo(b.score);
+		});
+		return list[0].Item1;
+	}
+
+	private Settlement FindBestTarget(Settlement castle, Settlement excludeSettlement)
+	{
+		List<(Settlement, float, bool)> list = new List<(Settlement, float, bool)>();
+		if (castle.BoundVillages != null)
+		{
+			foreach (Village boundVillage in castle.BoundVillages)
+			{
+				if (boundVillage?.Settlement != null && boundVillage.Settlement != excludeSettlement && IsValidTarget(castle, boundVillage.Settlement, out var distance))
+				{
+					(int food, int livestockMeat) tuple = CountFoodAndLivestock(boundVillage.Settlement);
+					int item = tuple.food;
+					int item2 = tuple.livestockMeat;
+					bool item3 = item >= 5;
+					float item4 = distance * 0.5f;
+					list.Add((boundVillage.Settlement, item4, item3));
+				}
+			}
+		}
+		if (GetForagerBudgetForCastle(castle) > 0)
+		{
+			foreach (Settlement item8 in Settlement.All)
+			{
+				if (item8.IsTown && item8 != excludeSettlement && IsValidTarget(castle, item8, out var distance2))
+				{
+					(int food, int livestockMeat) tuple2 = CountFoodAndLivestock(item8);
+					int item5 = tuple2.food;
+					int item6 = tuple2.livestockMeat;
+					bool item7 = item5 >= 5;
+					list.Add((item8, distance2, item7));
+				}
+			}
+		}
+		if (list.Count == 0)
+		{
+			return null;
+		}
+		list.Sort(delegate((Settlement settlement, float score, bool hasRealFood) a, (Settlement settlement, float score, bool hasRealFood) b)
+		{
+			if (a.hasRealFood && !b.hasRealFood)
+			{
+				return -1;
+			}
+			return (!a.hasRealFood && b.hasRealFood) ? 1 : a.score.CompareTo(b.score);
+		});
+		return list[0].Item1;
+	}
+
+	private (int food, int livestockMeat) CountFoodAndLivestock(Settlement settlement)
+	{
+		if (settlement?.ItemRoster == null)
+		{
+			return (food: 0, livestockMeat: 0);
+		}
+		int num = 0;
+		int num2 = 0;
+		for (int i = 0; i < settlement.ItemRoster.Count; i++)
+		{
+			ItemRosterElement elementCopyAtIndex = settlement.ItemRoster.GetElementCopyAtIndex(i);
+			ItemObject item = elementCopyAtIndex.EquipmentElement.Item;
+			if (item != null && elementCopyAtIndex.Amount > 0)
+			{
+				if (item.IsFood)
+				{
+					num += elementCopyAtIndex.Amount;
+				}
+				else if (item.HasHorseComponent && item.HorseComponent.IsLiveStock)
+				{
+					num2 += elementCopyAtIndex.Amount * item.HorseComponent.MeatCount;
+				}
+			}
+		}
+		return (food: num, livestockMeat: num2);
+	}
+
+	private bool IsValidTarget(Settlement castle, Settlement target, out float distance)
+	{
+		distance = float.MaxValue;
+		if (target == castle)
+		{
+			return false;
+		}
+		if (castle.MapFaction != null && target.MapFaction != null && FactionManager.IsAtWarAgainstFaction(castle.MapFaction, target.MapFaction))
+		{
+			return false;
+		}
+		if (target.IsUnderSiege)
+		{
+			return false;
+		}
+		if (target.IsVillage && target.Village.VillageState != Village.VillageStates.Normal)
+		{
+			return false;
+		}
+		if (!IsReachableByLand(castle, target, out distance))
+		{
+			return false;
+		}
+		float num = distance / (Campaign.Current.EstimatedAverageLordPartySpeed * (float)CampaignTime.HoursInDay);
+		if (num > 3f)
+		{
+			return false;
+		}
+		var (num2, num3) = CountFoodAndLivestock(target);
+		if (num2 < 5 && num3 < 5)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private bool IsReachableByLand(Settlement from, Settlement to, out float distance)
+	{
+		distance = float.MaxValue;
+		try
+		{
+			float distance2 = Campaign.Current.Models.MapDistanceModel.GetDistance(from, to, isFromPort: false, isTargetingPort: false, MobileParty.NavigationType.Default);
+			if (distance2 < float.MaxValue && distance2 > 0f)
+			{
+				distance = distance2;
+				return true;
+			}
+			return false;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private void SpawnForagerParty(Settlement castle, Settlement target)
+	{
+		try
+		{
+			if (_activeForagers.TryGetValue(castle, out var value) && value != null && value.IsActive)
+			{
+				bool flag = false;
+				return;
+			}
+			_activeForagers.Remove(castle);
+			MobileParty mobileParty = castle.Town?.GarrisonParty;
+			if (mobileParty == null)
+			{
+				return;
+			}
+			float starvationDays = StarvationDesertionBehavior.GetStarvationDays(castle);
+			int num = ((starvationDays > 0f) ? 20 : 50);
+			if (mobileParty.MemberRoster.TotalManCount < num)
+			{
+				return;
+			}
+			_foragerCounter++;
+			string stringId = "forager_party_" + castle.StringId + "_" + _foragerCounter;
+			MobileParty mobileParty2 = CastleForagerPartyComponent.CreateForagerParty(stringId, castle);
+			if (mobileParty2 == null)
+			{
+				Main.Log("ERROR: Failed to create forager party for " + castle.Name);
+				return;
+			}
+			int foragerTroopCount = GetForagerTroopCount(mobileParty.MemberRoster.TotalManCount);
+			TransferTroopsFromGarrison(mobileParty, mobileParty2, foragerTroopCount);
+			if (mobileParty2.MemberRoster.TotalManCount <= 0)
+			{
+				bool flag2 = false;
+				DestroyPartyAction.Apply(null, mobileParty2);
+				return;
+			}
+			CastleForagerPartyComponent foragerComponent = CastleForagerPartyComponent.GetForagerComponent(mobileParty2);
+			if (foragerComponent != null)
+			{
+				foragerComponent.State = CastleForagerPartyComponent.ForagerState.TravelingToTarget;
+				foragerComponent.TargetSettlement = target;
+				foragerComponent.ResetTripTracking();
+				foragerComponent.SetDestination(target);
+			}
+			if (foragerComponent != null)
+			{
+				TakePackAnimalsFromStash(mobileParty2, foragerComponent);
+			}
+			_activeForagers[castle] = mobileParty2;
+			_lastSpawnTime[castle] = CampaignTime.Now;
+			bool flag3 = false;
+			int num2 = GlobalSettings<HAPSettings>.Instance?.ForagerNotifications?.SelectedIndex ?? 1;
+			if (castle.OwnerClan == Clan.PlayerClan && num2 >= 1)
+			{
+				TextObject textObject = new TextObject("{=HAP_ForagerSpawnNotification}{CASTLE_NAME}'s food supplies are running low. Suppliers have been dispatched to acquire provisions.");
+				textObject.SetTextVariable("CASTLE_NAME", castle.Name);
+				InformationManager.DisplayMessage(new InformationMessage(textObject.ToString(), Colors.Yellow));
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in SpawnForagerParty: " + ex.Message);
+		}
+	}
+
+	private void TransferTroopsFromGarrison(MobileParty garrison, MobileParty forager, int targetCount)
+	{
+		int num = 0;
+		TroopRoster memberRoster = garrison.MemberRoster;
+		List<TroopRosterElement> list = new List<TroopRosterElement>();
+		for (int i = 0; i < memberRoster.Count; i++)
+		{
+			TroopRosterElement elementCopyAtIndex = memberRoster.GetElementCopyAtIndex(i);
+			if (!elementCopyAtIndex.Character.IsHero && elementCopyAtIndex.Number > 0)
+			{
+				list.Add(elementCopyAtIndex);
+			}
+		}
+		list.Sort(delegate(TroopRosterElement a, TroopRosterElement b)
+		{
+			int num6 = a.Character.Tier.CompareTo(b.Character.Tier);
+			return (num6 != 0) ? num6 : a.Character.TroopWage.CompareTo(b.Character.TroopWage);
+		});
+		foreach (TroopRosterElement item in list)
+		{
+			if (num >= targetCount)
+			{
+				break;
+			}
+			int troopCount = memberRoster.GetTroopCount(item.Character);
+			if (troopCount <= 0)
+			{
+				continue;
+			}
+			int num2 = 0;
+			for (int num3 = 0; num3 < memberRoster.Count; num3++)
+			{
+				if (memberRoster.GetCharacterAtIndex(num3) == item.Character)
+				{
+					num2 = memberRoster.GetElementCopyAtIndex(num3).WoundedNumber;
+					break;
+				}
+			}
+			int num4 = troopCount - num2;
+			if (num4 > 0)
+			{
+				int num5 = Math.Min(num4, targetCount - num);
+				if (num5 > 0)
+				{
+					forager.MemberRoster.AddToCounts(item.Character, num5);
+					memberRoster.AddToCounts(item.Character, -num5);
+					num += num5;
+					bool flag = false;
+				}
+			}
+		}
+		bool flag2 = false;
+	}
+
+	private int RefillTroopsFromGarrison(MobileParty garrison, MobileParty forager, int needed, int minGarrisonToKeep)
+	{
+		int num = 0;
+		TroopRoster memberRoster = garrison.MemberRoster;
+		int num2 = memberRoster.TotalManCount - minGarrisonToKeep;
+		if (num2 <= 0)
+		{
+			return 0;
+		}
+		int num3 = Math.Min(needed, num2);
+		List<TroopRosterElement> list = new List<TroopRosterElement>();
+		for (int i = 0; i < memberRoster.Count; i++)
+		{
+			TroopRosterElement elementCopyAtIndex = memberRoster.GetElementCopyAtIndex(i);
+			if (!elementCopyAtIndex.Character.IsHero && elementCopyAtIndex.Number > 0)
+			{
+				list.Add(elementCopyAtIndex);
+			}
+		}
+		list.Sort(delegate(TroopRosterElement a, TroopRosterElement b)
+		{
+			int num8 = a.Character.Tier.CompareTo(b.Character.Tier);
+			return (num8 != 0) ? num8 : a.Character.TroopWage.CompareTo(b.Character.TroopWage);
+		});
+		foreach (TroopRosterElement item in list)
+		{
+			if (num >= num3)
+			{
+				break;
+			}
+			int troopCount = memberRoster.GetTroopCount(item.Character);
+			if (troopCount <= 0)
+			{
+				continue;
+			}
+			int num4 = Math.Min(troopCount, num3 - num);
+			if (num4 <= 0)
+			{
+				continue;
+			}
+			int num5 = 0;
+			for (int num6 = 0; num6 < memberRoster.Count; num6++)
+			{
+				if (memberRoster.GetCharacterAtIndex(num6) == item.Character)
+				{
+					num5 = memberRoster.GetElementCopyAtIndex(num6).WoundedNumber;
+					break;
+				}
+			}
+			int num7 = troopCount - num5;
+			if (num7 > 0)
+			{
+				num4 = Math.Min(num4, num7);
+				memberRoster.AddToCounts(item.Character, -num4);
+				forager.MemberRoster.AddToCounts(item.Character, num4);
+				num += num4;
+				bool flag = false;
+			}
+		}
+		return num;
+	}
+
+	private void ProcessDestroyQueue()
+	{
+		if (_partiesToDestroy.Count == 0)
+		{
+			return;
+		}
+		List<MobileParty> list = new List<MobileParty>(_partiesToDestroy);
+		Dictionary<MobileParty, Settlement> dictionary = new Dictionary<MobileParty, Settlement>(_partiesToReturnTroops);
+		_partiesToDestroy.Clear();
+		_partiesToReturnTroops.Clear();
+		bool flag = false;
+		foreach (MobileParty item in list)
+		{
+			try
+			{
+				if (item == null || !item.IsActive)
+				{
+					continue;
+				}
+				if (item.MapEvent != null)
+				{
+					_partiesToDestroy.Add(item);
+					if (dictionary.TryGetValue(item, out var value))
+					{
+						_partiesToReturnTroops[item] = value;
+					}
+					continue;
+				}
+				if (item.CurrentSettlement != null)
+				{
+					try
+					{
+						LeaveSettlementAction.ApplyForParty(item);
+					}
+					catch (Exception)
+					{
+					}
+				}
+				if (dictionary.TryGetValue(item, out var value2))
+				{
+					if (value2?.Town != null && value2.MapFaction == item.MapFaction && value2.Party.MapEvent == null)
+					{
+						if (value2.Town.GarrisonParty == null && !value2.IsUnderSiege)
+						{
+							value2.AddGarrisonParty();
+							bool flag2 = false;
+						}
+						if (value2.Town.GarrisonParty != null)
+						{
+							ReturnTroopsToGarrison(item, value2.Town.GarrisonParty);
+							bool flag3 = false;
+						}
+						else
+						{
+							bool flag4 = false;
+						}
+					}
+					else
+					{
+						bool flag5 = false;
+					}
+				}
+				DestroyPartyAction.Apply(null, item);
+			}
+			catch (Exception ex2)
+			{
+				Main.Log("ERROR destroying queued party: " + ex2.Message);
+			}
+		}
+	}
+
+	private bool IsSettlementUnderAttack(Settlement settlement)
+	{
+		if (settlement == null)
+		{
+			return false;
+		}
+		if (settlement.IsUnderSiege)
+		{
+			return true;
+		}
+		if (settlement.IsVillage && settlement.Village != null && (settlement.Village.VillageState == Village.VillageStates.BeingRaided || settlement.Village.VillageState == Village.VillageStates.ForcedForVolunteers || settlement.Village.VillageState == Village.VillageStates.ForcedForSupplies))
+		{
+			return true;
+		}
+		if (settlement.Party?.MapEvent != null)
+		{
+			return true;
+		}
+		return false;
+	}
+
+	private bool IsCastleStillValid(CastleForagerPartyComponent component)
+	{
+		if (component.HomeCastle == null)
+		{
+			return false;
+		}
+		if (component.HomeCastle.Town == null)
+		{
+			return false;
+		}
+		if (component.OriginalClan != null)
+		{
+			if (component.OriginalClan != component.HomeCastle.OwnerClan)
+			{
+				return false;
+			}
+			if (component.OriginalClan.IsEliminated)
+			{
+				return false;
+			}
+		}
+		else if (component.MobileParty?.MapFaction 

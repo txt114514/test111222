@@ -1,0 +1,705 @@
+﻿PART 16/75
+_COW = 4;
+
+	private const int MEAT_PER_SHEEP = 2;
+
+	private const int MEAT_PER_HOG = 2;
+
+	private const float SNOW_THRESHOLD = 0.55f;
+
+	private const float MAX_OUTING_HOURS = 120f;
+
+	private const float SHELTER_RESPAWN_COOLDOWN_HOURS = 48f;
+
+	private readonly HashSet<MobileParty> _plannedDisbands = new HashSet<MobileParty>();
+
+	private readonly Dictionary<Village, CampaignTime> _shelterDisbandTimes = new Dictionary<Village, CampaignTime>();
+
+	private ItemObject _milkItem;
+
+	private ItemObject _woolItem;
+
+	private ItemObject _beefItem;
+
+	private ItemObject _muttonItem;
+
+	private ItemObject _porkItem;
+
+	private bool _itemsCached;
+
+	private void EnsureItemsCached()
+	{
+		if (!_itemsCached)
+		{
+			_milkItem = Game.Current.ObjectManager.GetObject<ItemObject>("milk");
+			_woolItem = Game.Current.ObjectManager.GetObject<ItemObject>("wool");
+			_beefItem = Game.Current.ObjectManager.GetObject<ItemObject>("meat_beef");
+			_muttonItem = Game.Current.ObjectManager.GetObject<ItemObject>("meat_mutton");
+			_porkItem = Game.Current.ObjectManager.GetObject<ItemObject>("meat_pork");
+			_itemsCached = true;
+			if (_milkItem == null)
+			{
+				Main.Log("HerderBehavior ERROR: milk item not found");
+			}
+			if (_woolItem == null)
+			{
+				Main.Log("HerderBehavior ERROR: wool item not found");
+			}
+			if (_beefItem == null)
+			{
+				Main.Log("HerderBehavior ERROR: meat_beef item not found");
+			}
+			if (_muttonItem == null)
+			{
+				Main.Log("HerderBehavior ERROR: meat_mutton item not found");
+			}
+			if (_porkItem == null)
+			{
+				Main.Log("HerderBehavior ERROR: meat_pork item not found");
+			}
+		}
+	}
+
+	public override void RegisterEvents()
+	{
+		CampaignEvents.DailyTickSettlementEvent.AddNonSerializedListener(this, OnDailySettlementTick);
+		CampaignEvents.HourlyTickPartyEvent.AddNonSerializedListener(this, OnHourlyTickParty);
+		CampaignEvents.MobilePartyDestroyed.AddNonSerializedListener(this, OnMobilePartyDestroyed);
+		CampaignEvents.OnGameLoadedEvent.AddNonSerializedListener(this, OnGameLoaded);
+		CampaignEvents.OnNewGameCreatedEvent.AddNonSerializedListener(this, OnNewGameCreated);
+	}
+
+	public override void SyncData(IDataStore dataStore)
+	{
+		if (dataStore.IsLoading)
+		{
+			_plannedDisbands.Clear();
+			_shelterDisbandTimes.Clear();
+			_itemsCached = false;
+		}
+	}
+
+	private void OnNewGameCreated(CampaignGameStarter starter)
+	{
+		EnsureItemsCached();
+	}
+
+	private void OnGameLoaded(CampaignGameStarter starter)
+	{
+		EnsureItemsCached();
+	}
+
+	private void OnDailySettlementTick(Settlement settlement)
+	{
+		try
+		{
+			Village village = settlement.Village;
+			if (village == null)
+			{
+				return;
+			}
+			HAPSettings? instance = GlobalSettings<HAPSettings>.Instance;
+			if (instance == null || instance.EnableHerderParties)
+			{
+				if (HerderPartyComponent.HasActiveHerder(village))
+				{
+					CheckDisbandConditions(village);
+				}
+				else if (CanSpawnHerder(village) && !(MBRandom.RandomFloat > 0.5f))
+				{
+					SpawnHerder(village);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in HerderBehavior.OnDailySettlementTick: " + ex.Message);
+		}
+	}
+
+	private bool CanSpawnHerder(Village village)
+	{
+		if (_shelterDisbandTimes.TryGetValue(village, out var value))
+		{
+			if (value.ElapsedHoursUntilNow < 48f)
+			{
+				return false;
+			}
+			_shelterDisbandTimes.Remove(village);
+		}
+		string text = village.VillageType?.StringId;
+		if (text != "cattle_farm" && text != "sheep_farm" && text != "swine_farm")
+		{
+			return false;
+		}
+		if (village.VillageState != Village.VillageStates.Normal)
+		{
+			return false;
+		}
+		if (village.Settlement.Party.MapEvent != null)
+		{
+			return false;
+		}
+		if (village.Hearth < 300f)
+		{
+			return false;
+		}
+		if (village.Bound?.Town == null)
+		{
+			return false;
+		}
+		if (village.Bound.Town.Security < 60f)
+		{
+			return false;
+		}
+		string animalId = ((text == "cattle_farm") ? "cow" : ((text == "swine_farm") ? "hog" : "sheep"));
+		int animalCountInVillage = GetAnimalCountInVillage(village, animalId);
+		if (animalCountInVillage < 20)
+		{
+			return false;
+		}
+		if (IsSnowCovered(village.Settlement))
+		{
+			return false;
+		}
+		CampaignTime.Seasons getSeasonOfYear = CampaignTime.Now.GetSeasonOfYear;
+		if (getSeasonOfYear == CampaignTime.Seasons.Winter)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	private void SpawnHerder(Village village)
+	{
+		EnsureItemsCached();
+		string stringId = village.VillageType.StringId;
+		string text;
+		HerderPartyComponent.HerdType animalType;
+		if (stringId == "cattle_farm")
+		{
+			text = "cow";
+			animalType = HerderPartyComponent.HerdType.Cow;
+		}
+		else if (stringId == "swine_farm")
+		{
+			text = "hog";
+			animalType = HerderPartyComponent.HerdType.Hog;
+		}
+		else
+		{
+			text = "sheep";
+			animalType = HerderPartyComponent.HerdType.Sheep;
+		}
+		int animalCountInVillage = GetAnimalCountInVillage(village, text);
+		int val = Math.Min(animalCountInVillage, 120);
+		val = Math.Max(val, 20);
+		if (val > animalCountInVillage)
+		{
+			return;
+		}
+		string stringId2 = village.Settlement.OwnerClan.StringId + "_herder_1";
+		MobileParty mobileParty = HerderPartyComponent.CreateHerderParty(stringId2, village, animalType, val);
+		if (mobileParty == null)
+		{
+			Main.Log("HerderBehavior ERROR: Failed to create herder party at " + village.Name);
+			return;
+		}
+		village.Hearth = MathF.Max(0f, village.Hearth - (float)((mobileParty.MemberRoster.TotalManCount + 1) / 2));
+		ItemObject itemObject = Game.Current.ObjectManager.GetObject<ItemObject>(text);
+		if (itemObject != null)
+		{
+			village.Owner.ItemRoster.AddToCounts(itemObject, -val);
+			mobileParty.ItemRoster.AddToCounts(itemObject, val);
+		}
+		MilitiaGuardHelper.EnsureMilitiaGuards(mobileParty, village);
+		StartRoaming(HerderPartyComponent.GetComponent(mobileParty));
+		bool flag = false;
+	}
+
+	private void CheckDisbandConditions(Village village)
+	{
+		HerderPartyComponent herderForVillage = HerderPartyComponent.GetHerderForVillage(village);
+		if (herderForVillage?.MobileParty == null || !herderForVillage.MobileParty.IsActive)
+		{
+			return;
+		}
+		bool flag = false;
+		string text = "";
+		if (village.Hearth < 300f)
+		{
+			flag = true;
+			text = "low hearth";
+		}
+		else if (village.Bound?.Town != null && village.Bound.Town.Security < 60f)
+		{
+			flag = true;
+			text = "low security";
+		}
+		else if (village.VillageState != Village.VillageStates.Normal)
+		{
+			flag = true;
+			text = "village state " + village.VillageState;
+		}
+		else if (IsSnowCovered(village.Settlement))
+		{
+			flag = true;
+			text = "snow";
+		}
+		else if (CampaignTime.Now.GetSeasonOfYear == CampaignTime.Seasons.Winter)
+		{
+			flag = true;
+			text = "winter";
+		}
+		else if (herderForVillage.OriginalClan != village.Settlement.OwnerClan)
+		{
+			flag = true;
+			text = "ownership changed";
+			herderForVillage.MobileParty?.Party?.SetVisualAsDirty();
+		}
+		if (flag)
+		{
+			bool flag2 = false;
+			if (herderForVillage.State != HerderPartyComponent.HerderState.ReturningToVillage)
+			{
+				StartReturnToVillage(herderForVillage);
+			}
+		}
+	}
+
+	private void DisbandHerder(HerderPartyComponent component)
+	{
+		if (component?.MobileParty == null)
+		{
+			return;
+		}
+		MobileParty mobileParty = component.MobileParty;
+		Village village = component.Village;
+		if (village != null)
+		{
+			OnDropOff(component);
+			string objectName = ((component.AnimalType == HerderPartyComponent.HerdType.Cow) ? "cow" : ((component.AnimalType == HerderPartyComponent.HerdType.Hog) ? "hog" : "sheep"));
+			ItemObject itemObject = Game.Current.ObjectManager.GetObject<ItemObject>(objectName);
+			if (itemObject != null)
+			{
+				int itemNumber = mobileParty.ItemRoster.GetItemNumber(itemObject);
+				if (itemNumber > 0)
+				{
+					List<ItemRosterElement> list = new List<ItemRosterElement>();
+					list.Add(new ItemRosterElement(itemObject, itemNumber));
+					FireSuppliedNotifications(mobileParty, village.Settlement, list);
+					mobileParty.ItemRoster.AddToCounts(itemObject, -itemNumber);
+					village.Owner.ItemRoster.AddToCounts(itemObject, itemNumber);
+					bool flag = false;
+				}
+			}
+		}
+		ReleaseAllPrisoners(mobileParty);
+		bool flag2 = false;
+		_plannedDisbands.Add(mobileParty);
+		DestroyPartyAction.Apply(null, mobileParty);
+	}
+
+	private void ForceDisbandHerder(HerderPartyComponent component, Settlement location)
+	{
+		MobileParty mobileParty = component?.MobileParty;
+		if (mobileParty == null)
+		{
+			return;
+		}
+		try
+		{
+			ReleaseAllPrisoners(mobileParty);
+			if (location != null)
+			{
+				try
+				{
+					LeaveSettlementAction.ApplyForParty(mobileParty);
+				}
+				catch
+				{
+				}
+			}
+			mobileParty.ItemRoster.Clear();
+			bool flag = false;
+			_plannedDisbands.Add(mobileParty);
+			DestroyPartyAction.Apply(null, mobileParty);
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in ForceDisbandHerder: " + ex.Message);
+		}
+	}
+
+	private void ReleaseAllPrisoners(MobileParty party)
+	{
+		try
+		{
+			if (party?.Party?.PrisonRoster == null || party.Party.PrisonRoster.TotalManCount <= 0)
+			{
+				return;
+			}
+			List<Hero> list = new List<Hero>();
+			foreach (TroopRosterElement item in party.Party.PrisonRoster.GetTroopRoster())
+			{
+				if (item.Character?.HeroObject != null)
+				{
+					list.Add(item.Character.HeroObject);
+				}
+			}
+			foreach (Hero item2 in list)
+			{
+				EndCaptivityAction.ApplyByEscape(item2);
+			}
+			int totalManCount = party.Party.PrisonRoster.TotalManCount;
+			if (totalManCount > 0)
+			{
+				party.Party.PrisonRoster.Clear();
+			}
+			bool flag = false;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in ReleaseAllPrisoners: " + ex.Message);
+		}
+	}
+
+	private MobileParty FindNearestHostileParty(MobileParty party)
+	{
+		try
+		{
+			IFaction mapFaction = party.MapFaction;
+			if (mapFaction == null)
+			{
+				return null;
+			}
+			float fleeToNearbyPartyRadius = Campaign.Current.Models.MobilePartyAIModel.FleeToNearbyPartyRadius;
+			Vec2 position = party.Position.ToVec2();
+			MobileParty result = null;
+			float num = float.MaxValue;
+			LocatableSearchData<MobileParty> data = MobileParty.StartFindingLocatablesAroundPosition(position, fleeToNearbyPartyRadius);
+			for (MobileParty mobileParty = MobileParty.FindNextLocatable(ref data); mobileParty != null; mobileParty = MobileParty.FindNextLocatable(ref data))
+			{
+				if (mobileParty != party && mobileParty.IsActive && mobileParty.CurrentSettlement == null)
+				{
+					IFaction mapFaction2 = mobileParty.MapFaction;
+					if (mapFaction2 != null && FactionManager.IsAtWarAgainstFaction(mapFaction2, mapFaction) && !mobileParty.IsCaravan && !mobileParty.IsVillager)
+					{
+						float num2 = position.DistanceSquared(mobileParty.Position.ToVec2());
+						if (num2 < num)
+						{
+							num = num2;
+							result = mobileParty;
+						}
+					}
+				}
+			}
+			return result;
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in FindNearestHostileParty: " + ex.Message);
+			return null;
+		}
+	}
+
+	private void OnMobilePartyDestroyed(MobileParty party, PartyBase destroyerParty)
+	{
+		if (HerderPartyComponent.IsHerderParty(party) && !_plannedDisbands.Remove(party))
+		{
+			HerderPartyComponent component = HerderPartyComponent.GetComponent(party);
+			if (component != null)
+			{
+				bool flag = false;
+			}
+		}
+	}
+
+	private void OnHourlyTickParty(MobileParty party)
+	{
+		HerderPartyComponent component;
+		if (party.MapEvent != null || (component = HerderPartyComponent.GetComponent(party)) == null)
+		{
+			return;
+		}
+		try
+		{
+			Settlement currentSettlement = party.CurrentSettlement;
+			if (currentSettlement != null && component.Village?.Settlement == currentSettlement && party.IsFleeing())
+			{
+				OnDropOff(component);
+				return;
+			}
+			if (currentSettlement != null)
+			{
+				Settlement settlement = component.Village?.Settlement;
+				if (settlement == null)
+				{
+					ForceDisbandHerder(component, currentSettlement);
+				}
+				else if (currentSettlement == settlement)
+				{
+					if (component.State == HerderPartyComponent.HerderState.ReturningToVillage)
+					{
+						if (ShouldDisbandNow(component))
+						{
+							try
+							{
+								LeaveSettlementAction.ApplyForParty(party);
+							}
+							catch
+							{
+							}
+							DisbandHerder(component);
+						}
+						else
+						{
+							ProcessHerdTurnover(component);
+							OnDropOff(component);
+							StartRoaming(component);
+							bool flag = false;
+						}
+					}
+					else
+					{
+						try
+						{
+							LeaveSettlementAction.ApplyForParty(party);
+						}
+						catch
+						{
+						}
+						_shelterDisbandTimes[component.Village] = CampaignTime.Now;
+						bool flag2 = false;
+						DisbandHerder(component);
+					}
+				}
+				else
+				{
+					_shelterDisbandTimes[component.Village] = CampaignTime.Now;
+					bool flag3 = false;
+					ForceDisbandHerder(component, currentSettlement);
+				}
+				return;
+			}
+			if (party.ShortTermBehavior != party.DefaultBehavior || party.IsFleeing())
+			{
+				MobileParty threatParty = party.ShortTermTargetParty ?? FindNearestHostileParty(party);
+				component.ThreatParty = threatParty;
+			}
+			else if (component.ThreatParty != null)
+			{
+				component.ThreatParty = null;
+			}
+			float elapsedHoursUntilNow = component.RoamingStartTime.ElapsedHoursUntilNow;
+			if (elapsedHoursUntilNow > 120f)
+			{
+				if (component.State != HerderPartyComponent.HerderState.ReturningToVillage)
+				{
+					bool flag4 = false;
+					StartReturnToVillage(component);
+					return;
+				}
+				if (elapsedHoursUntilNow > 240f)
+				{
+					bool flag5 = false;
+					DisbandHerder(component);
+					return;
+				}
+			}
+			if (party.ShortTermBehavior != party.DefaultBehavior)
+			{
+				if (party.IsFleeing() && party.ShortTermTargetParty != null && party.ShortTermTargetParty.Position.DistanceSquared(party.TargetPosition) < 16f)
+				{
+					GoToNewGrazingPoint(component);
+				}
+			}
+			else if (party.DefaultBehavior == AiBehavior.Hold)
+			{
+				if (component.State == HerderPartyComponent.HerderState.ReturningToVillage)
+				{
+					StartReturnToVillage(component);
+					return;
+				}
+				if (component.State != HerderPartyComponent.HerderState.Roaming && component.State != HerderPartyComponent.HerderState.Herding)
+				{
+					StartRoaming(component);
+					return;
+				}
+				if (component.State == HerderPartyComponent.HerderState.Roaming)
+				{
+					component.State = HerderPartyComponent.HerderState.Herding;
+					component.HerdingStartTime = CampaignTime.Now;
+				}
+				ProduceGoods(component);
+				float elapsedHoursUntilNow2 = component.HerdingStartTime.ElapsedHoursUntilNow;
+				if (elapsedHoursUntilNow2 >= 6f && MBRandom.RandomFloat < GetEndHerdingChance(elapsedHoursUntilNow2))
+				{
+					if (MBRandom.RandomFloat < GetEndRoamingChance(component))
+					{
+						StartReturnToVillage(component);
+					}
+					else
+					{
+						GoToNewGrazingPoint(component);
+					}
+				}
+			}
+			else if (party.DefaultBehavior == AiBehavior.GoToPoint && (party.Position - party.TargetPosition).LengthSquared < 0.01f)
+			{
+				party.SetMoveModeHold();
+				if (component.State == HerderPartyComponent.HerderState.ReturningToVillage)
+				{
+					if (ShouldDisbandNow(component))
+					{
+						DisbandHerder(component);
+						return;
+					}
+					ProcessHerdTurnover(component);
+					OnDropOff(component);
+					StartRoaming(component);
+				}
+			}
+			else if (party.DefaultBehavior != AiBehavior.GoToPoint)
+			{
+				Main.Log("[Herder] " + party.StringId + " unrecognised behavior " + party.DefaultBehavior.ToString() + " — resetting to roaming");
+				StartRoaming(component);
+			}
+		}
+		catch (Exception ex)
+		{
+			Main.Log("ERROR in HerderBehavior.OnHourlyTickParty: " + ex.Message);
+		}
+	}
+
+	private void StartRoaming(HerderPartyComponent component)
+	{
+		component.State = HerderPartyComponent.HerderState.Roaming;
+		component.HerdingStartTime = CampaignTime.Never;
+		component.RoamingStartTime = CampaignTime.Now;
+		GoToNewGrazingPoint(component);
+	}
+
+	private void GoToNewGrazingPoint(HerderPartyComponent component)
+	{
+		component.State = HerderPartyComponent.HerderState.Roaming;
+		component.HerdingStartTime = CampaignTime.Never;
+		CampaignVec2 gatePosition = component.Village.Settlement.GatePosition;
+		CampaignVec2 campaignVec = gatePosition;
+		int num = 20;
+		do
+		{
+			campaignVec = NavigationHelper.FindReachablePointAroundPosition(gatePosition, MobileParty.NavigationType.Default, 12f, 3f);
+			num--;
+		}
+		while (num > 0 && campaignVec.Distance(component.MobileParty.Position) < 3f);
+		component.MobileParty.SetMoveGoToPoint(campaignVec, MobileParty.NavigationType.Default);
+	}
+
+	private void StartReturnToVillage(HerderPartyComponent component)
+	{
+		component.State = HerderPartyComponent.HerderState.ReturningToVillage;
+		component.HerdingStartTime = CampaignTime.Never;
+		CampaignVec2 gatePosition = component.Village.Settlement.GatePosition;
+		component.MobileParty.SetMoveGoToPoint(gatePosition, MobileParty.NavigationType.Default);
+	}
+
+	private void ProduceGoods(HerderPartyComponent component)
+	{
+		EnsureItemsCached();
+		MobileParty mobileParty = component.MobileParty;
+		int animalCount = component.AnimalCount;
+		float climateProductionFactor = GetClimateProductionFactor(component.Village);
+		switch (component.AnimalType)
+		{
+		case HerderPartyComponent.HerdType.Cow:
+			ProduceItem(mobileParty, _milkItem, animalCount, 0.008f * climateProductionFactor);
+			break;
+		case HerderPartyComponent.HerdType.Sheep:
+			ProduceItem(mobileParty, _milkItem, animalCount, 0.004f * climateProductionFactor);
+			ProduceItem(mobileParty, _woolItem, animalCount, 0.002f * climateProductionFactor);
+			break;
+		case HerderPartyComponent.HerdType.Hog:
+			break;
+		}
+	}
+
+	private void ProduceItem(MobileParty party, ItemObject item, int animalCount, float ratePerAnimal)
+	{
+		if (item == null)
+		{
+			return;
+		}
+		float f = (float)animalCount * ratePerAnimal * MBRandom.RandomFloat;
+		int num = MBRandom.RoundRandomized(f);
+		if (num > 0)
+		{
+			float num2 = (float)party.InventoryCapacity - party.TotalWeightCarried;
+			int num3 = (int)(num2 / (item.Weight + 0.1f));
+			if (num3 < num)
+			{
+				num = num3;
+			}
+			if (num > 0)
+			{
+				party.ItemRoster.AddToCounts(item, num);
+			}
+		}
+	}
+
+	private void ProcessHerdTurnover(HerderPartyComponent component)
+	{
+		try
+		{
+			MobileParty mobileParty = component?.MobileParty;
+			Village village = component?.Village;
+			if (mobileParty == null || village == null)
+			{
+				return;
+			}
+			EnsureItemsCached();
+			string text;
+			ItemObject itemObject;
+			int num;
+			switch (component.AnimalType)
+			{
+			case HerderPartyComponent.HerdType.Cow:
+				text = "cow";
+				itemObject = _beefItem;
+				num = 4;
+				break;
+			case HerderPartyComponent.HerdType.Hog:
+				text = "hog";
+				itemObject = _porkItem;
+				num = 2;
+				break;
+			default:
+				text = "sheep";
+				itemObject = _muttonItem;
+				num = 2;
+				break;
+			}
+			ItemObject itemObject2 = Game.Current.ObjectManager.GetObject<ItemObject>(text);
+			if (itemObject2 == null || itemObject == null)
+			{
+				return;
+			}
+			int itemNumber = mobileParty.ItemRoster.GetItemNumber(itemObject2);
+			if (itemNumber <= 0)
+			{
+				return;
+			}
+			int animalCountInVillage = GetAnimalCountInVillage(village, text);
+			int num2 = MBRandom.RoundRandomized((float)itemNumber * 0.03f);
+			int num3 = itemNumber - 20;
+			if (num2 > num3)
+			{
+				num2 = num3;
+			}
+			if (num2 > animalCountInVillage)
+			{
+				num2 = animalCountInVillage;
+			}
+			if (num2 > 0)
+			{
+				mobileParty.ItemRoster.AddToCounts(itemOb
